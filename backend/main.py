@@ -1,6 +1,11 @@
+import json
+import os
+import sqlite3
+import time
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -21,16 +26,101 @@ from uri_suggester import suggest_uris
 
 app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 
+_cors_origins_env = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173",
+)
+_cors_origins = [o.strip() for o in _cors_origins_env.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory session store (MVP, no persistence required)
+# In-memory session store (sessions are also persisted to SQLite)
 sessions: Dict[str, Dict[str, Any]] = {}
 
+# ── SQLite session persistence ───────────────────────────────────────────────
+
+_DB_PATH = os.getenv("SESSION_DB", "sessions.db")
+
+
+def _init_db() -> None:
+    with sqlite3.connect(_DB_PATH) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS sessions "
+            "(dataset_id TEXT PRIMARY KEY, session_json TEXT NOT NULL, "
+            "original_bytes BLOB NOT NULL, updated_at REAL NOT NULL)"
+        )
+
+
+_init_db()
+
+
+def _json_default(obj: Any) -> Any:
+    if hasattr(obj, "item"):   # numpy scalar
+        return obj.item()
+    if hasattr(obj, "tolist"):  # numpy array
+        return obj.tolist()
+    return str(obj)
+
+
+def _save_session(dataset_id: str, session: Dict[str, Any]) -> None:
+    data = {k: v for k, v in session.items() if k not in ("df", "original_bytes")}
+    with sqlite3.connect(_DB_PATH) as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO sessions (dataset_id, session_json, original_bytes, updated_at) "
+            "VALUES (?, ?, ?, ?)",
+            (dataset_id, json.dumps(data, default=_json_default), session["original_bytes"], time.time()),
+        )
+
+
+def _load_session(dataset_id: str) -> Optional[Dict[str, Any]]:
+    with sqlite3.connect(_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT session_json, original_bytes FROM sessions WHERE dataset_id = ?",
+            (dataset_id,),
+        ).fetchone()
+    if not row:
+        return None
+    session = json.loads(row[0])
+    original_bytes = row[1]
+    session["original_bytes"] = original_bytes
+    filename = session.get("import_info", {}).get("filename", "data.csv")
+    try:
+        profile_result = profile_csv(original_bytes, filename)
+        session["df"] = profile_result["df"]
+    except Exception:
+        return None
+    return session
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _require(dataset_id: str) -> Dict[str, Any]:
+    s = sessions.get(dataset_id)
+    if not s:
+        s = _load_session(dataset_id)
+        if not s:
+            raise HTTPException(404, "Dataset not found. Please upload your CSV again.")
+        sessions[dataset_id] = s
+    return s
+
+
+def _prepare_exports(dataset_id: str) -> Dict[str, Any]:
+    s = _require(dataset_id)
+    if "fair_score" not in s:
+        s["fair_score"] = compute_fair_score(
+            s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"]
+        )
+    if "uri_suggestions" not in s:
+        s["uri_suggestions"] = suggest_uris(s["columns"], s["metadata"], s["import_info"])
+    return s
+
+
+# ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.post("/api/upload")
 async def upload_csv(file: UploadFile = File(...)):
@@ -38,8 +128,18 @@ async def upload_csv(file: UploadFile = File(...)):
     if not content:
         raise HTTPException(400, "Empty file")
 
+    filename = file.filename or "data.csv"
+    if filename.lower().endswith((".xlsx", ".xls")):
+        try:
+            import io as _io
+            df_excel = pd.read_excel(_io.BytesIO(content))
+            content = df_excel.to_csv(index=False).encode("utf-8")
+            filename = filename.rsplit(".", 1)[0] + ".csv"
+        except Exception as exc:
+            raise HTTPException(400, f"Could not read Excel file: {exc}")
+
     try:
-        result = profile_csv(content, file.filename or "data.csv")
+        result = profile_csv(content, filename)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -81,6 +181,7 @@ async def upload_csv(file: UploadFile = File(...)):
         "df": df,
         "original_bytes": content,
     }
+    _save_session(dataset_id, sessions[dataset_id])
 
     return {
         "dataset_id": dataset_id,
@@ -117,6 +218,7 @@ async def update_columns(dataset_id: str, column_updates: List[Dict[str, Any]]):
 
     # Recompute issues after column edits
     s["issues"] = detect_issues(s["import_info"], s["columns"], s["table_structure"])
+    _save_session(dataset_id, s)
     return {"columns": s["columns"], "issues": s["issues"]}
 
 
@@ -130,6 +232,7 @@ async def get_metadata(dataset_id: str):
 async def save_metadata(dataset_id: str, metadata: Dict[str, Any]):
     s = _require(dataset_id)
     s["metadata"].update(metadata)
+    _save_session(dataset_id, s)
     return {"metadata": s["metadata"]}
 
 
@@ -222,26 +325,6 @@ async def export_rocrate(dataset_id: str):
     )
     return Response(zip_bytes, media_type="application/zip",
                     headers={"Content-Disposition": 'attachment; filename="ro-crate.zip"'})
-
-
-# ── Helpers ─────────────────────────────────────────────────────────────────
-
-def _require(dataset_id: str) -> Dict[str, Any]:
-    s = sessions.get(dataset_id)
-    if not s:
-        raise HTTPException(404, "Dataset not found. Please upload your CSV again.")
-    return s
-
-
-def _prepare_exports(dataset_id: str) -> Dict[str, Any]:
-    s = _require(dataset_id)
-    if "fair_score" not in s:
-        s["fair_score"] = compute_fair_score(
-            s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"]
-        )
-    if "uri_suggestions" not in s:
-        s["uri_suggestions"] = suggest_uris(s["columns"], s["metadata"], s["import_info"])
-    return s
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Typography,
@@ -145,11 +146,13 @@ function ColumnEditor({
 
 export default function ColumnProfilePage() {
   const navigate = useNavigate()
-  const { datasetId, columns, setColumns, setIssues } = useStore()
+  const { datasetId, columns, setColumns, setIssues, setFairScore } = useStore()
   const [localCols, setLocalCols] = useState<ColumnProfile[]>(columns)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(25)
 
   if (!datasetId) {
     return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>
@@ -161,6 +164,7 @@ export default function ColumnProfilePage() {
       const result = await updateColumns(datasetId, localCols)
       setColumns(result.columns)
       setIssues(result.issues)
+      setFairScore(null)
       setLocalCols(result.columns)
       setSaved(true)
     } finally {
@@ -203,7 +207,7 @@ export default function ColumnProfilePage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {localCols.map((col) => (
+              {localCols.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((col) => (
                 <TableRow
                   key={col.name}
                   hover
@@ -256,6 +260,22 @@ export default function ColumnProfilePage() {
             </TableBody>
           </Table>
         </TableContainer>
+        <TablePagination
+          component="div"
+          count={localCols.length}
+          page={page}
+          onPageChange={(_, newPage) => {
+            setPage(newPage)
+            setExpanded(null)
+          }}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10))
+            setPage(0)
+            setExpanded(null)
+          }}
+          rowsPerPageOptions={[10, 25, 50]}
+        />
       </Card>
 
       {/* Expanded editor */}

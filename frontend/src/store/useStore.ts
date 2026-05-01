@@ -108,7 +108,7 @@ interface AppState {
   ) => void
   setColumns: (columns: ColumnProfile[]) => void
   setIssues: (issues: Issue[]) => void
-  setFairScore: (score: FAIRScore) => void
+  setFairScore: (score: FAIRScore | null) => void
   setMetadata: (metadata: DatasetMetadata) => void
   reset: () => void
 }

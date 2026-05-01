@@ -1,7 +1,9 @@
 import AssessmentIcon from '@mui/icons-material/Assessment'
+import BarChartIcon from '@mui/icons-material/BarChart'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoIcon from '@mui/icons-material/Info'
+import ScienceIcon from '@mui/icons-material/Science'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
@@ -31,13 +33,15 @@ const navItems = [
   { label: 'FAIR Score', path: '/fair-score', icon: <AssessmentIcon /> },
   { label: 'Metadata Wizard', path: '/metadata', icon: <TuneIcon /> },
   { label: 'Export', path: '/export', icon: <DownloadIcon /> },
+  { label: 'VCG Wizard', path: '/vcg', icon: <ScienceIcon />, vcgItem: false },
+  { label: 'VCG Results', path: '/vcg/results', icon: <BarChartIcon />, vcgItem: true },
 ]
 
 export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const theme = useTheme()
-  const { datasetId, importInfo } = useStore()
+  const { datasetId, importInfo, vcgStatus } = useStore()
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -85,7 +89,8 @@ export default function Layout() {
           <List dense>
             {navItems.map((item) => {
               const active = location.pathname === item.path
-              const disabled = item.path !== '/' && !datasetId
+              const isVcgResults = (item as any).vcgItem === true
+              const disabled = item.path !== '/' && (!datasetId || (isVcgResults && vcgStatus !== 'done'))
               return (
                 <ListItem key={item.path} disablePadding>
                   <ListItemButton

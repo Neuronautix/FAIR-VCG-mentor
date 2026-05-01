@@ -7,6 +7,9 @@ import FAIRScorePage from './pages/FAIRScorePage'
 import MetadataWizardPage from './pages/MetadataWizardPage'
 import OverviewPage from './pages/OverviewPage'
 import UploadPage from './pages/UploadPage'
+import VCGPage from './pages/VCGPage'
+import VCGWizardPage from './pages/VCGWizardPage'
+import VCGResultsPage from './pages/VCGResultsPage'
 
 const theme = createTheme({
   palette: {
@@ -48,6 +51,9 @@ export default function App() {
             <Route path="fair-score" element={<FAIRScorePage />} />
             <Route path="metadata" element={<MetadataWizardPage />} />
             <Route path="export" element={<ExportPage />} />
+            <Route path="vcg" element={<VCGPage />} />
+            <Route path="vcg/wizard" element={<VCGWizardPage />} />
+            <Route path="vcg/results" element={<VCGResultsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

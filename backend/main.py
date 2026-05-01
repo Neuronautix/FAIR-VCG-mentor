@@ -26,6 +26,8 @@ from uri_suggester import suggest_uris
 
 app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 
+from vcg.vcg_router import vcg_router, init_vcg_router  # noqa: E402
+
 _cors_origins_env = os.getenv(
     "CORS_ORIGINS",
     "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173",
@@ -325,6 +327,10 @@ async def export_rocrate(dataset_id: str):
     )
     return Response(zip_bytes, media_type="application/zip",
                     headers={"Content-Disposition": 'attachment; filename="ro-crate.zip"'})
+
+
+init_vcg_router(sessions, _save_session, _load_session)
+app.include_router(vcg_router)
 
 
 if __name__ == "__main__":

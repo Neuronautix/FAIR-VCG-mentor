@@ -118,25 +118,25 @@ export default function OverviewPage() {
                   {tableStructure.row_represents.replace(/_/g, ' ')}
                 </Typography>
               </Box>
-              {tableStructure.detected_identifiers.length > 0 && (
+              {(tableStructure.detected_identifiers ?? []).length > 0 && (
                 <Box sx={{ mb: 1 }}>
                   <Typography variant="caption" color="text.secondary">
                     IDENTIFIERS
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                    {tableStructure.detected_identifiers.map((id) => (
+                    {(tableStructure.detected_identifiers ?? []).map((id) => (
                       <Chip key={id} label={id} size="small" color="secondary" />
                     ))}
                   </Box>
                 </Box>
               )}
-              {tableStructure.detected_measurements.length > 0 && (
+              {(tableStructure.detected_measurements ?? []).length > 0 && (
                 <Box sx={{ mb: 1 }}>
                   <Typography variant="caption" color="text.secondary">
                     MEASUREMENTS
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                    {tableStructure.detected_measurements.map((m) => (
+                    {(tableStructure.detected_measurements ?? []).map((m) => (
                       <Chip key={m} label={m} size="small" variant="outlined" color="warning" />
                     ))}
                   </Box>

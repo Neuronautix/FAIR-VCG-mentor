@@ -19,11 +19,19 @@ def _normalize_col_name(name: str) -> str:
 
 def generate_cleaned_csv(df: pd.DataFrame, columns: List[Dict], metadata: Dict) -> str:
     rename_map = {}
+    seen: set = set()
     for col in columns:
         orig = col['name']
-        new_name = col.get('user_label') or _normalize_col_name(orig)
-        if new_name != orig:
-            rename_map[orig] = new_name
+        base = col.get('user_label') or _normalize_col_name(orig)
+        # Deduplicate: if base already claimed, append a counter suffix
+        candidate = base
+        suffix = 2
+        while candidate in seen and candidate != orig:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        seen.add(candidate)
+        if candidate != orig:
+            rename_map[orig] = candidate
 
     cleaned = df.copy()
     if rename_map:

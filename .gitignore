@@ -22,3 +22,6 @@ Thumbs.db
 
 # Claude Code memory (local only)
 .claude/
+
+# Runtime database (generated at startup, not for version control)
+backend/sessions.db

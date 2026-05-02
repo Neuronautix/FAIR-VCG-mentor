@@ -1,5 +1,6 @@
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import { Alert, Box, Button, CircularProgress, Paper, Typography } from '@mui/material'
+import type { AxiosError } from 'axios'
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { uploadCSV } from '../api/client'
@@ -33,7 +34,8 @@ export default function UploadPage() {
         )
         navigate('/overview')
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Upload failed'
+        const axiosErr = e as AxiosError<{ detail: string }>
+        const msg = axiosErr.response?.data?.detail ?? (e instanceof Error ? e.message : 'Upload failed')
         setError(msg)
       } finally {
         setLoading(false)

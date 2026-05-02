@@ -77,9 +77,9 @@ export default function MetadataWizardPage() {
 
   useEffect(() => {
     if (datasetId) {
-      getMetadata(datasetId).then((r) => {
-        setForm((prev) => ({ ...prev, ...r.metadata }))
-      })
+      getMetadata(datasetId)
+        .then((r) => setForm((prev) => ({ ...prev, ...r.metadata })))
+        .catch(() => setError('Failed to load existing metadata.'))
     }
   }, [datasetId])
 
@@ -96,7 +96,7 @@ export default function MetadataWizardPage() {
     try {
       const result = await saveMetadata(datasetId, form)
       setMetadata(result.metadata)
-      setFairScore(null as never) // invalidate score so it recalculates
+      setFairScore(null) // invalidate score so it recalculates
       setSaved(true)
     } catch {
       setError('Failed to save metadata.')

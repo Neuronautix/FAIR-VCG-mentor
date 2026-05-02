@@ -1,7 +1,10 @@
+import type { ReactNode } from 'react'
 import AssessmentIcon from '@mui/icons-material/Assessment'
+import BarChartIcon from '@mui/icons-material/BarChart'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoIcon from '@mui/icons-material/Info'
+import ScienceIcon from '@mui/icons-material/Science'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
@@ -24,20 +27,35 @@ import { useStore } from '../store/useStore'
 
 const DRAWER_WIDTH = 220
 
-const navItems = [
-  { label: 'Upload CSV', path: '/', icon: <CloudUploadIcon /> },
-  { label: 'Overview', path: '/overview', icon: <InfoIcon /> },
-  { label: 'Column Profile', path: '/columns', icon: <TableChartIcon /> },
-  { label: 'FAIR Score', path: '/fair-score', icon: <AssessmentIcon /> },
-  { label: 'Metadata Wizard', path: '/metadata', icon: <TuneIcon /> },
-  { label: 'Export', path: '/export', icon: <DownloadIcon /> },
-]
+interface NavItem {
+  label: string
+  path: string
+  icon: ReactNode
+  vcgResultsOnly?: boolean
+}
+
+const navItems: NavItem[] = [
+  { label: 'Upload CSV', path: '/' },
+  { label: 'Overview', path: '/overview' },
+  { label: 'Column Profile', path: '/columns' },
+  { label: 'FAIR Score', path: '/fair-score' },
+  { label: 'Metadata Wizard', path: '/metadata' },
+  { label: 'Export', path: '/export' },
+  { label: 'VCG Wizard', path: '/vcg' },
+  { label: 'VCG Results', path: '/vcg/results', vcgResultsOnly: true },
+].map((item, i) => ({
+  ...item,
+  icon: [
+    <CloudUploadIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
+    <TuneIcon />, <DownloadIcon />, <ScienceIcon />, <BarChartIcon />,
+  ][i],
+}))
 
 export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const theme = useTheme()
-  const { datasetId, importInfo } = useStore()
+  const { datasetId, importInfo, vcgStatus } = useStore()
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -85,7 +103,7 @@ export default function Layout() {
           <List dense>
             {navItems.map((item) => {
               const active = location.pathname === item.path
-              const disabled = item.path !== '/' && !datasetId
+              const disabled = item.path !== '/' && (!datasetId || (item.vcgResultsOnly === true && vcgStatus !== 'done'))
               return (
                 <ListItem key={item.path} disablePadding>
                   <ListItemButton

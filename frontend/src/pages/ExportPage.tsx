@@ -11,6 +11,7 @@ import {
   Divider,
   Grid,
   LinearProgress,
+  Snackbar,
   Typography,
 } from '@mui/material'
 import { useState } from 'react'
@@ -93,9 +94,11 @@ const EXPORTS: ExportItem[] = [
 
 function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string }) {
   const [loading, setLoading] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const handleDownload = async () => {
     setLoading(true)
+    setExportError(null)
     try {
       const url = exportUrl(datasetId, item.endpoint)
       const resp = await fetch(url)
@@ -107,7 +110,7 @@ function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string
       a.click()
       URL.revokeObjectURL(a.href)
     } catch {
-      alert('Export failed. Please try again.')
+      setExportError('Export failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -151,7 +154,18 @@ function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string
             Download
           </Button>
         </Box>
+        {exportError && (
+          <Alert severity="error" sx={{ mt: 1 }} onClose={() => setExportError(null)}>
+            {exportError}
+          </Alert>
+        )}
       </CardContent>
+      <Snackbar
+        open={!!exportError}
+        autoHideDuration={5000}
+        onClose={() => setExportError(null)}
+        message={exportError}
+      />
     </Card>
   )
 }

@@ -90,6 +90,47 @@ export interface DatasetMetadata {
   base_uri?: string
 }
 
+export interface VCGColumnRoles {
+  subject_id: string | null
+  treatment_col: string | null
+  treatment_value: string | null
+  control_value: string | null
+  outcome_cols: string[]
+  covariate_cols: string[]
+  time_col: string | null
+  exclude_cols: string[]
+}
+
+export interface VCGConfig {
+  method: string          // "bootstrap"|"synthetic"|"auto"
+  n_synthetic: number
+  seed: number
+  bootstrap_iters: number
+  confidence_level: number
+}
+
+export interface ChatMessage {
+  role: 'agent' | 'user'
+  content: string
+  state?: string
+  options?: string[]
+  ready_to_build?: boolean
+  timestamp: string
+}
+
+export interface VCGResults {
+  method_used: string
+  n_subjects_real: number
+  n_subjects_vcg: number
+  balance_report: {
+    covariates: Array<{col: string, smd: number, balance_label: string}>
+    outcomes: Array<{col: string, mean_real: number, sd_real: number, mean_vcg: number, sd_vcg: number, p_value: number}>
+  }
+  diagnostic_plots: Record<string, string>   // base64 PNG strings
+  stat_report: string
+  generated_at: string
+}
+
 interface AppState {
   datasetId: string | null
   importInfo: ImportInfo | null
@@ -98,6 +139,12 @@ interface AppState {
   issues: Issue[]
   fairScore: FAIRScore | null
   metadata: DatasetMetadata
+
+  vcgStatus: 'not_started' | 'running' | 'done' | 'failed' | null
+  vcgResults: VCGResults | null
+  vcgConversation: ChatMessage[]
+  vcgColumnRoles: VCGColumnRoles | null
+  vcgConfig: VCGConfig | null
 
   setUploadResult: (
     datasetId: string,
@@ -108,9 +155,16 @@ interface AppState {
   ) => void
   setColumns: (columns: ColumnProfile[]) => void
   setIssues: (issues: Issue[]) => void
-  setFairScore: (score: FAIRScore) => void
+  setFairScore: (score: FAIRScore | null) => void
   setMetadata: (metadata: DatasetMetadata) => void
   reset: () => void
+
+  setVCGStatus: (status: AppState['vcgStatus']) => void
+  setVCGResults: (results: VCGResults | null) => void
+  addChatMessage: (msg: ChatMessage) => void
+  clearVCGConversation: () => void
+  setVCGColumnRoles: (roles: VCGColumnRoles) => void
+  setVCGConfig: (config: VCGConfig) => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -121,6 +175,12 @@ export const useStore = create<AppState>((set) => ({
   issues: [],
   fairScore: null,
   metadata: { base_uri: 'https://your-lab.org' },
+
+  vcgStatus: null,
+  vcgResults: null,
+  vcgConversation: [],
+  vcgColumnRoles: null,
+  vcgConfig: null,
 
   setUploadResult: (datasetId, importInfo, columns, tableStructure, issues) =>
     set({ datasetId, importInfo, columns, tableStructure, issues, fairScore: null }),
@@ -139,5 +199,17 @@ export const useStore = create<AppState>((set) => ({
       issues: [],
       fairScore: null,
       metadata: { base_uri: 'https://your-lab.org' },
+      vcgStatus: null,
+      vcgResults: null,
+      vcgConversation: [],
+      vcgColumnRoles: null,
+      vcgConfig: null,
     }),
+
+  setVCGStatus: (status) => set({ vcgStatus: status }),
+  setVCGResults: (results) => set({ vcgResults: results }),
+  addChatMessage: (msg) => set((s) => ({ vcgConversation: [...s.vcgConversation, msg] })),
+  clearVCGConversation: () => set({ vcgConversation: [] }),
+  setVCGColumnRoles: (roles) => set({ vcgColumnRoles: roles }),
+  setVCGConfig: (config) => set({ vcgConfig: config }),
 }))

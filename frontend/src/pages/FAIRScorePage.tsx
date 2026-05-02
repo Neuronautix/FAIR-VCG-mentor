@@ -43,7 +43,7 @@ export default function FAIRScorePage() {
 
   useEffect(() => {
     if (datasetId && !fairScore) load()
-  }, [datasetId])
+  }, [datasetId, fairScore]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!datasetId) {
     return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>

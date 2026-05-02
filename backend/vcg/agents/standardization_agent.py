@@ -90,8 +90,9 @@ class DataStandardizationAgent:
             else:
                 # Categorical imputation: mode
                 non_null = df[col].dropna()
-                if len(non_null) > 0:
-                    mode_val = non_null.mode().iloc[0]
+                m = non_null.mode()
+                if len(non_null) > 0 and len(m) > 0:
+                    mode_val = m.iloc[0]
                     df[col] = df[col].fillna(mode_val)
                     log.append(
                         f"Imputation: '{col}' — {n_missing} missing value(s) replaced with mode ('{mode_val}')."

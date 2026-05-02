@@ -273,7 +273,11 @@ export default function VCGWizardPage() {
                   Covariate columns (select all that apply)
                 </Typography>
                 {bioColumns.length === 0 ? (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                      No biological descriptor columns auto-detected — select from all columns:
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                     {allColumnNames.map((col) => {
                       const selected = form.covariate_cols.includes(col)
                       return (
@@ -292,6 +296,7 @@ export default function VCGWizardPage() {
                         />
                       )
                     })}
+                    </Box>
                   </Box>
                 ) : (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>

@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 import sqlite3
 import time
 import uuid
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -94,7 +97,8 @@ def _load_session(dataset_id: str) -> Optional[Dict[str, Any]]:
     try:
         profile_result = profile_csv(original_bytes, filename)
         session["df"] = profile_result["df"]
-    except Exception:
+    except Exception as exc:
+        logger.error("Failed to reconstruct df for dataset %s: %s", dataset_id, exc)
         return None
     return session
 

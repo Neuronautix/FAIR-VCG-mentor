@@ -54,7 +54,12 @@ def run_vcg_pipeline(
             real_control_df = df.copy()
 
         if real_control_df.empty:
-            raise ValueError(f"No rows found for control group '{control_value}' in column '{treatment_col}'.")
+            unique_vals = df[treatment_col].astype(str).unique().tolist()[:10] if treatment_col in df.columns else []
+            raise ValueError(
+                f"No rows matched control value '{control_value}' in column '{treatment_col}'. "
+                f"Values present: {unique_vals}. "
+                "Check for type mismatches (e.g. integer vs string) or spelling differences."
+            )
 
         # ── Step 2: Standardisation ────────────────────────────────────────────
         std_result = DataStandardizationAgent().run(

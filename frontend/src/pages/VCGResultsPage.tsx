@@ -76,6 +76,7 @@ export default function VCGResultsPage() {
 
       // Poll status
       pollRef.current = setInterval(async () => {
+        if (!datasetId) return
         try {
           const statusData = await getVCGStatus(datasetId)
           const status: string = statusData.status ?? statusData

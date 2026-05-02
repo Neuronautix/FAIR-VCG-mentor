@@ -47,7 +47,7 @@ export default function VCGPage() {
         })
       })
       .finally(() => setLoading(false))
-  }, [datasetId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [datasetId, vcgConversation.length, addChatMessage, setLoading])
 
   // Clean up polling on unmount
   useEffect(() => {

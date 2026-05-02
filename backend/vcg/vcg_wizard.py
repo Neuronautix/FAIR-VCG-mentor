@@ -2,10 +2,7 @@ from typing import List, Dict, Any, Optional
 
 import pandas as pd
 
-
-_CONTROL_KEYWORDS = [
-    "vehicle", "ctrl", "control", "saline", "placebo", "sham", "wt", "wildtype", "veh",
-]
+from vcg.constants import CONTROL_KEYWORDS as _CONTROL_KEYWORDS
 
 
 def infer_column_roles(columns: List[Dict], table_structure: Dict, metadata: Dict) -> dict:

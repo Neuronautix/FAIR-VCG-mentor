@@ -2,6 +2,9 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List
 
+from vcg.constants import CONTROL_KEYWORDS as _CONTROL_KEYWORDS_LIST
+
+_CONTROL_KEYWORDS = set(_CONTROL_KEYWORDS_LIST)
 
 STATES = [
     "GREETING",
@@ -16,9 +19,6 @@ STATES = [
     "DONE",
     "ERROR",
 ]
-
-_CONTROL_KEYWORDS = {"vehicle", "ctrl", "control", "saline", "placebo", "sham", "wt", "wildtype", "veh", "untreated", "naive"}
-
 
 class VCGOrchestrator:
     """
@@ -62,6 +62,12 @@ class VCGOrchestrator:
         )
 
     # ── Helpers ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _parse_yes_no(text: str) -> bool:
+        """Return True if text expresses affirmation, False otherwise."""
+        t = text.lower().strip()
+        return bool(re.search(r"\b(yes|yeah|yep|yup|sure|ok|okay|correct|go|proceed|generate|confirm|all)\b", t))
 
     def _vcg(self) -> dict:
         return self.session["vcg"]
@@ -132,7 +138,7 @@ class VCGOrchestrator:
         )
 
     def _handle_greeting(self, reply: str) -> dict:
-        if not any(w in reply.lower() for w in ["no", "nope", "wrong", "incorrect"]):
+        if self._parse_yes_no(reply):
             ctx = self._vcg()["research_context"]
             if not ctx.get("study_type"):
                 ctx["study_type"] = "pre_clinical_in_vivo"
@@ -243,7 +249,7 @@ class VCGOrchestrator:
         covs = self._covariate_candidates()
         reply_lower = reply.lower()
 
-        if "skip" in reply_lower or "no" in reply_lower:
+        if "skip" in reply_lower or not self._parse_yes_no(reply):
             roles["covariate_cols"] = []
         elif "all" in reply_lower:
             roles["covariate_cols"] = covs
@@ -333,7 +339,7 @@ class VCGOrchestrator:
         return self._agent_msg(content, "SUMMARY_CONFIRM", ["Yes, generate VCG", "Modify settings"])
 
     def _handle_confirm(self, reply: str) -> dict:
-        if any(w in reply.lower() for w in ["yes", "generate", "proceed", "go", "ok", "sure"]):
+        if self._parse_yes_no(reply):
             self._vcg()["research_context"]["confirmed_by_user"] = True
             return self._agent_msg(
                 "Starting VCG generation. Running:\n"

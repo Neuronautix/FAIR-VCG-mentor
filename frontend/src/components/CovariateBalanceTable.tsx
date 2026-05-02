@@ -32,18 +32,20 @@ interface Props {
 }
 
 function smdChip(smd: number) {
+  if (!isFinite(smd) || isNaN(smd)) return <Chip label="N/A" size="small" />
   if (smd < 0.1) return <Chip label="Excellent" color="success" size="small" />
   if (smd <= 0.25) return <Chip label="Acceptable" color="warning" size="small" />
   return <Chip label="Poor" color="error" size="small" />
 }
 
 function pChip(p: number) {
+  if (!isFinite(p) || isNaN(p)) return <Chip label="N/A" size="small" />
   if (p > 0.05) return <Chip label="Similar distributions" color="success" size="small" />
   return <Chip label="Significant difference" color="warning" size="small" />
 }
 
 function sig(n: number): string {
-  if (!isFinite(n)) return String(n)
+  if (!isFinite(n) || isNaN(n)) return '—'
   return Number(n.toPrecision(3)).toString()
 }
 

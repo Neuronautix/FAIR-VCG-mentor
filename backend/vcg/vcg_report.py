@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -68,8 +69,8 @@ def generate_vcg_report(
         p = ks_pvals.get(col, float("nan"))
         d = eff_sizes.get(col, {}).get("cohens_d", float("nan"))
         interp = eff_sizes.get(col, {}).get("interpretation", "")
-        p_str = f"{p:.3f}" if p == p else "N/A"
-        d_str = f"{d:.3f}" if d == d else "N/A"
+        p_str = f"{p:.3f}" if not math.isnan(p) else "N/A"
+        d_str = f"{d:.3f}" if not math.isnan(d) else "N/A"
         outcome_table_rows.append([
             col,
             f"{r['mean_real']:.3g} ± {r['sd_real']:.3g}",

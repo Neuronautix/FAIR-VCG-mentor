@@ -159,6 +159,7 @@ export default function ChatInterface({ messages, onSend, disabled = false, load
           onKeyDown={handleKeyDown}
           disabled={disabled || loading}
           variant="outlined"
+          inputProps={{ 'aria-label': 'Message input' }}
         />
         <IconButton
           color="primary"

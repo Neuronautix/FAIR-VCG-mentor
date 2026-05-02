@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
@@ -26,16 +27,29 @@ import { useStore } from '../store/useStore'
 
 const DRAWER_WIDTH = 220
 
-const navItems = [
-  { label: 'Upload CSV', path: '/', icon: <CloudUploadIcon /> },
-  { label: 'Overview', path: '/overview', icon: <InfoIcon /> },
-  { label: 'Column Profile', path: '/columns', icon: <TableChartIcon /> },
-  { label: 'FAIR Score', path: '/fair-score', icon: <AssessmentIcon /> },
-  { label: 'Metadata Wizard', path: '/metadata', icon: <TuneIcon /> },
-  { label: 'Export', path: '/export', icon: <DownloadIcon /> },
-  { label: 'VCG Wizard', path: '/vcg', icon: <ScienceIcon />, vcgItem: false },
-  { label: 'VCG Results', path: '/vcg/results', icon: <BarChartIcon />, vcgItem: true },
-]
+interface NavItem {
+  label: string
+  path: string
+  icon: ReactNode
+  vcgResultsOnly?: boolean
+}
+
+const navItems: NavItem[] = [
+  { label: 'Upload CSV', path: '/' },
+  { label: 'Overview', path: '/overview' },
+  { label: 'Column Profile', path: '/columns' },
+  { label: 'FAIR Score', path: '/fair-score' },
+  { label: 'Metadata Wizard', path: '/metadata' },
+  { label: 'Export', path: '/export' },
+  { label: 'VCG Wizard', path: '/vcg' },
+  { label: 'VCG Results', path: '/vcg/results', vcgResultsOnly: true },
+].map((item, i) => ({
+  ...item,
+  icon: [
+    <CloudUploadIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
+    <TuneIcon />, <DownloadIcon />, <ScienceIcon />, <BarChartIcon />,
+  ][i],
+}))
 
 export default function Layout() {
   const location = useLocation()
@@ -89,8 +103,7 @@ export default function Layout() {
           <List dense>
             {navItems.map((item) => {
               const active = location.pathname === item.path
-              const isVcgResults = (item as any).vcgItem === true
-              const disabled = item.path !== '/' && (!datasetId || (isVcgResults && vcgStatus !== 'done'))
+              const disabled = item.path !== '/' && (!datasetId || (item.vcgResultsOnly === true && vcgStatus !== 'done'))
               return (
                 <ListItem key={item.path} disablePadding>
                   <ListItemButton

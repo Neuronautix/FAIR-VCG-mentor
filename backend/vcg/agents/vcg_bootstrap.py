@@ -66,43 +66,51 @@ class BootstrapVCGAgent:
                     sigma = float(series.std(ddof=1)) if len(series) > 1 else 1.0
                     rows[col] = rng.normal(mu, max(sigma, 1e-9), size=n_synthetic)
             else:
-                # Step 2: Spearman correlation matrix
-                # Fill per-column NaNs with median for correlation computation
-                corr_data = outcome_data.copy()
-                for col in valid_outcome_cols:
-                    median = corr_data[col].median()
-                    corr_data[col] = corr_data[col].fillna(median)
-
-                if len(valid_outcome_cols) == 1:
-                    corr_matrix = np.array([[1.0]])
-                else:
-                    try:
-                        corr_matrix = corr_data[valid_outcome_cols].corr(method="spearman").values
-                        # Replace NaNs with 0 (uncorrelated)
-                        corr_matrix = np.nan_to_num(corr_matrix, nan=0.0)
-                        np.fill_diagonal(corr_matrix, 1.0)
-                    except Exception:
-                        k = len(valid_outcome_cols)
-                        corr_matrix = np.eye(k)
-
-                # Step 3: Fit distributions
-                marginal_dists = []
+                # Separate zero-variance columns — copula/ppf breaks for constant series
+                variable_cols = []
                 for col in valid_outcome_cols:
                     series = outcome_data[col].dropna()
-                    dist_name, params = fit_best_distribution(series)
-                    marginal_dists.append((dist_name, params))
+                    if series.std(ddof=1) > 1e-10:
+                        variable_cols.append(col)
+                    else:
+                        # Constant column: just repeat the single value
+                        rows[col] = np.full(n_synthetic, float(series.iloc[0]) if len(series) > 0 else 0.0)
 
-                # Step 4: Gaussian copula sampling
-                try:
-                    samples = gaussian_copula_sample(marginal_dists, corr_matrix, n_synthetic, rng)
-                    for j, col in enumerate(valid_outcome_cols):
-                        rows[col] = samples[:, j]
-                except Exception:
-                    # Fallback: sample each column independently
-                    for j, col in enumerate(valid_outcome_cols):
-                        dist_name, params = marginal_dists[j]
+                if not variable_cols:
+                    pass  # all rows already filled above
+                else:
+                    # Step 2: Spearman correlation matrix (variable columns only)
+                    corr_data = outcome_data[variable_cols].copy()
+                    for col in variable_cols:
+                        corr_data[col] = corr_data[col].fillna(corr_data[col].median())
+
+                    if len(variable_cols) == 1:
+                        corr_matrix = np.array([[1.0]])
+                    else:
+                        try:
+                            corr_matrix = corr_data.corr(method="spearman").values
+                            corr_matrix = np.nan_to_num(corr_matrix, nan=0.0)
+                            np.fill_diagonal(corr_matrix, 1.0)
+                        except Exception:
+                            corr_matrix = np.eye(len(variable_cols))
+
+                    # Step 3: Fit distributions (variable columns only)
+                    marginal_dists = []
+                    for col in variable_cols:
+                        series = outcome_data[col].dropna()
+                        dist_name, params = fit_best_distribution(series)
+                        marginal_dists.append((dist_name, params))
+
+                    # Step 4: Gaussian copula sampling
+                    try:
+                        samples = gaussian_copula_sample(marginal_dists, corr_matrix, n_synthetic, rng)
+                        for j, col in enumerate(variable_cols):
+                            rows[col] = samples[:, j]
+                    except Exception:
                         from vcg.utils.distributions import sample_from_distribution
-                        rows[col] = sample_from_distribution(dist_name, params, n_synthetic, rng)
+                        for j, col in enumerate(variable_cols):
+                            dist_name, params = marginal_dists[j]
+                            rows[col] = sample_from_distribution(dist_name, params, n_synthetic, rng)
 
         # Step 5: Categorical covariates — sample with replacement from empirical PMF
         for col in covariate_cols:

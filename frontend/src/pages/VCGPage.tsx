@@ -72,7 +72,7 @@ export default function VCGPage() {
     pollRef.current = setInterval(async () => {
       try {
         const statusData = await getVCGStatus(id)
-        const status: string = statusData.status ?? statusData
+        const status: string = statusData.vcg_status
 
         stepIdx = (stepIdx + 1) % steps.length
         setActiveStep(steps[stepIdx])

@@ -209,12 +209,12 @@ The goal is to make FAIR-VCG Mentor a credible scientific instrument that genuin
 
 Improvements to what already exists.
 
-- [ ] **VCG suitability gate** — refuse or warn loudly before generation when conditions are not met: too few controls (n < 6), high between-subject CV, presence of outliers that inflate variance, or non-overlapping control/treatment distributions. A clear rejection is more trustworthy than a low reliability score. `[credibility]`
-- [ ] **Reliability score breakdown** — replace the single 0–1 number with a per-endpoint table: KS divergence, Cohen's d, CI width, and a plain-English interpretation of each. Give scientists the language they need for a methods section or supplementary material. `[credibility]`
-- [ ] **Diagnostic plots in results** — side-by-side density plots (real control vs VCG) and Q-Q plots per endpoint, rendered in the VCG Results page and included in the Markdown export. A score alone will not satisfy a statistical reviewer. `[credibility]`
-- [ ] **Expose method diagnostics** — show which marginal distribution (Normal / LogNormal / Gamma) was fitted to each column, the fit quality (AIC/BIC), and bootstrap convergence. Scientists must be able to audit and report the method, not just accept auto-selection. `[credibility]`
-- [ ] **ARRIVE 2.0 compliance checker** — flag missing ARRIVE 2.0 items in uploaded metadata. ARRIVE is required by most journals for in vivo papers; integrating the check positions the tool inside a workflow researchers already have. `[usability]`
-- [ ] **Test suite** — unit tests for `vcg_bootstrap.py`, `vcg_synthetic.py`, `stats_agent.py`, and `csv_profiler.py`. Zero test coverage is the main barrier to safe iteration on statistical code. `[credibility]`
+- [x] **VCG suitability gate** — refuse or warn loudly before generation when conditions are not met: too few controls (n < 6), high between-subject CV, presence of outliers that inflate variance, or non-overlapping control/treatment distributions. A clear rejection is more trustworthy than a low reliability score. `[credibility]`
+- [x] **Reliability score breakdown** — replace the single 0–1 number with a per-endpoint table: KS divergence, Cohen's d, CI width, and a plain-English interpretation of each. Give scientists the language they need for a methods section or supplementary material. `[credibility]`
+- [x] **Diagnostic plots in results** — side-by-side density plots (real control vs VCG) and Q-Q plots per endpoint, rendered in the VCG Results page and included in the Markdown export. A score alone will not satisfy a statistical reviewer. `[credibility]`
+- [x] **Expose method diagnostics** — show which marginal distribution (Normal / LogNormal / Gamma) was fitted to each column, the fit quality (AIC/BIC), and bootstrap convergence. Scientists must be able to audit and report the method, not just accept auto-selection. `[credibility]`
+- [x] **ARRIVE 2.0 compliance checker** — flag missing ARRIVE 2.0 items in uploaded metadata. ARRIVE is required by most journals for in vivo papers; integrating the check positions the tool inside a workflow researchers already have. `[usability]`
+- [x] **Test suite** — unit tests for `vcg_bootstrap.py`, `vcg_synthetic.py`, `stats_agent.py`, and `csv_profiler.py`. Zero test coverage is the main barrier to safe iteration on statistical code. `[credibility]`
 
 ### Medium term
 

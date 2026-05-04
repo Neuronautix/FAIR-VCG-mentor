@@ -26,6 +26,7 @@ from export_engine import (
 )
 from fair_engine import compute_fair_score, detect_issues
 from uri_suggester import suggest_uris
+from arrive_engine import generate_arrive_zip
 
 app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 
@@ -331,6 +332,20 @@ async def export_rocrate(dataset_id: str):
     )
     return Response(zip_bytes, media_type="application/zip",
                     headers={"Content-Disposition": 'attachment; filename="ro-crate.zip"'})
+
+
+@app.get("/api/export/{dataset_id}/arrive")
+async def export_arrive(dataset_id: str):
+    s = _prepare_exports(dataset_id)
+    vcg_results = (s.get("vcg") or {}).get("vcg_results") or {}
+    # Strip large binary fields before passing to arrive engine
+    vcg_safe = {k: v for k, v in vcg_results.items() if k not in ("vcg_csv", "diagnostic_plots", "per_endpoint_plots", "stat_report")}
+    zip_bytes = generate_arrive_zip(
+        s["import_info"], s["columns"], s["metadata"],
+        s["table_structure"], s["issues"], vcg_safe,
+    )
+    return Response(zip_bytes, media_type="application/zip",
+                    headers={"Content-Disposition": 'attachment; filename="arrive_guidelines.zip"'})
 
 
 init_vcg_router(sessions, _save_session, _load_session)

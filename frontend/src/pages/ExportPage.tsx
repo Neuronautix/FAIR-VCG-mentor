@@ -17,6 +17,7 @@ import {
 import { useState } from 'react'
 import { getFairScore } from '../api/client'
 import { exportUrl } from '../api/client'
+import { arriveExportUrl } from '../api/client'
 import FAIRScoreBreakdown from '../components/FAIRScoreBreakdown'
 import { useStore } from '../store/useStore'
 
@@ -170,6 +171,76 @@ function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string
   )
 }
 
+function ARRIVEExportCard({ datasetId }: { datasetId: string }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleDownload = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const resp = await fetch(arriveExportUrl(datasetId))
+      if (!resp.ok) throw new Error('Export failed')
+      const blob = await resp.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = 'arrive_guidelines.zip'
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch {
+      setError('ARRIVE export failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Card sx={{ mt: 2, border: '1.5px solid #2e7d32', background: '#f1f8f1' }}>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          ARRIVE 2.0 Guidelines Export
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          Downloads a ZIP containing two pre-filled Markdown documents:
+        </Typography>
+        <Box component="ul" sx={{ pl: 2.5, mb: 1.5, '& li': { mb: 0.5 } }}>
+          <li>
+            <Typography variant="body2">
+              <strong>arrive_study_plan.md</strong> — pre-study plan template filled with your dataset
+              metadata, animal information, experimental groups, and VCG statistics (if generated).
+            </Typography>
+          </li>
+          <li>
+            <Typography variant="body2">
+              <strong>arrive_checklist.md</strong> — ARRIVE 2.0 author checklist (Essential 10 + Recommended Set)
+              with auto-detected status (✅ / ⚠️ / ❌) per item, pre-filled section references, and
+              an action list of missing items.
+            </Typography>
+          </li>
+        </Box>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+          Based on the official ARRIVE 2.0 Author Checklist and ARRIVE Study Plan template
+          (www.ARRIVEguidelines.org).
+        </Typography>
+        {error && (
+          <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+        <Button
+          variant="contained"
+          color="success"
+          startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <FolderZipIcon />}
+          onClick={handleDownload}
+          disabled={loading}
+        >
+          {loading ? 'Generating…' : 'Download ARRIVE ZIP'}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function ExportPage() {
   const { datasetId, fairScore, metadata, importInfo, setFairScore } = useStore()
   const [refreshing, setRefreshing] = useState(false)
@@ -233,6 +304,8 @@ export default function ExportPage() {
               </Typography>
             </CardContent>
           </Card>
+
+          <ARRIVEExportCard datasetId={datasetId} />
         </Grid>
 
         <Grid item xs={12} md={5}>

@@ -1,6 +1,7 @@
 import io
 import re
 import csv as csv_module
+import warnings
 from typing import Dict, List, Any, Tuple, Optional
 
 import chardet
@@ -154,7 +155,9 @@ def infer_data_type(series: pd.Series) -> str:
     non_null = series.dropna()
     if len(non_null) > 0:
         try:
-            pd.to_datetime(non_null.head(20), infer_datetime_format=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                pd.to_datetime(non_null.head(20))
             return 'date'
         except Exception:
             pass

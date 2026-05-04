@@ -127,6 +127,20 @@ export interface VCGResults {
     outcomes: Array<{col: string, mean_real: number, sd_real: number, mean_vcg: number, sd_vcg: number, p_value: number}>
   }
   diagnostic_plots: Record<string, string>   // base64 PNG strings
+  per_endpoint_plots?: Record<string, Record<string, string>>
+  reliability_score?: number
+  reliability_breakdown?: {
+    per_endpoint?: Record<string, Record<string, unknown>>
+    [key: string]: unknown
+  }
+  method_diagnostics?: {
+    method?: string
+    n_control?: number
+    fitted_distributions?: Record<string, Record<string, unknown>>
+    per_column_method?: Record<string, string>
+    [key: string]: unknown
+  }
+  warnings?: string[]
   stat_report: string
   generated_at: string
 }

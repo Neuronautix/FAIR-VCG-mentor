@@ -476,7 +476,9 @@ class StatsAgent:
             ax.set_title(col, fontsize=10, fontweight="bold")
             ax.set_xlabel("Value", fontsize=8)
             ax.set_ylabel("Density", fontsize=8)
-            ax.legend(fontsize=7)
+            handles, labels = ax.get_legend_handles_labels()
+            if handles:
+                ax.legend(fontsize=7)
             ax.tick_params(labelsize=7)
 
         # Hide unused subplots

@@ -45,6 +45,13 @@ def run_vcg_pipeline(
         if ingestion["blocking_issues"]:
             raise ValueError(f"Data ingestion failed: {'; '.join(ingestion['blocking_issues'])}")
 
+        # Enforce suitability gate (n<6, zero variance, etc.)
+        suitability = ingestion.get("suitability", {})
+        suitability_blocks = suitability.get("blocking_issues", [])
+        if suitability_blocks:
+            msgs = [b["message"] for b in suitability_blocks]
+            raise ValueError(f"Suitability gate failed: {'; '.join(msgs)}")
+
         n_control = ingestion["n_control"]
 
         # Extract real control group
@@ -73,9 +80,13 @@ def run_vcg_pipeline(
             method = auto_select_method(n_control)
 
         if method == "bootstrap":
-            vcg_df = BootstrapVCGAgent().run(control_df, outcome_cols, covariate_cols, vcg_config)
+            bootstrap_agent = BootstrapVCGAgent()
+            vcg_df = bootstrap_agent.run(control_df, outcome_cols, covariate_cols, vcg_config)
+            method_diagnostics = bootstrap_agent.method_diagnostics
         else:
-            vcg_df = SyntheticVCGAgent().run(control_df, outcome_cols, covariate_cols, vcg_config)
+            synthetic_agent = SyntheticVCGAgent()
+            vcg_df = synthetic_agent.run(control_df, outcome_cols, covariate_cols, vcg_config)
+            method_diagnostics = synthetic_agent.method_diagnostics
 
         # ── Step 4: Statistics ─────────────────────────────────────────────────
         valid_outcomes = [c for c in outcome_cols if c in control_df.columns and c in vcg_df.columns]
@@ -111,10 +122,13 @@ def run_vcg_pipeline(
             "vcg_csv": vcg_df.to_csv(index=False),
             "balance_report": balance,
             "diagnostic_plots": stats_result.get("diagnostic_plots", {}),
+            "per_endpoint_plots": stats_result.get("per_endpoint_plots", {}),
+            "reliability_score": stats_result.get("reliability_score", 0.0),
+            "reliability_breakdown": stats_result.get("reliability_breakdown", {}),
+            "method_diagnostics": method_diagnostics,
             "stat_report": report_md,
             "generated_at": datetime.now().isoformat(),
-            "reliability_score": stats_result.get("reliability_score", 0.0),
-            "warnings": stats_result.get("warnings", []),
+            "warnings": stats_result.get("warnings", []) + ingestion.get("suitability", {}).get("warnings", []),
         }
         vcg["vcg_status"] = "done"
 

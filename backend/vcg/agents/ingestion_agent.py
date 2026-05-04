@@ -1,9 +1,99 @@
 import pandas as pd
-from typing import Dict, List, Any
+import numpy as np
+from typing import Dict, List, Any, Optional
 
 
 class DataIngestionAgent:
     """Validates data suitability for VCG generation."""
+
+    def _check_suitability(
+        self,
+        control_df: pd.DataFrame,
+        outcome_cols: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Checks statistical suitability of the control group for VCG generation.
+
+        Returns:
+            {
+                "suitable": bool,
+                "blocking_issues": [{"type": str, "endpoint": str|None, "message": str}],
+                "warnings": [{"type": str, "endpoint": str|None, "message": str}],
+            }
+        """
+        blocking_issues = []
+        warnings = []
+
+        n = len(control_df)
+
+        # Block: too few subjects
+        if n < 6:
+            blocking_issues.append({
+                "type": "insufficient_n",
+                "endpoint": None,
+                "message": (
+                    f"Too few control subjects (n={n}). "
+                    "Minimum 6 required for reliable VCG generation."
+                ),
+            })
+
+        # Per-column checks
+        for col in outcome_cols:
+            if col not in control_df.columns:
+                continue
+
+            numeric = pd.to_numeric(control_df[col], errors="coerce").dropna()
+            if len(numeric) == 0:
+                continue
+
+            values = numeric.values.astype(float)
+
+            # Block: zero variance
+            if float(np.std(values, ddof=0)) == 0.0:
+                blocking_issues.append({
+                    "type": "zero_variance",
+                    "endpoint": col,
+                    "message": (
+                        f"Outcome column '{col}' has zero variance in control group."
+                    ),
+                })
+                continue  # skip further checks for this column
+
+            mean_val = float(np.mean(values))
+            std_val = float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
+
+            # Warning: high CV (> 80%)
+            if mean_val != 0.0:
+                cv = abs(std_val / mean_val) * 100.0
+                if cv > 80.0:
+                    warnings.append({
+                        "type": "high_cv",
+                        "endpoint": col,
+                        "message": (
+                            f"High coefficient of variation ({cv:.0f}%) in '{col}'. "
+                            "VCG reliability may be limited."
+                        ),
+                    })
+
+            # Warning: outliers with |z-score| > 3.5
+            if std_val > 0:
+                z_scores = np.abs((values - mean_val) / std_val)
+                n_out = int(np.sum(z_scores > 3.5))
+                if n_out > 0:
+                    warnings.append({
+                        "type": "outliers",
+                        "endpoint": col,
+                        "message": (
+                            f"{n_out} potential outlier(s) detected in '{col}' (|z| > 3.5)."
+                        ),
+                    })
+
+        suitable = len(blocking_issues) == 0
+        return {
+            "suitable": suitable,
+            "blocking_issues": blocking_issues,
+            "warnings": warnings,
+        }
 
     def run(
         self,
@@ -58,6 +148,11 @@ class DataIngestionAgent:
                 "n_treatment": 0,
                 "available_methods": ["synthetic"],
                 "recommended_n_synthetic": 30,
+                "suitability": {
+                    "suitable": False,
+                    "blocking_issues": [],
+                    "warnings": [],
+                },
             }
 
         col_vals = df[treatment_col].astype(str)
@@ -151,6 +246,18 @@ class DataIngestionAgent:
             min(1.0, 1.0 - 0.3 * len(blocking_issues) - 0.1 * len(warnings)),
         )
 
+        # Run deep suitability gate on the actual control subset
+        if control_value and control_value in col_vals.values and valid_outcome_cols:
+            control_mask = col_vals == str(control_value)
+            _control_df_for_suitability = df[control_mask]
+            suitability = self._check_suitability(_control_df_for_suitability, valid_outcome_cols)
+        else:
+            suitability = {
+                "suitable": False,
+                "blocking_issues": [],
+                "warnings": [],
+            }
+
         return {
             "suitability_score": round(suitability_score, 3),
             "blocking_issues": blocking_issues,
@@ -159,4 +266,5 @@ class DataIngestionAgent:
             "n_treatment": n_treatment,
             "available_methods": available_methods,
             "recommended_n_synthetic": recommended_n_synthetic,
+            "suitability": suitability,
         }

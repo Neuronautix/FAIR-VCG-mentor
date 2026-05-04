@@ -1,4 +1,5 @@
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -18,7 +19,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getVCGWizardPrefill, saveVCGWizard, startVCGGeneration } from '../api/client'
+import { getVCGSuitability, getVCGWizardPrefill, saveVCGWizard, startVCGGeneration } from '../api/client'
 import { useStore } from '../store/useStore'
 
 const STEPS = ['Research Context', 'Column Roles', 'Statistical Config', 'Review & Generate']
@@ -61,6 +62,7 @@ export default function VCGWizardPage() {
   const [activeStep, setActiveStep] = useState(0)
   const [form, setForm] = useState<FormState>(defaultForm)
   const [saving, setSaving] = useState(false)
+  const [suitability, setSuitability] = useState<{ suitable: boolean; blocking_issues: string[]; warnings: string[] } | null>(null)
 
   // Prefill on step 2 mount
   useEffect(() => {
@@ -101,7 +103,14 @@ export default function VCGWizardPage() {
 
   const handleNext = async () => {
     await saveCurrentStep()
-    setActiveStep((s) => s + 1)
+    const nextStep = activeStep + 1
+    setActiveStep(nextStep)
+    // Run suitability check on entering review step
+    if (nextStep === 3 && datasetId) {
+      getVCGSuitability(datasetId)
+        .then((s) => setSuitability(s))
+        .catch(() => setSuitability(null))
+    }
   }
 
   const handleBack = () => setActiveStep((s) => s - 1)
@@ -430,6 +439,27 @@ export default function VCGWizardPage() {
             <Typography variant="h6" gutterBottom>
               Review &amp; Generate
             </Typography>
+
+            {/* Suitability gate */}
+            {suitability && suitability.blocking_issues.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                {suitability.blocking_issues.map((msg: string, i: number) => (
+                  <Alert key={i} severity="error" sx={{ mb: 1 }}>
+                    {msg}
+                  </Alert>
+                ))}
+              </Box>
+            )}
+            {suitability && suitability.warnings.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                {suitability.warnings.map((msg: string, i: number) => (
+                  <Alert key={i} severity="warning" sx={{ mb: 1 }}>
+                    {msg}
+                  </Alert>
+                ))}
+              </Box>
+            )}
+
             <Grid container spacing={2}>
               {[
                 { label: 'Domain', value: form.domain || '—' },
@@ -457,7 +487,7 @@ export default function VCGWizardPage() {
                 variant="contained"
                 size="large"
                 onClick={handleGenerate}
-                disabled={saving}
+                disabled={saving || (suitability != null && !suitability.suitable && suitability.blocking_issues.length > 0)}
               >
                 {saving ? 'Starting…' : 'Generate VCG'}
               </Button>

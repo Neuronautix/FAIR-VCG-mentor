@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Any
 
-from vcg.utils.distributions import fit_best_distribution, gaussian_copula_sample
+from vcg.utils.distributions import fit_best_distribution, fit_best_distribution_with_diagnostics, gaussian_copula_sample
 
 
 class BootstrapVCGAgent:
@@ -10,6 +10,9 @@ class BootstrapVCGAgent:
     Generates synthetic control subjects using a Gaussian copula with
     fitted marginal distributions. Preserves inter-endpoint correlations.
     """
+
+    def __init__(self):
+        self.method_diagnostics: dict = {}
 
     def run(
         self,
@@ -96,10 +99,12 @@ class BootstrapVCGAgent:
 
                     # Step 3: Fit distributions (variable columns only)
                     marginal_dists = []
+                    fit_diagnostics: Dict[str, Any] = {}
                     for col in variable_cols:
                         series = outcome_data[col].dropna()
-                        dist_name, params = fit_best_distribution(series)
+                        dist_name, params, diag = fit_best_distribution_with_diagnostics(series)
                         marginal_dists.append((dist_name, params))
+                        fit_diagnostics[col] = diag
 
                     # Step 4: Gaussian copula sampling
                     try:
@@ -111,6 +116,12 @@ class BootstrapVCGAgent:
                         for j, col in enumerate(variable_cols):
                             dist_name, params = marginal_dists[j]
                             rows[col] = sample_from_distribution(dist_name, params, n_synthetic, rng)
+
+                    self.method_diagnostics = {
+                        "method": "gaussian_copula_bootstrap",
+                        "n_control": len(outcome_data),
+                        "fitted_distributions": fit_diagnostics,
+                    }
 
         # Step 5: Categorical covariates — sample with replacement from empirical PMF
         for col in covariate_cols:

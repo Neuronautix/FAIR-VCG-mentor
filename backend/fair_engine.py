@@ -298,4 +298,190 @@ def detect_issues(
             ),
         })
 
+    # ── ARRIVE 2.0 compliance checks ─────────────────────────────────────────
+    # Only triggered for datasets that appear to be pre-clinical animal studies.
+    PRECLINICAL_SIGNALS = {
+        'animal_id', 'animal', 'mouse', 'rat', 'mice', 'rats', 'rabbit', 'pig',
+        'strain', 'cage', 'litter', 'dose', 'dosing', 'treatment', 'group',
+        'body_weight', 'bw', 'organ_weight',
+    }
+    col_names_lower = {c['name'].lower() for c in columns}
+    is_preclinical = bool(col_names_lower & PRECLINICAL_SIGNALS)
+
+    if is_preclinical:
+        metadata_flat = import_info  # import_info doesn't carry metadata; use columns instead
+        # We check the table_structure and column list as proxies for the items we can detect.
+
+        # ARRIVE 2.1 – Ethical statement
+        has_ethics = any(
+            any(kw in c['name'].lower() for kw in ['ethic', 'iacuc', 'approval', 'license'])
+            for c in columns
+        )
+        if not has_ethics:
+            issues.append({
+                'id': 'arrive_missing_ethical_statement',
+                'severity': 'medium',
+                'category': 'arrive_2.0',
+                'column': None,
+                'problem': 'ARRIVE 2.0 (item 1): No ethical statement detected.',
+                'why_it_matters': (
+                    'ARRIVE 2.0 requires documentation of ethical approval (IACUC, Home Office, '
+                    'or equivalent) for all in vivo studies. Most journals mandate this.'
+                ),
+                'suggested_fix': (
+                    'Add an "ethical_approval_id" column or record the ethics committee '
+                    'approval number in the dataset metadata.'
+                ),
+            })
+
+        # ARRIVE 2.3 – Sex of animals
+        has_sex = any(c['name'].lower() in ('sex', 'gender') for c in columns)
+        if not has_sex:
+            issues.append({
+                'id': 'arrive_missing_sex',
+                'severity': 'medium',
+                'category': 'arrive_2.0',
+                'column': None,
+                'problem': 'ARRIVE 2.0 (item 3): Sex of animals not recorded.',
+                'why_it_matters': (
+                    'Sex is a biological variable that strongly influences most physiological '
+                    'endpoints. ARRIVE 2.0 and most journals require it to be reported.'
+                ),
+                'suggested_fix': (
+                    'Add a "sex" column with values: male, female, or unknown.'
+                ),
+            })
+
+        # ARRIVE 2.3 – Species / strain
+        has_strain = any(
+            any(kw in c['name'].lower() for kw in ['strain', 'species', 'genotype', 'line'])
+            for c in columns
+        )
+        if not has_strain:
+            issues.append({
+                'id': 'arrive_missing_strain',
+                'severity': 'medium',
+                'category': 'arrive_2.0',
+                'column': None,
+                'problem': 'ARRIVE 2.0 (item 3): Strain or species not recorded as a column.',
+                'why_it_matters': (
+                    'Results are not reproducible without knowing the exact strain, substrain, '
+                    'and source of animals. This is a core ARRIVE 2.0 essential item.'
+                ),
+                'suggested_fix': (
+                    'Add a "strain" or "species" column recording the exact animal background.'
+                ),
+            })
+
+        # ARRIVE 2.4 – Housing and husbandry (light cycle, housing)
+        has_housing = any(
+            any(kw in c['name'].lower() for kw in ['cage', 'housing', 'light', 'temperature', 'humidity'])
+            for c in columns
+        )
+        if not has_housing:
+            issues.append({
+                'id': 'arrive_missing_housing',
+                'severity': 'low',
+                'category': 'arrive_2.0',
+                'column': None,
+                'problem': 'ARRIVE 2.0 (item 4): Housing / husbandry conditions not recorded.',
+                'why_it_matters': (
+                    'Light cycle, temperature, and social housing significantly affect behaviour '
+                    'and physiology. ARRIVE 2.0 requires these to be reported.'
+                ),
+                'suggested_fix': (
+                    'Add housing metadata (cage_type, light_cycle, temperature_C) as columns '
+                    'or document them in the metadata protocol field.'
+                ),
+            })
+
+        # ARRIVE 2.5 – Sample size statement / group size
+        has_n = any(
+            any(kw in c['name'].lower() for kw in ['group', 'cohort', 'batch', 'replicate'])
+            for c in columns
+        )
+        n_rows = table_structure.get('n_rows') or import_info.get('n_rows', 0)
+        if not has_n and n_rows < 6:
+            issues.append({
+                'id': 'arrive_small_n',
+                'severity': 'medium',
+                'category': 'arrive_2.0',
+                'column': None,
+                'problem': f'ARRIVE 2.0 (item 5): Dataset has very few rows (n={n_rows}); group size statement likely missing.',
+                'why_it_matters': (
+                    'ARRIVE 2.0 requires justification for the chosen sample size. '
+                    'Very small datasets raise concerns about statistical power.'
+                ),
+                'suggested_fix': (
+                    'Add a "group_size_justification" field to dataset metadata or a '
+                    'power calculation reference in the protocol field.'
+                ),
+            })
+
+        # ARRIVE 2.6 – Inclusion / exclusion criteria
+        has_exclusion = any(
+            any(kw in c['name'].lower() for kw in ['exclude', 'excluded', 'outlier', 'dropout'])
+            for c in columns
+        )
+        if not has_exclusion:
+            issues.append({
+                'id': 'arrive_missing_exclusion',
+                'severity': 'low',
+                'category': 'arrive_2.0',
+                'column': None,
+                'problem': 'ARRIVE 2.0 (item 6): No exclusion/inclusion criteria column detected.',
+                'why_it_matters': (
+                    'Without documented exclusion criteria, selective reporting of results '
+                    'cannot be ruled out. ARRIVE 2.0 requires pre-specified criteria.'
+                ),
+                'suggested_fix': (
+                    'Add an "excluded" flag column (True/False) with a reason field, '
+                    'or document criteria in the protocol metadata field.'
+                ),
+            })
+
+        # ARRIVE 2.7 – Randomisation
+        has_randomisation = any(
+            any(kw in c['name'].lower() for kw in ['random', 'randomis', 'randomiz', 'allocation'])
+            for c in columns
+        )
+        if not has_randomisation:
+            issues.append({
+                'id': 'arrive_missing_randomisation',
+                'severity': 'medium',
+                'category': 'arrive_2.0',
+                'column': None,
+                'problem': 'ARRIVE 2.0 (item 7): No randomisation information detected.',
+                'why_it_matters': (
+                    'Lack of randomisation is a leading source of bias in animal studies. '
+                    'ARRIVE 2.0 requires a description of how animals were allocated to groups.'
+                ),
+                'suggested_fix': (
+                    'Add a "randomisation_method" field to dataset metadata '
+                    '(e.g. "stratified by body weight, computer-generated sequence").'
+                ),
+            })
+
+        # ARRIVE 2.8 – Blinding
+        has_blinding = any(
+            any(kw in c['name'].lower() for kw in ['blind', 'blinded', 'masked'])
+            for c in columns
+        )
+        if not has_blinding:
+            issues.append({
+                'id': 'arrive_missing_blinding',
+                'severity': 'medium',
+                'category': 'arrive_2.0',
+                'column': None,
+                'problem': 'ARRIVE 2.0 (item 8): No blinding information detected.',
+                'why_it_matters': (
+                    'Observer bias is a major source of irreproducibility. ARRIVE 2.0 requires '
+                    'a statement on whether outcome assessment was blinded to treatment group.'
+                ),
+                'suggested_fix': (
+                    'Add a "blinding" field to dataset metadata '
+                    '(e.g. "outcome assessors blinded to treatment allocation").'
+                ),
+            })
+
     return issues

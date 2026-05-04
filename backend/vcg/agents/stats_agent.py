@@ -202,7 +202,112 @@ class StatsAgent:
                 "Low overall reliability score. Consider using more source data."
             )
 
-        # Diagnostic plots
+        # ── Reliability breakdown ─────────────────────────────────────────────
+        per_endpoint_breakdown: Dict[str, Any] = {}
+        for col in valid_cols:
+            real_vals = pd.to_numeric(real_control_df[col], errors="coerce").dropna().values
+            vcg_vals_col = pd.to_numeric(vcg_df[col], errors="coerce").dropna().values
+
+            if len(real_vals) < 2 or len(vcg_vals_col) < 2:
+                continue
+
+            mean_real = float(np.mean(real_vals))
+            std_real = float(np.std(real_vals, ddof=1))
+            mean_vcg_col = float(np.mean(vcg_vals_col))
+            std_vcg_col = float(np.std(vcg_vals_col, ddof=1))
+
+            cohens_d_val = effect_sizes.get(col, {}).get("cohens_d", float("nan"))
+            ks_p_val = ks_pvalues.get(col, float("nan"))
+            ks_s_val = float("nan")
+            try:
+                with _warnings.catch_warnings():
+                    _warnings.simplefilter("ignore")
+                    ks_s_val, _ = stats.ks_2samp(real_vals, vcg_vals_col)
+                ks_s_val = round(float(ks_s_val), 6)
+            except Exception:
+                pass
+
+            # Confidence interval for mean difference
+            ci_lower = float("nan")
+            ci_upper = float("nan")
+            ci_width = float("nan")
+            try:
+                n1 = len(real_vals)
+                n2 = len(vcg_vals_col)
+                se = float(np.sqrt(std_real**2 / n1 + std_vcg_col**2 / n2))
+                df_t = n1 + n2 - 2
+                t_crit = float(stats.t.ppf((1 + confidence_level) / 2, df=df_t))
+                diff = mean_real - mean_vcg_col
+                ci_lower = round(diff - t_crit * se, 6)
+                ci_upper = round(diff + t_crit * se, 6)
+                ci_width = round(ci_upper - ci_lower, 6)
+            except Exception:
+                pass
+
+            # Interpretation thresholds
+            abs_d = abs(cohens_d_val) if not np.isnan(cohens_d_val) else float("inf")
+            ks_p = ks_p_val if not np.isnan(ks_p_val) else 0.0
+
+            if ks_p > 0.5 and abs_d < 0.2:
+                interpretation = "Excellent"
+                interpretation_detail = (
+                    "Distributions are highly similar; VCG is a reliable substitute."
+                )
+            elif ks_p > 0.2 and abs_d < 0.5:
+                interpretation = "Good"
+                interpretation_detail = (
+                    "Minor distributional differences; VCG is acceptable for most analyses."
+                )
+            elif ks_p > 0.05 and abs_d < 0.8:
+                interpretation = "Acceptable"
+                interpretation_detail = (
+                    "Moderate differences detected; interpret VCG comparisons with caution."
+                )
+            else:
+                interpretation = "Poor"
+                interpretation_detail = (
+                    "Substantial distributional divergence; VCG should not substitute "
+                    "for concurrent controls for this endpoint."
+                )
+
+            per_endpoint_breakdown[col] = {
+                "mean_real": round(mean_real, 6),
+                "std_real": round(std_real, 6),
+                "mean_vcg": round(mean_vcg_col, 6),
+                "std_vcg": round(std_vcg_col, 6),
+                "cohens_d": round(float(cohens_d_val), 4) if not np.isnan(cohens_d_val) else None,
+                "ks_stat": round(ks_s_val, 6) if not np.isnan(ks_s_val) else None,
+                "ks_pvalue": round(ks_p_val, 6) if not np.isnan(ks_p_val) else None,
+                "ci_lower": ci_lower if not np.isnan(ci_lower) else None,
+                "ci_upper": ci_upper if not np.isnan(ci_upper) else None,
+                "ci_width": ci_width if not np.isnan(ci_width) else None,
+                "interpretation": interpretation,
+                "interpretation_detail": interpretation_detail,
+            }
+
+        reliability_breakdown = {
+            "overall_score": reliability_score,
+            "per_endpoint": per_endpoint_breakdown,
+        }
+
+        # ── Per-endpoint diagnostic plots ─────────────────────────────────────
+        per_endpoint_plots: Dict[str, Any] = {}
+        for col in valid_cols:
+            real_vals = pd.to_numeric(real_control_df[col], errors="coerce").dropna().values
+            vcg_vals_col = pd.to_numeric(vcg_df[col], errors="coerce").dropna().values
+
+            # Skip columns with fewer than 3 unique values
+            if len(np.unique(real_vals)) < 3:
+                continue
+
+            density_b64 = self._plot_endpoint_density(col, real_vals, vcg_vals_col)
+            qq_b64_ep = self._plot_endpoint_qq(col, real_vals, vcg_vals_col)
+            per_endpoint_plots[col] = {
+                "density": density_b64,
+                "qq": qq_b64_ep,
+            }
+
+        # ── Legacy combined diagnostic plots ─────────────────────────────────
         dist_overlap_b64 = self._plot_distribution_overlap(real_control_df, vcg_df, valid_cols)
         qq_b64 = self._plot_qq(real_control_df, vcg_df, valid_cols)
 
@@ -220,13 +325,82 @@ class StatsAgent:
             "effect_sizes": effect_sizes,
             "power_estimates": power_estimates,
             "reliability_score": reliability_score,
+            "reliability_breakdown": reliability_breakdown,
             "warnings": stat_warnings,
             "diagnostic_plots": {
                 "dist_overlap": dist_overlap_b64,
                 "qq_plot": qq_b64,
+                **per_endpoint_plots,
             },
+            "per_endpoint_plots": per_endpoint_plots,
             "method_params": method_params,
         }
+
+    def _plot_endpoint_density(
+        self,
+        col: str,
+        real_vals: np.ndarray,
+        vcg_vals: np.ndarray,
+    ) -> str:
+        """KDE density overlay for a single endpoint. Returns base64 PNG."""
+        fig, ax = plt.subplots(figsize=(5, 4))
+        for vals, color, label in (
+            (real_vals, "#1976d2", "Real control"),
+            (vcg_vals, "#e65100", "VCG"),
+        ):
+            if len(vals) >= 2:
+                try:
+                    with _warnings.catch_warnings():
+                        _warnings.simplefilter("ignore")
+                        kde = stats.gaussian_kde(vals)
+                    all_v = np.concatenate([real_vals, vcg_vals])
+                    lo, hi = float(all_v.min()), float(all_v.max())
+                    span = max(hi - lo, 1e-9)
+                    x = np.linspace(lo - 0.1 * span, hi + 0.1 * span, 200)
+                    ax.fill_between(x, kde(x), alpha=0.45, color=color, label=label)
+                    ax.plot(x, kde(x), color=color, lw=1.5)
+                except Exception:
+                    ax.hist(vals, density=True, alpha=0.45, color=color, label=label)
+
+        ax.set_title(col, fontsize=11, fontweight="bold")
+        ax.set_xlabel("Value", fontsize=9)
+        ax.set_ylabel("Density", fontsize=9)
+        ax.legend(fontsize=8)
+        ax.tick_params(labelsize=8)
+        plt.tight_layout()
+        return self._fig_to_base64(fig)
+
+    def _plot_endpoint_qq(
+        self,
+        col: str,
+        real_vals: np.ndarray,
+        vcg_vals: np.ndarray,
+    ) -> str:
+        """Q-Q plot for a single endpoint. Returns base64 PNG."""
+        fig, ax = plt.subplots(figsize=(5, 4))
+        if len(real_vals) < 2 or len(vcg_vals) < 2:
+            ax.text(0.5, 0.5, "Insufficient data", ha="center", va="center",
+                    transform=ax.transAxes)
+            ax.set_axis_off()
+            return self._fig_to_base64(fig)
+
+        n_q = min(len(real_vals), len(vcg_vals), 100)
+        pts = np.linspace(0, 1, n_q)
+        real_q = np.quantile(np.sort(real_vals), pts)
+        vcg_q = np.quantile(np.sort(vcg_vals), pts)
+
+        ax.scatter(real_q, vcg_q, s=25, color="#1976d2", alpha=0.7, zorder=3)
+        all_q = np.concatenate([real_q, vcg_q])
+        ref = np.linspace(float(all_q.min()), float(all_q.max()), 100)
+        ax.plot(ref, ref, color="grey", lw=1.5, linestyle="--", alpha=0.8, label="45° ref")
+
+        ax.set_title(f"{col} — Q-Q", fontsize=11, fontweight="bold")
+        ax.set_xlabel("Real control quantiles", fontsize=9)
+        ax.set_ylabel("VCG quantiles", fontsize=9)
+        ax.legend(fontsize=8)
+        ax.tick_params(labelsize=8)
+        plt.tight_layout()
+        return self._fig_to_base64(fig)
 
     def _plot_distribution_overlap(
         self,

@@ -55,6 +55,9 @@ export const respondVCGChat = (id: string, message: string) =>
 export const startVCGGeneration = (id: string) =>
   api.post(`/vcg/${id}/generate`).then(r => r.data)
 
+export const getVCGSuitability = (id: string) =>
+  api.get(`/vcg/${id}/suitability`).then(r => r.data)
+
 export const getVCGStatus = (id: string) =>
   api.get(`/vcg/${id}/status`).then(r => r.data)
 

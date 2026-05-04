@@ -96,6 +96,29 @@ async def get_conversation(dataset_id: str):
 
 # ── Generation endpoints ────────────────────────────────────────────────────
 
+@vcg_router.get("/{dataset_id}/suitability")
+async def get_suitability(dataset_id: str):
+    """Pre-generation suitability check. Returns blocking issues and warnings."""
+    s = _require(dataset_id)
+    _ensure_vcg(s)
+    if "df" not in s or s["df"] is None:
+        raise HTTPException(400, "Dataset not loaded. Please upload your CSV again.")
+
+    from vcg.agents.ingestion_agent import DataIngestionAgent
+    column_roles = s["vcg"].get("column_roles", {})
+    ingestion = DataIngestionAgent().run(s["df"], s["columns"], column_roles)
+    suitability = ingestion.get("suitability", {"suitable": False, "blocking_issues": [], "warnings": []})
+    return {
+        "suitable": suitability.get("suitable", True) and not ingestion.get("blocking_issues"),
+        "blocking_issues": ingestion.get("blocking_issues", []) + [
+            b["message"] for b in suitability.get("blocking_issues", [])
+        ],
+        "warnings": [w["message"] for w in suitability.get("warnings", [])] + ingestion.get("warnings", []),
+        "n_control": ingestion.get("n_control", 0),
+        "available_methods": ingestion.get("available_methods", ["synthetic"]),
+    }
+
+
 @vcg_router.post("/{dataset_id}/generate")
 async def generate(dataset_id: str):
     s = _require(dataset_id)

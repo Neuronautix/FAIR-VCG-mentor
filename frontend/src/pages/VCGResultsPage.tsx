@@ -79,7 +79,7 @@ export default function VCGResultsPage() {
         if (!datasetId) return
         try {
           const statusData = await getVCGStatus(datasetId)
-          const status: string = statusData.status ?? statusData
+          const status: string = statusData.vcg_status ?? statusData.status ?? statusData
 
           if (status === 'done') {
             clearInterval(pollRef.current!)
@@ -174,8 +174,24 @@ export default function VCGResultsPage() {
     )
   }
 
-  const reliabilityScore = deriveReliabilityScore(vcgResults)
-  const { n_subjects_real, n_subjects_vcg, balance_report, diagnostic_plots, stat_report, generated_at } = vcgResults
+  const reliabilityScore: number =
+    typeof vcgResults.reliability_score === 'number'
+      ? vcgResults.reliability_score
+      : deriveReliabilityScore(vcgResults)
+
+  const {
+    n_subjects_real,
+    n_subjects_vcg,
+    balance_report,
+    diagnostic_plots,
+    per_endpoint_plots,
+    reliability_breakdown,
+    method_diagnostics,
+    stat_report,
+    generated_at,
+    warnings,
+    method_used,
+  } = vcgResults
 
   const formattedDate = (() => {
     try {
@@ -230,16 +246,84 @@ export default function VCGResultsPage() {
                 Reliability
               </Typography>
               <ReliabilityBadge score={reliabilityScore} />
+              {method_used && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                  Method: {method_used}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Diagnostic Plots */}
-      {diagnostic_plots && Object.keys(diagnostic_plots).length > 0 && (
+      {/* Warnings */}
+      {warnings && warnings.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          {warnings.map((w: string, i: number) => (
+            <Alert key={i} severity="warning" sx={{ mb: 1 }}>
+              {w}
+            </Alert>
+          ))}
+        </Box>
+      )}
+
+      {/* Reliability breakdown per endpoint */}
+      {reliability_breakdown?.per_endpoint && Object.keys(reliability_breakdown.per_endpoint).length > 0 && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" gutterBottom>
-            Diagnostic Plots
+            Reliability Breakdown
+          </Typography>
+          <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f5f5f5' }}>
+                  {['Endpoint', 'Mean (real)', 'Mean (VCG)', 'Cohen\'s d', 'KS p-value', 'CI width', 'Verdict'].map((h) => (
+                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e0e0e0' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(reliability_breakdown.per_endpoint as Record<string, Record<string, unknown>>).map(([col, ep]) => {
+                  const interp = ep.interpretation as string
+                  const color = interp === 'Excellent' ? '#2e7d32' : interp === 'Good' ? '#1565c0' : interp === 'Acceptable' ? '#e65100' : '#c62828'
+                  return (
+                    <tr key={col}>
+                      <td style={{ padding: '7px 12px', borderBottom: '1px solid #f0f0f0', fontWeight: 600 }}>{col}</td>
+                      <td style={{ padding: '7px 12px', borderBottom: '1px solid #f0f0f0' }}>
+                        {typeof ep.mean_real === 'number' ? ep.mean_real.toFixed(3) : '—'} ± {typeof ep.std_real === 'number' ? ep.std_real.toFixed(3) : '—'}
+                      </td>
+                      <td style={{ padding: '7px 12px', borderBottom: '1px solid #f0f0f0' }}>
+                        {typeof ep.mean_vcg === 'number' ? ep.mean_vcg.toFixed(3) : '—'} ± {typeof ep.std_vcg === 'number' ? ep.std_vcg.toFixed(3) : '—'}
+                      </td>
+                      <td style={{ padding: '7px 12px', borderBottom: '1px solid #f0f0f0' }}>
+                        {ep.cohens_d != null ? (ep.cohens_d as number).toFixed(3) : '—'}
+                      </td>
+                      <td style={{ padding: '7px 12px', borderBottom: '1px solid #f0f0f0' }}>
+                        {ep.ks_pvalue != null ? (ep.ks_pvalue as number).toFixed(4) : '—'}
+                      </td>
+                      <td style={{ padding: '7px 12px', borderBottom: '1px solid #f0f0f0' }}>
+                        {ep.ci_width != null ? (ep.ci_width as number).toFixed(3) : '—'}
+                      </td>
+                      <td style={{ padding: '7px 12px', borderBottom: '1px solid #f0f0f0', color, fontWeight: 600 }}>
+                        {interp}
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          {ep.interpretation_detail as string}
+                        </Typography>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </Paper>
+        </Box>
+      )}
+
+      {/* Diagnostic Plots */}
+      {(diagnostic_plots?.dist_overlap || diagnostic_plots?.qq_plot) && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Overview Diagnostic Plots
           </Typography>
           <Grid container spacing={2}>
             {diagnostic_plots.dist_overlap && (
@@ -273,7 +357,7 @@ export default function VCGResultsPage() {
                 <Card>
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="subtitle1">QQ Plot</Typography>
+                      <Typography variant="subtitle1">Q-Q Plot</Typography>
                       <Tooltip title="Download plot">
                         <IconButton
                           size="small"
@@ -294,36 +378,57 @@ export default function VCGResultsPage() {
                 </Card>
               </Grid>
             )}
-            {/* Any additional plots */}
-            {Object.entries(diagnostic_plots)
-              .filter(([key]) => key !== 'dist_overlap' && key !== 'qq_plot')
-              .map(([key, value]) => (
-                <Grid item xs={12} md={6} key={key}>
-                  <Card>
-                    <CardContent>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="subtitle1">{key.replace(/_/g, ' ')}</Typography>
-                        <Tooltip title="Download plot">
-                          <IconButton
-                            size="small"
-                            component="a"
-                            href={`data:image/png;base64,${value}`}
-                            download={`${key}.png`}
-                          >
-                            <DownloadIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                      <img
-                        src={`data:image/png;base64,${value}`}
-                        alt={key}
-                        style={{ width: '100%', borderRadius: 8 }}
-                      />
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
           </Grid>
+        </Box>
+      )}
+
+      {/* Per-endpoint diagnostic plots */}
+      {per_endpoint_plots && Object.keys(per_endpoint_plots).length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Per-Endpoint Diagnostics
+          </Typography>
+          {Object.entries(per_endpoint_plots as Record<string, Record<string, string>>).map(([col, plots]) => (
+            <Box key={col} sx={{ mb: 2 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>{col}</Typography>
+              <Grid container spacing={2}>
+                {plots.density && (
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="subtitle2">Density Overlay</Typography>
+                          <Tooltip title="Download">
+                            <IconButton size="small" component="a" href={`data:image/png;base64,${plots.density}`} download={`${col}_density.png`}>
+                              <DownloadIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                        <img src={`data:image/png;base64,${plots.density}`} alt={`${col} density`} style={{ width: '100%', borderRadius: 6 }} />
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                )}
+                {plots.qq && (
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="subtitle2">Q-Q Plot</Typography>
+                          <Tooltip title="Download">
+                            <IconButton size="small" component="a" href={`data:image/png;base64,${plots.qq}`} download={`${col}_qq.png`}>
+                              <DownloadIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                        <img src={`data:image/png;base64,${plots.qq}`} alt={`${col} qq`} style={{ width: '100%', borderRadius: 6 }} />
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                )}
+              </Grid>
+            </Box>
+          ))}
         </Box>
       )}
 
@@ -334,6 +439,53 @@ export default function VCGResultsPage() {
           outcomes={balance_report.outcomes ?? []}
         />
       </Box>
+
+      {/* Method diagnostics */}
+      {method_diagnostics && (method_diagnostics.fitted_distributions || method_diagnostics.per_column_method) && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Method Diagnostics
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Generation method:</strong> {method_diagnostics.method ?? method_used ?? '—'}
+              {method_diagnostics.n_control != null && ` | Real control n = ${method_diagnostics.n_control}`}
+            </Typography>
+            {method_diagnostics.fitted_distributions && (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f5f5f5' }}>
+                    {['Endpoint', 'Distribution', 'AIC', 'BIC', 'Shapiro-W', 'N fitted'].map(h => (
+                      <th key={h} style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e0e0e0' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(method_diagnostics.fitted_distributions as Record<string, Record<string, unknown>>).map(([col, d]) => (
+                    <tr key={col}>
+                      <td style={{ padding: '5px 10px', borderBottom: '1px solid #f0f0f0', fontWeight: 600 }}>{col}</td>
+                      <td style={{ padding: '5px 10px', borderBottom: '1px solid #f0f0f0' }}>{d.dist_name as string}</td>
+                      <td style={{ padding: '5px 10px', borderBottom: '1px solid #f0f0f0' }}>{d.aic != null ? (d.aic as number).toFixed(2) : '—'}</td>
+                      <td style={{ padding: '5px 10px', borderBottom: '1px solid #f0f0f0' }}>{d.bic != null ? (d.bic as number).toFixed(2) : '—'}</td>
+                      <td style={{ padding: '5px 10px', borderBottom: '1px solid #f0f0f0' }}>{d.shapiro_w != null ? (d.shapiro_w as number).toFixed(4) : '—'}</td>
+                      <td style={{ padding: '5px 10px', borderBottom: '1px solid #f0f0f0' }}>{d.n_fitted as number ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {method_diagnostics.per_column_method && (
+              <Box sx={{ mt: 1 }}>
+                {Object.entries(method_diagnostics.per_column_method as Record<string, string>).map(([col, m]) => (
+                  <Typography key={col} variant="caption" display="block">
+                    {col}: <strong>{m}</strong>
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </Paper>
+        </Box>
+      )}
 
       {/* Statistical Report (collapsible) */}
       {stat_report && (

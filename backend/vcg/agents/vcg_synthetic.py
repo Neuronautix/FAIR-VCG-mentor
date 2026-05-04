@@ -12,6 +12,9 @@ class SyntheticVCGAgent:
     Simpler than bootstrap but does not preserve correlations.
     """
 
+    def __init__(self):
+        self.method_diagnostics: dict = {}
+
     def run(
         self,
         control_df: pd.DataFrame,
@@ -36,6 +39,7 @@ class SyntheticVCGAgent:
         rng = np.random.default_rng(seed)
 
         rows: Dict[str, np.ndarray] = {}
+        col_method_log: Dict[str, str] = {}
 
         # Process numeric outcome columns
         for col in outcome_cols:
@@ -47,6 +51,7 @@ class SyntheticVCGAgent:
             if len(numeric) == 0:
                 # No data — use standard normal as fallback
                 rows[col] = rng.standard_normal(n_synthetic)
+                col_method_log[col] = "standard_normal_fallback"
                 continue
 
             values = numeric.values.astype(float)
@@ -74,6 +79,7 @@ class SyntheticVCGAgent:
                     rng_int = int(rng.integers(0, 2**31))
                     samples = stats.lognorm.rvs(*lognorm_params, size=n_synthetic, random_state=rng_int)
                     rows[col] = samples.astype(float)
+                    col_method_log[col] = "lognorm"
                     continue
                 except Exception:
                     pass  # Fall through to other methods
@@ -87,16 +93,19 @@ class SyntheticVCGAgent:
                     rng_int = int(rng.integers(0, 2**31))
                     samples = kde.resample(n_synthetic, seed=rng_int).flatten()
                     rows[col] = samples.astype(float)
+                    col_method_log[col] = "kde"
                 except Exception:
                     # Fallback to normal
                     mu = float(np.mean(values))
                     sigma = float(np.std(values, ddof=1)) if n > 1 else 1.0
                     rows[col] = rng.normal(mu, max(sigma, 1e-9), size=n_synthetic)
+                    col_method_log[col] = "norm_fallback"
             else:
                 # Normal distribution for small N
                 mu = float(np.mean(values))
                 sigma = float(np.std(values, ddof=1)) if n > 1 else 1.0
                 rows[col] = rng.normal(mu, max(sigma, 1e-9), size=n_synthetic)
+                col_method_log[col] = "norm_small_n"
 
         # Process categorical covariates
         for col in covariate_cols:
@@ -149,5 +158,11 @@ class SyntheticVCGAgent:
         result_df["vcg"] = True
         result_df["vcg_method"] = "synthetic"
         result_df["vcg_seed"] = seed
+
+        self.method_diagnostics = {
+            "method": "kde_normal_sampling",
+            "n_control": len(control_df),
+            "per_column_method": col_method_log,
+        }
 
         return result_df

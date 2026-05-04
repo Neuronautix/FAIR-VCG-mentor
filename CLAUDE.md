@@ -1,45 +1,72 @@
-# FAIR CSV Mentor — CLAUDE.md
+# FAIR-VCG Mentor — CLAUDE.md
 
 ## Project Overview
 
-FAIR CSV Mentor is a web application that assesses CSV datasets against the [FAIR data principles](https://www.go-fair.org/fair-principles/) (Findable, Accessible, Interoperable, Reusable). Users upload a CSV, receive automated profiling and FAIR-readiness scoring, enrich metadata through a guided wizard, and export the result in standards-compliant formats (Frictionless DataPackage, CSVW, JSON-LD, RO-Crate).
+FAIR-VCG Mentor is a web application with two main capabilities:
+
+1. **FAIR Assessment** — profiles CSV datasets against the [FAIR data principles](https://www.go-fair.org/fair-principles/) (Findable, Accessible, Interoperable, Reusable), scores them on a 100-point rubric, guides metadata enrichment through a wizard, and exports results in standards-compliant formats (Frictionless DataPackage, CSVW, JSON-LD, RO-Crate).
+
+2. **Virtual Control Group (VCG) Generation** — generates statistically rigorous synthetic control cohorts from a real concurrent control group, using either a Gaussian copula bootstrap or KDE/Normal sampling, with optional covariate balancing. Configured through a rule-based chat assistant or a four-step wizard; no external LLM API required.
 
 ---
 
 ## Repository Structure
 
 ```
-FAIR-csv-mentor/
+FAIR-vcg-mentor/
 ├── CLAUDE.md                 # This file
 ├── docker-compose.yml        # Orchestrates backend + frontend
 ├── backend/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py               # FastAPI app, all REST endpoints
+│   ├── main.py               # FastAPI app, FAIR endpoints + VCG router registration
 │   ├── csv_profiler.py       # Encoding/delimiter detection, column type & semantic inference
 │   ├── fair_engine.py        # FAIR scoring (100-pt rubric) & issue detection
 │   ├── entity_detector.py    # Table-shape inference (repeated measures, long/wide)
 │   ├── uri_suggester.py      # Linked-data URI pattern generation
-│   └── export_engine.py      # Multi-format export (CSV, CSVW, JSON-LD, RO-Crate, etc.)
+│   ├── export_engine.py      # Multi-format export (CSV, CSVW, JSON-LD, RO-Crate, etc.)
+│   └── vcg/
+│       ├── __init__.py
+│       ├── vcg_router.py     # FastAPI router — all /api/vcg/* endpoints
+│       ├── orchestrator.py   # Rule-based FSM chat engine (9 states, no LLM)
+│       ├── vcg_engine.py     # Four-agent pipeline orchestrator (sync, run via to_thread)
+│       ├── vcg_wizard.py     # Wizard payload validation
+│       ├── context_model.py  # Dataclasses: ResearchContext, ColumnRoles, VCGConfig
+│       ├── vcg_report.py     # Markdown statistical report generator
+│       ├── constants.py      # CONTROL_KEYWORDS list for auto-detecting control group
+│       ├── agents/
+│       │   ├── ingestion_agent.py       # Data validation, control-row extraction, n_control
+│       │   ├── standardization_agent.py # Unit harmonisation, missing-value imputation
+│       │   ├── vcg_bootstrap.py         # Gaussian copula bootstrap (recommended for N ≥ 15)
+│       │   ├── vcg_synthetic.py         # KDE/Normal sampling (fallback for N < 15)
+│       │   └── stats_agent.py           # Effect sizes, CIs, reliability score, diagnostics
+│       └── utils/
+│           ├── covariate_balance.py     # Balance report: SMD, distributional overlap
+│           └── distributions.py        # Distribution fitting (Normal/LogNormal/Gamma)
 └── frontend/
     ├── Dockerfile
     ├── package.json
     ├── vite.config.ts
     └── src/
         ├── App.tsx
-        ├── api/client.ts         # Axios API client (maps to backend endpoints)
+        ├── api/client.ts         # Axios API client (maps to all backend endpoints)
         ├── store/useStore.ts     # Zustand global state
         ├── components/
         │   ├── Layout.tsx
         │   ├── FAIRScoreBreakdown.tsx
-        │   └── IssueCard.tsx
+        │   ├── IssueCard.tsx
+        │   ├── AgentStatusBar.tsx
+        │   └── ChatInterface.tsx
         └── pages/
             ├── UploadPage.tsx
             ├── OverviewPage.tsx
             ├── ColumnProfilePage.tsx
             ├── FAIRScorePage.tsx
             ├── MetadataWizardPage.tsx
-            └── ExportPage.tsx
+            ├── ExportPage.tsx
+            ├── VCGPage.tsx           # Chat interface + generation status polling
+            ├── VCGWizardPage.tsx     # Four-step configuration wizard
+            └── VCGResultsPage.tsx    # Results, diagnostics, export
 ```
 
 ---
@@ -47,7 +74,7 @@ FAIR-csv-mentor/
 ## Running the Project
 
 ```bash
-# Start both services with live reload
+# Start both services with live reload (recommended)
 docker-compose up
 
 # Backend only (port 8000)
@@ -57,52 +84,83 @@ cd backend && pip install -r requirements.txt && uvicorn main:app --reload
 cd frontend && npm install && npm run dev
 ```
 
-Backend API: `http://localhost:8000`  
-Frontend: `http://localhost:5173`  
+Backend API: `http://localhost:8000`
+Frontend: `http://localhost:5173`
 OpenAPI docs: `http://localhost:8000/docs`
+
+**Docker note:** The Vite proxy target is set via `VITE_BACKEND_URL`. In `docker-compose.yml` this is `http://backend:8000` (Docker service name). For native development the default `http://localhost:8000` is used.
 
 ---
 
 ## Architecture & Data Flow
 
+### FAIR pipeline
+
 ```
-User uploads CSV
-      │
-      ▼
+User uploads CSV / Excel
+        │
+        ▼
 POST /api/upload
-  ├── csv_profiler.py   → detects encoding, delimiter, column types, semantic types
-  ├── entity_detector.py → infers table shape, entity type, repeated measures
-  └── fair_engine.py    → detects data quality issues
-      │
-      ▼
-Session stored in-memory (UUID key)
-      │
-      ▼
+  ├── csv_profiler.py    → encoding, delimiter, column types, semantic types, units
+  ├── entity_detector.py → table shape, primary entity, repeated-measures detection
+  └── fair_engine.py     → data quality & metadata issues list
+        │
+        ▼
+Session stored in SQLite (UUID key) + in-memory dict
+        │
+        ▼
 User edits column metadata / fills dataset metadata wizard
-      │
-PUT /api/columns/{id}   → recalculates issues
-PUT /api/metadata/{id}  → marks FAIR score dirty
-      │
-      ▼
+        │
+PUT /api/columns/{id}   → rerun issue detection
+PUT /api/metadata/{id}  → update dataset-level metadata
+        │
+        ▼
 GET /api/fair-score/{id}
-  └── fair_engine.py    → scores F/A/I/R dimensions (25/20/30/25 pts)
-      │
-      ▼
+  └── fair_engine.py     → score F/A/I/R dimensions (25/20/30/25 pts)
+        │
+        ▼
 GET /api/export/{id}/{type}
-  └── export_engine.py  → generates cleaned-csv | data-dictionary | frictionless |
-                          csvw | jsonld | report | rocrate
+  └── export_engine.py   → cleaned-csv | data-dictionary | frictionless |
+                           csvw | jsonld | report | rocrate
 ```
 
-**Session model:** All state lives in a Python dict (`sessions: dict[str, SessionData]`). There is no database. Sessions are lost on restart.
+### VCG pipeline
+
+```
+User configures via chat (VCGPage) or wizard (VCGWizardPage)
+        │
+PUT /api/vcg/{id}/wizard  → save ColumnRoles + VCGConfig + ResearchContext
+        │
+POST /api/vcg/{id}/generate
+  └── vcg_engine.run_vcg_pipeline() [asyncio.to_thread]
+        ├── DataIngestionAgent     → validate data, extract control rows, compute n_control
+        ├── DataStandardizationAgent → harmonise units, impute missing values
+        ├── BootstrapVCGAgent      → Gaussian copula (N ≥ 15)
+        │   OR SyntheticVCGAgent   → KDE/Normal (N < 15)
+        └── StatsAgent             → effect sizes, CIs, reliability score, diagnostics
+        │
+        ▼
+session["vcg"]["vcg_status"] = "done" | "failed"
+        │
+Frontend polls GET /api/vcg/{id}/status every 2 s
+        │
+        ▼ (on "done")
+GET /api/vcg/{id}/results    → balance report, stats, reliability score
+GET /api/vcg/{id}/export/vcg-csv     → synthetic CSV download
+GET /api/vcg/{id}/export/vcg-report  → Markdown statistical report
+```
+
+**Session model:** State lives in a Python dict keyed by UUID, persisted to SQLite via `_save_session` / `_load_session` in `main.py`. The `df` (pandas DataFrame) and `original_bytes` are excluded from JSON serialisation and reconstructed on load.
 
 ---
 
 ## Backend Module Reference
 
 ### `main.py`
-- All FastAPI route handlers
-- In-memory session store (`sessions` dict)
-- CORS configured for `localhost:5173` and `localhost:3000`
+- All FAIR FastAPI route handlers
+- SQLite session persistence (`_save_session`, `_load_session`, `_init_db`)
+- CORS origins configurable via `CORS_ORIGINS` env var
+- Registers `vcg_router` via `init_vcg_router(sessions, _save_session, _load_session)` then `app.include_router(vcg_router)`
 - Key routes:
   - `POST /api/upload` → profile + detect issues, return `dataset_id`
   - `GET /api/profile/{id}` → import info, columns, table structure
@@ -116,27 +174,81 @@ GET /api/export/{id}/{type}
 ### `csv_profiler.py`
 - `profile_csv(file_bytes, filename)` → `ProfileResult`
 - Detects: encoding (chardet), delimiter (csv.Sniffer), data types, semantic types, units
-- Semantic type patterns: identifier, measurement, biological_descriptor, experimental_condition, time_variable, notes, metadata_field
+- Semantic types: `identifier | measurement | biological_descriptor | experimental_condition | time_variable | free_text_note | metadata_field | categorical | unknown`
 - Returns column profiles with confidence scores, sample values, missing-value counts
+- Returns key `df` (typed DataFrame) and `content` (decoded string); both are popped by `main.py` before storing
 
 ### `fair_engine.py`
-- `calculate_fair_score(session)` → `FAIRScore` with per-dimension breakdown
-- `detect_issues(columns, import_info)` → `list[Issue]`
+- `compute_fair_score(import_info, columns, table_structure, metadata, issues)` → `FAIRScore`
+- `detect_issues(import_info, columns, table_structure)` → `list[Issue]`
 - FAIR rubric: F=25, A=20, I=30, R=25 points (5 pts per criterion)
 - Issue severities: `high | medium | low`
 
 ### `entity_detector.py`
-- `detect_entity_structure(columns, df)` → `TableStructure`
-- Infers: primary entity, secondary entity, table shape, row representation
+- `detect_entity_structure(df, columns)` → `TableStructure`
+- Infers: primary entity, secondary entity, table shape, row representation, detected identifier/measurement/categorical/time columns
 - Shape options: `one_row_per_entity | repeated_measures | repeated_measures_long_format | wide_measurement_format | tabular_data`
 
 ### `uri_suggester.py`
-- `suggest_uris(session, base_uri)` → `URISuggestions`
+- `suggest_uris(columns, metadata, import_info)` → `URISuggestions`
 - Generates: dataset URI, observation pattern, entity URIs, column URIs
 
 ### `export_engine.py`
-- `generate_export(session, export_type)` → `(bytes, filename, content_type)`
-- Export types: `cleaned-csv | data-dictionary | frictionless | csvw | jsonld | report | rocrate`
+- Exports: `cleaned-csv | data-dictionary | frictionless | csvw | jsonld | report | rocrate`
+- All functions return `bytes`; `main.py` streams them directly without writing to disk
+
+---
+
+## VCG Module Reference
+
+### `vcg/vcg_router.py`
+FastAPI `APIRouter` mounted at `/api/vcg`. Receives injected references to `sessions`, `_save_session`, and `_load_session` from `main.py` via `init_vcg_router()`.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/{id}/wizard-prefill` | GET | Auto-fill wizard from profiled column data |
+| `/{id}/wizard` | PUT | Save `column_roles`, `vcg_config`, `research_context` |
+| `/{id}/chat/start` | POST | Start conversation, return first agent message |
+| `/{id}/chat/respond` | POST | Send user message, return next agent message |
+| `/{id}/conversation` | GET | Full conversation history |
+| `/{id}/generate` | POST | Start async pipeline; returns immediately with `vcg_status: running` |
+| `/{id}/status` | GET | Poll status: `not_started | running | done | failed` |
+| `/{id}/results` | GET | Results dict (excluding VCG CSV bytes) |
+| `/{id}/export/vcg-csv` | GET | Stream synthetic CSV |
+| `/{id}/export/vcg-report` | GET | Stream Markdown statistical report |
+
+### `vcg/orchestrator.py`
+Rule-based finite-state machine. No external LLM required.
+
+States (in order): `GREETING → TREATMENT_CONFIRM → ENDPOINT_SELECT → COVARIATE_SELECT → SAMPLE_SIZE → METHOD_SELECT → SUMMARY_CONFIRM → READY_TO_BUILD`
+
+Each state produces a structured agent message with `content` (Markdown), `state`, `options` (quick-reply button labels), and `ready_to_build` (bool). When `ready_to_build` is `true`, the frontend triggers `POST /generate`.
+
+### `vcg/vcg_engine.py`
+`run_vcg_pipeline(dataset_id, session, sessions_dict, save_fn)` runs synchronously inside `asyncio.to_thread`. Updates `session["vcg"]` in-place. Sets `vcg_status` to `"done"` or `"failed"`.
+
+Agent sequence:
+1. `DataIngestionAgent` — validates types, extracts control rows (`df[treatment_col] == control_value`), reports `n_control`
+2. `DataStandardizationAgent` — handles missing values in outcome and covariate columns
+3. `BootstrapVCGAgent` (N ≥ 15) or `SyntheticVCGAgent` (N < 15) — generates synthetic DataFrame
+4. `StatsAgent` — computes per-endpoint effect sizes (Cohen's d), confidence intervals, Kolmogorov-Smirnov test, overall reliability score
+
+### `vcg/context_model.py`
+Three dataclasses serialised to/from dicts stored in `session["vcg"]`:
+- `ResearchContext` — `domain`, `study_type`, `design`, `confirmed_by_user`
+- `ColumnRoles` — `treatment_col`, `control_value`, `treatment_value`, `outcome_cols`, `covariate_cols`, `subject_id`, `time_col`, `exclude_cols`
+- `VCGConfig` — `method` (`auto|bootstrap|synthetic`), `n_synthetic`, `seed`, `bootstrap_iters`, `confidence_level`
+
+`DEFAULT_VCG_SESSION()` produces the initial `session["vcg"]` dict with all fields zeroed/empty.
+
+### `vcg/agents/vcg_bootstrap.py`
+Gaussian copula bootstrap. Fits marginal distributions (Normal / LogNormal / Gamma) to each outcome column, models inter-column correlations via a Gaussian copula, and samples `n_synthetic` rows. Preserves covariate distributions if `covariate_cols` is non-empty. Recommended for N ≥ 15.
+
+### `vcg/agents/vcg_synthetic.py`
+KDE or Normal sampling. Independently samples each column from its fitted kernel density estimate. More conservative; recommended for N < 15. Does not preserve inter-column correlations.
+
+### `vcg/agents/stats_agent.py`
+Produces per-endpoint statistics: mean ± SD for real vs VCG, Cohen's d, 95% CI, KS test p-value. Computes an overall `reliability_score` (0–1) based on effect size and distributional similarity. Flags warnings when n_control is very small or when KS divergence is high.
 
 ---
 
@@ -144,14 +256,15 @@ GET /api/export/{id}/{type}
 
 ### State (`store/useStore.ts`)
 Central Zustand store. Key slices:
-- `datasetId`, `importInfo`, `columns`, `tableStructure`
-- `issues`, `fairScore`, `metadata`, `uriSuggestions`
-- Actions: `setDatasetId`, `setColumns`, `updateColumn`, `setMetadata`, `setFairScore`
+- **FAIR:** `datasetId`, `importInfo`, `columns`, `tableStructure`, `issues`, `fairScore`, `metadata`, `uriSuggestions`
+- **VCG:** `vcgConversation`, `vcgStatus`, `vcgResults`
+- Actions: `setUploadResult`, `setColumns`, `updateColumn`, `setMetadata`, `setFairScore`, `addChatMessage`, `setVCGStatus`, `setVCGResults`, `reset`
 
 ### API Client (`api/client.ts`)
-Thin Axios wrapper. Exports one function per backend endpoint. Base URL is `/api` (proxied to port 8000 by Vite).
+Thin Axios wrapper. Base URL is `/api` (proxied to backend by Vite). Each backend endpoint has a corresponding exported function. VCG functions: `getVCGWizardPrefill`, `saveVCGWizard`, `startVCGChat`, `respondVCGChat`, `startVCGGeneration`, `getVCGStatus`, `getVCGResults`, `getVCGConversation`, `vcgExportUrl`.
 
 ### Pages
+
 | Page | File | Responsibility |
 |------|------|----------------|
 | Upload | `UploadPage.tsx` | File drag-drop, POST /upload, redirect to /overview |
@@ -160,6 +273,11 @@ Thin Axios wrapper. Exports one function per backend endpoint. Base URL is `/api
 | FAIR Score | `FAIRScorePage.tsx` | Score gauge + dimension breakdown + recommendations |
 | Metadata Wizard | `MetadataWizardPage.tsx` | Dataset-level metadata form |
 | Export | `ExportPage.tsx` | Per-format download buttons + RO-Crate bundle |
+| VCG Chat | `VCGPage.tsx` | Rule-based chat + generation trigger + status polling |
+| VCG Wizard | `VCGWizardPage.tsx` | Four-step form: context / column roles / stats config / review |
+| VCG Results | `VCGResultsPage.tsx` | Reliability score, balance diagnostics, VCG CSV + report download |
+
+**VCG status polling** (`VCGPage.tsx`): `setInterval` at 2 s calls `GET /api/vcg/{id}/status`. Checks `statusData.vcg_status` (not `statusData.status`) for `"done"` or `"failed"`. On `"done"`, clears the interval, fetches results, and navigates to `/vcg/results`.
 
 ---
 
@@ -167,65 +285,44 @@ Thin Axios wrapper. Exports one function per backend endpoint. Base URL is `/api
 
 ### What Works Well
 
-**Core pipeline is solid.**
-The automated analysis chain (profiling → issue detection → FAIR scoring → export) runs end-to-end without external dependencies. Semantic type inference uses domain-specific patterns (biology, clinical research) that are genuinely useful and cover most common CSV structures encountered in life-sciences data.
+**Full end-to-end FAIR pipeline.** Upload → profile → score → enrich → export runs without external dependencies. Semantic type inference covers most life-sciences CSV naming conventions.
 
-**Export coverage is comprehensive.**
-Seven export formats cover the main interoperability standards relevant to FAIR data: Frictionless DataPackage, W3C CSVW, Schema.org JSON-LD, and RO-Crate. Few open-source tools provide all of these together.
+**VCG pipeline is self-contained.** The rule-based orchestrator requires no LLM API key. The four-agent pipeline runs locally using scipy/statsmodels. Gaussian copula bootstrap preserves inter-endpoint correlations, which naive per-column sampling does not.
 
-**FAIR scoring is transparent.**
-The 100-point rubric is deterministic and explainable — every score deduction maps to a specific missing metadata field or detectable structural problem. This makes it suitable as a teaching tool.
+**Two VCG entry points.** Chat suits first-time users; the wizard suits users who already know their configuration. Both converge on the same `session["vcg"]` state.
 
-**UI is logically structured.**
-The six-page wizard flow (Upload → Overview → Columns → Score → Metadata → Export) matches the natural user journey for FAIR compliance improvement.
+**Seven FAIR export formats.** Frictionless DataPackage, W3C CSVW, Schema.org JSON-LD, and RO-Crate are covered. Few open-source tools provide all of these together.
 
-**Docker deployment is straightforward.**
-Single `docker-compose up` command starts both services with live-reload volumes, making local development quick.
+**SQLite persistence.** Sessions survive server restarts. The DataFrame is reconstructed from stored bytes on load rather than serialised.
 
----
-
-### Usability Gaps
+### Known Gaps
 
 | Gap | Severity | Notes |
 |-----|----------|-------|
-| No persistence | High | Sessions are in-memory; refreshing the page or restarting the server loses all work. A user cannot save and return to a session. |
-| No README | High | No getting-started guide, no description of what the tool does, no screenshots. Discovery is difficult for new contributors or users. |
-| No tests | High | Zero test coverage across backend and frontend. Refactoring any core module carries high regression risk. |
-| FAIR score not invalidated on column save | Medium | After `PUT /columns`, the score shown in the UI may be stale; the frontend does not automatically refetch `/fair-score`. |
-| No input validation feedback | Medium | The upload endpoint accepts any file and fails silently on non-CSV content; error messages are not surfaced to the user. |
-| Hardcoded patterns only | Medium | Semantic type and unit detection relies on column-name patterns. Unusual naming conventions score poorly with no fallback. |
-| No pagination on column table | Low | Large CSVs (100+ columns) make `ColumnProfilePage` unwieldy. |
-| CORS restricted to localhost | Low | Production deployment requires updating CORS origins manually in `main.py`. |
-| openpyxl imported but unused | Low | Excel support is listed as a dependency but no Excel upload path exists. |
-
----
-
-### Functionality Gaps
-
-| Gap | Notes |
-|-----|-------|
-| No ontology lookup | Controlled vocabulary fields accept free text; no integration with OLS, BioPortal, or SKOS term search. |
-| No diff/versioning | No way to compare FAIR score before and after metadata edits. |
-| No batch processing | One file at a time; no API for processing multiple files or a directory. |
-| Single-user only | No auth, no namespacing of sessions by user. |
-| No validation of exported JSON-LD | Exported JSON-LD is not validated against Schema.org or SHACL shapes. |
+| No tests | High | Zero test coverage across backend and frontend. Any refactor of `vcg_engine.py`, `vcg_bootstrap.py`, or `stats_agent.py` carries high regression risk. |
+| Hardcoded semantic patterns | Medium | Column-type inference relies on name patterns. Unusual naming conventions score poorly with no fallback. |
+| VCG requires one-shot control group | Medium | The pipeline extracts control rows by matching `treatment_col == control_value` as strings. Type mismatches (int vs string) cause an empty control set and pipeline failure. |
+| No ontology lookup | Medium | Controlled vocabulary fields accept free text; no integration with OLS, BioPortal, or SKOS. |
+| VCG chat state not restored on reload | Low | `vcgConversation` lives in Zustand (not persisted to SQLite). Reloading the page loses the conversation but not the VCG config. |
+| No diff/versioning | Low | No way to compare FAIR score before and after metadata edits. |
+| Single-user only | Low | No auth, no session namespacing by user. |
 
 ---
 
 ## Multi-Agent Development Guidelines
 
-This section defines how multiple Claude agents should collaborate on this codebase without conflicts.
-
 ### Ownership Boundaries
-
-Each agent should work within a designated boundary. Avoid cross-boundary edits without explicit coordination.
 
 | Domain | Files | Agent Role |
 |--------|-------|------------|
-| **Backend – Analysis** | `csv_profiler.py`, `entity_detector.py` | Improve semantic detection, add new column patterns, fix encoding edge cases |
+| **Backend – Analysis** | `csv_profiler.py`, `entity_detector.py` | Improve semantic detection, add column patterns, fix encoding edge cases |
 | **Backend – Scoring** | `fair_engine.py` | Refine FAIR rubric, add/remove criteria, tune issue thresholds |
 | **Backend – Export** | `export_engine.py`, `uri_suggester.py` | Add/fix export formats, validate against standards |
-| **Backend – API** | `main.py` | Add endpoints, fix session logic, add persistence layer |
+| **Backend – API** | `main.py` | Add endpoints, fix session logic, manage persistence layer |
+| **Backend – VCG Core** | `vcg/vcg_engine.py`, `vcg/context_model.py`, `vcg/constants.py` | Pipeline orchestration, data model changes |
+| **Backend – VCG Agents** | `vcg/agents/*.py`, `vcg/utils/*.py` | Statistical methods, agent logic, distribution fitting |
+| **Backend – VCG Chat** | `vcg/orchestrator.py`, `vcg/vcg_wizard.py` | Conversation states, wizard validation |
+| **Backend – VCG Router** | `vcg/vcg_router.py` | API endpoints for VCG sub-system |
 | **Frontend – Pages** | `pages/*.tsx` | UI layout, user flows, form behaviour |
 | **Frontend – State** | `store/useStore.ts`, `api/client.ts` | State shape changes, API contract alignment |
 | **Frontend – Components** | `components/*.tsx` | Shared UI components |
@@ -234,42 +331,42 @@ Each agent should work within a designated boundary. Avoid cross-boundary edits 
 
 ### Coordination Rules
 
-1. **One agent per boundary per session.** Do not have two agents editing `fair_engine.py` simultaneously.
+1. **One agent per boundary per session.** Do not have two agents editing `vcg_engine.py` simultaneously.
 
-2. **API contract is a shared interface.** Any agent changing a backend endpoint signature (`main.py`) or the Zustand store shape (`useStore.ts`) must also update the counterpart. State the contract change explicitly in the commit message.
+2. **API contract is a shared interface.** Any agent changing a backend endpoint signature (`main.py` or `vcg_router.py`) or the Zustand store shape (`useStore.ts`) must also update the counterpart. State the contract change explicitly in the commit message.
 
-3. **Session data shape is a coordination point.** The `sessions` dict structure in `main.py` is read by every backend module. If you change a field name or add a required key, grep for all usages and update them in the same commit.
+3. **Session data shape is a coordination point.** `session["vcg"]` is read by `vcg_router.py`, `vcg_engine.py`, and the frontend results page. If you rename a key or add a required field, grep for all usages and update them in the same commit.
 
-4. **Do not change export format schemas silently.** Changes to Frictionless, CSVW, JSON-LD, or RO-Crate output in `export_engine.py` may break downstream consumers. Document schema changes in commit messages and, where possible, add a regression test.
+4. **VCG status field is `vcg_status`, not `status`.** The router returns `{"vcg_status": ..., "vcg_error": ...}`. The frontend polls `statusData.vcg_status`. Do not rename this field.
 
-5. **Prefer additive changes.** Add new semantic type patterns, scoring criteria, or export fields rather than replacing existing ones, until there is test coverage for the behaviour being replaced.
+5. **Do not change export format schemas silently.** Changes to Frictionless, CSVW, JSON-LD, or RO-Crate output may break downstream consumers. Document schema changes in commit messages.
 
-6. **Tests live alongside source.** Backend tests go in `backend/tests/`, frontend tests co-located as `*.test.tsx` or `*.test.ts`. Testing agents should not modify source files.
+6. **Prefer additive changes.** Add new orchestrator states, agent steps, or scoring criteria rather than replacing existing ones until there is test coverage for the replaced behaviour.
 
-7. **Mark work-in-progress clearly.** If a task spans multiple commits (e.g. adding a persistence layer), open with a commit that adds a `# WIP` comment at the relevant entry point so other agents know the area is in flux.
+7. **Tests live alongside source.** Backend tests in `backend/tests/`, frontend tests co-located as `*.test.tsx`. Testing agents must not modify source files.
 
-### Suggested Parallel Task Decomposition
+### Suggested Parallel Tasks
 
-The following tasks are independent and safe to run in parallel:
+Safe to run in parallel:
 
 | Task | Safe to run in parallel with |
 |------|------------------------------|
-| Add unit tests for `csv_profiler.py` | Any frontend task; `fair_engine.py` changes |
-| Add unit tests for `fair_engine.py` | Any frontend task; `csv_profiler.py` changes |
-| Add a README.md | Any task |
-| Fix FAIR score invalidation on column save (frontend) | Any backend-only task |
-| Add pagination to `ColumnProfilePage.tsx` | Any backend-only task |
-| Add Excel upload support (backend) | Frontend pagination; README |
+| Add unit tests for `csv_profiler.py` | Any frontend task; VCG agent changes |
+| Add unit tests for `vcg_bootstrap.py` | Any frontend task; FAIR scoring changes |
+| Add unit tests for `stats_agent.py` | Any frontend task; FAIR export changes |
+| Improve VCGResultsPage visualisations | Any backend-only task |
 | Add ontology term search endpoint | Frontend column profile UI changes |
+| Add README screenshots | Any task |
 
-The following tasks have dependencies and must be serialised:
+Must be serialised:
 
 | Task | Must wait for |
 |------|--------------|
-| Add SQLite persistence | API endpoint review (session shape finalised) |
-| Add auth/multi-tenancy | Persistence layer complete |
-| Add SHACL validation for JSON-LD export | JSON-LD export format stabilised |
+| Add auth/multi-tenancy | Session shape finalised |
+| Persist VCG conversation to SQLite | Session model change reviewed |
+| Add SHACL validation for JSON-LD | JSON-LD export format stabilised |
 | Frontend ontology term picker | Backend ontology search endpoint |
+| LLM-powered orchestrator | Rule-based orchestrator tests written |
 
 ### Commit Message Convention
 
@@ -279,14 +376,15 @@ The following tasks have dependencies and must be serialised:
 <optional body explaining why, not what>
 ```
 
-Scope values: `backend`, `frontend`, `api`, `export`, `scoring`, `profiler`, `tests`, `docs`, `deps`, `config`
+Scope values: `backend`, `frontend`, `api`, `export`, `scoring`, `profiler`, `vcg`, `vcg-agents`, `vcg-chat`, `tests`, `docs`, `deps`, `config`
 
 Examples:
 ```
+vcg-agents: use Gamma distribution fallback when LogNormal fit diverges
+vcg-chat: add REPEAT_MEASURES state for longitudinal study detection
 scoring: add 5-pt criterion for machine-readable license URI
-export: fix RO-Crate @context URL to use versioned spec
-tests: add profiler tests for semicolon-delimited files
-api: invalidate fair_score_cache on PUT /columns
+frontend: show per-endpoint KS p-value in VCGResultsPage
+tests: add bootstrap agent tests for N=8 small-sample path
 ```
 
 ### Environment Setup for Agents
@@ -309,7 +407,15 @@ docker-compose up --build
 
 ### Key Invariants to Preserve
 
-- `profile_csv()` must always return a `dataframe` key in its result; `main.py` and `entity_detector.py` depend on it.
-- `session["columns"]` is a list of dicts, each with at least `name`, `label`, `data_type`, `semantic_type`, `description`, `unit`, `missing_values`, `sample_values`. Adding new keys is safe; removing or renaming existing keys will break `fair_engine.py`, `export_engine.py`, and frontend state.
-- The FAIR score is intentionally recomputed on every `GET /api/fair-score/{id}` call (no caching by default). Do not add a persistent cache without also wiring cache invalidation to `PUT /columns` and `PUT /metadata`.
-- Export endpoints stream responses directly; they do not write to disk. Do not introduce temp-file side effects without cleanup logic.
+**FAIR pipeline**
+- `profile_csv()` must always return a `df` key; `main.py` and `entity_detector.py` depend on it.
+- `session["columns"]` is a list of dicts, each with at least: `name`, `label`, `data_type`, `inferred_type`, `description`, `unit_guess`, `user_unit`, `missing_values`, `missing_pct`, `sample_values`. Adding keys is safe; renaming or removing breaks `fair_engine.py`, `export_engine.py`, and frontend state.
+- The FAIR score is recomputed on every `GET /api/fair-score/{id}` call. Do not add a persistent cache without wiring invalidation to `PUT /columns` and `PUT /metadata`.
+- Export endpoints stream responses directly; they do not write to disk.
+
+**VCG pipeline**
+- `session["vcg"]` must always be initialised from `DEFAULT_VCG_SESSION()` before any VCG endpoint writes to it. `_ensure_vcg(session)` in `vcg_router.py` handles this.
+- `vcg_status` values are `not_started | running | done | failed`. The frontend polls for exactly these strings. Do not rename or add intermediate states without updating the polling logic in `VCGPage.tsx`.
+- `run_vcg_pipeline` is synchronous and must be called via `asyncio.to_thread`. Do not make it async; the agents use blocking scipy/statsmodels calls.
+- The VCG router receives `sessions`, `_save_session`, and `_load_session` by injection from `main.py`. It must not import from `main.py` directly (circular import).
+- `session["df"]` must be present when `run_vcg_pipeline` is called. If loaded from SQLite, `_load_session` reconstructs it from `original_bytes` via `profile_csv`.

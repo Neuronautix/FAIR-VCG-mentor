@@ -246,6 +246,16 @@ Contributions are welcome. This project uses a multi-agent development model wit
 
 In brief: prefer additive changes over replacements, keep API contract changes atomic across both backend and frontend, and add tests for any behaviour you intend to modify.
 
+### Open-source release check
+
+Run the global release-readiness audit before sharing or tagging a release:
+
+```bash
+python scripts/oss_readiness_check.py --strict
+```
+
+This verifies required project files and policies, license declarations, README structure, frontend metadata, and CI workflow coverage.
+
 ---
 
 ## License

@@ -250,4 +250,4 @@ In brief: prefer additive changes over replacements, keep API contract changes a
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+GNU GPL v3.0 — see [LICENSE](./LICENSE).

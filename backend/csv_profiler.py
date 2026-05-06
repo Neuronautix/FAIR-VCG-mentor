@@ -11,13 +11,14 @@ IDENTIFIER_PATTERNS = [
     r'.*_id$', r'.*_ID$', r'^id$', r'^ID$', r'.*identifier.*',
     r'.*subject.*id.*', r'.*animal.*id.*', r'.*sample.*id.*',
     r'.*mouse.*id.*', r'.*rat.*id.*', r'.*patient.*id.*',
+    r'.*\bdoi\b.*', r'.*\buid\b$', r'.*control_record_id$',
 ]
 
 MEASUREMENT_PATTERNS = [
     r'.*_g$', r'.*_mg.*', r'.*_kg$', r'.*_cm$', r'.*_mm$', r'.*_ml.*',
     r'.*_s$', r'.*_sec$', r'.*_min$', r'.*_h$', r'.*_hr$',
     r'.*weight.*', r'.*distance.*', r'.*latency.*', r'.*duration.*',
-    r'.*count.*', r'.*score.*', r'.*level.*', r'.*concentration.*',
+    r'(^count$|.*_count$|count_.*)', r'.*score.*', r'(^level$|.*_level$)', r'.*concentration.*',
     r'.*amount.*', r'.*volume.*', r'.*ratio.*', r'.*index.*',
     r'.*_pct$', r'.*_percent$', r'.*response.*', r'.*reading.*',
 ]
@@ -36,18 +37,21 @@ CONDITION_PATTERNS = [
 TIME_PATTERNS = [
     r'^day.*', r'^timepoint.*', r'^time.*', r'^week.*', r'^hour.*',
     r'^visit.*', r'^session.*', r'^date.*', r'^timestamp.*', r'^period.*',
-    r'^baseline.*', r'^followup.*', r'^follow.*up.*',
+    r'^baseline.*', r'^followup.*', r'^follow.*up.*', r'.*date$', r'.*created_at$',
 ]
 
 NOTE_PATTERNS = [
     r'^comment.*', r'^note.*', r'^observation.*', r'^remark.*',
-    r'^description.*', r'^details.*', r'^annotation.*',
+    r'^description.*', r'^details.*', r'^annotation.*', r'^definition$', r'^objective$',
 ]
 
 METADATA_PATTERNS = [
     r'^operator.*', r'^device.*', r'^instrument.*', r'^protocol.*',
     r'^experimenter.*', r'^technician.*', r'^lab.*', r'^batch.*',
     r'^run.*', r'^plate.*', r'^cage.*', r'^rack.*',
+    r'^field_label$', r'^data_type$', r'^unit$', r'^required_for_vcg$',
+    r'^vcg_role$', r'^arrive_mapping$', r'^allowed_values_or_format$',
+    r'^source_status$', r'^future_value_to_fill$', r'^current_publication_value_or_example$',
 ]
 
 UNIT_MAP = {
@@ -86,6 +90,25 @@ def detect_delimiter(content: str) -> str:
 
 
 def infer_semantic_type(col_name: str, series: pd.Series) -> Tuple[str, float]:
+    col_lower = col_name.lower()
+
+    # Strong explicit overrides for known high-signal metadata/time fields.
+    if col_lower in {
+        'collection_date', 'study.start_date', 'study.end_date',
+        'procedure.date', 'provenance.created_at',
+    }:
+        return 'time_variable', 0.92
+
+    if col_lower in {
+        'field_label', 'data_type', 'unit', 'required_for_vcg', 'vcg_role',
+        'arrive_mapping', 'allowed_values_or_format', 'source_status',
+        'future_value_to_fill', 'current_publication_value_or_example',
+    }:
+        return 'metadata_field', 0.90
+
+    if col_lower in {'definition', 'study.objective', 'notes'}:
+        return 'free_text_note', 0.90
+
     for pattern in IDENTIFIER_PATTERNS:
         if re.match(pattern, col_name, re.IGNORECASE):
             return 'identifier', 0.90
@@ -128,6 +151,8 @@ def infer_semantic_type(col_name: str, series: pd.Series) -> Tuple[str, float]:
     if series.dtype == object:
         n_unique = series.nunique()
         n_total = len(series.dropna())
+        if re.search(r'(definition|description|note|comment|title|objective)', col_lower):
+            return 'free_text_note', 0.55
         if n_total > 0 and n_unique == n_total:
             return 'identifier', 0.65
         if n_total > 0 and n_unique / n_total < 0.15 and n_unique < 25:

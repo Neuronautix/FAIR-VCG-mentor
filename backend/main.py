@@ -27,6 +27,13 @@ from export_engine import (
 from fair_engine import compute_fair_score, detect_issues
 from uri_suggester import suggest_uris
 from arrive_engine import generate_arrive_zip
+from template_store import (
+    apply_template,
+    load_template,
+    low_confidence_columns,
+    record_corrections,
+    save_template,
+)
 
 app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 
@@ -177,6 +184,14 @@ async def upload_csv(file: UploadFile = File(...)):
                 ),
             })
 
+    # Stage 2: auto-apply a previously confirmed mapping if the dataset
+    # signature matches one we've already seen.
+    signature = result["import_info"].get("signature")
+    template = load_template(_DB_PATH, signature) if signature else None
+    template_applied = 0
+    if template:
+        template_applied = apply_template(result["columns"], template["mappings"])
+
     dataset_id = str(uuid.uuid4())
     sessions[dataset_id] = {
         "dataset_id": dataset_id,
@@ -187,6 +202,14 @@ async def upload_csv(file: UploadFile = File(...)):
         "metadata": {"base_uri": "https://your-lab.org"},
         "df": df,
         "original_bytes": content,
+        "template_signature": signature,
+        "template_applied": template_applied,
+        "inference_metrics": {
+            "total_updates": 0,
+            "type_corrections": 0,
+            "label_corrections": 0,
+            "unit_corrections": 0,
+        },
     }
     _save_session(dataset_id, sessions[dataset_id])
 
@@ -196,6 +219,8 @@ async def upload_csv(file: UploadFile = File(...)):
         "columns": result["columns"],
         "table_structure": table_structure,
         "issues": issues,
+        "template_applied": template_applied,
+        "low_confidence_columns": low_confidence_columns(result["columns"]),
     }
 
 
@@ -218,15 +243,56 @@ async def get_issues(dataset_id: str):
 @app.put("/api/columns/{dataset_id}")
 async def update_columns(dataset_id: str, column_updates: List[Dict[str, Any]]):
     s = _require(dataset_id)
+    record_corrections(s, column_updates)
     updates_by_name = {u["name"]: u for u in column_updates}
     for col in s["columns"]:
         if col["name"] in updates_by_name:
             col.update(updates_by_name[col["name"]])
 
+    # Invalidate cached score so it reflects the new column metadata.
+    s.pop("fair_score", None)
+    s.pop("uri_suggestions", None)
+
     # Recompute issues after column edits
     s["issues"] = detect_issues(s["import_info"], s["columns"], s["table_structure"])
     _save_session(dataset_id, s)
-    return {"columns": s["columns"], "issues": s["issues"]}
+    return {
+        "columns": s["columns"],
+        "issues": s["issues"],
+        "low_confidence_columns": low_confidence_columns(s["columns"]),
+        "inference_metrics": s.get("inference_metrics", {}),
+    }
+
+
+@app.get("/api/templates/{dataset_id}")
+async def get_template_info(dataset_id: str):
+    s = _require(dataset_id)
+    signature = s.get("template_signature") or s.get("import_info", {}).get("signature")
+    saved = load_template(_DB_PATH, signature) if signature else None
+    return {
+        "signature": signature,
+        "exists": saved is not None,
+        "applied": s.get("template_applied", 0),
+        "source_filename": (saved or {}).get("source_filename"),
+        "updated_at": (saved or {}).get("updated_at"),
+        "low_confidence_columns": low_confidence_columns(s["columns"]),
+        "inference_metrics": s.get("inference_metrics", {}),
+    }
+
+
+@app.post("/api/templates/{dataset_id}")
+async def save_template_for_dataset(dataset_id: str):
+    s = _require(dataset_id)
+    signature = s.get("template_signature") or s.get("import_info", {}).get("signature")
+    if not signature:
+        raise HTTPException(400, "Dataset has no signature; cannot save template.")
+    result = save_template(
+        _DB_PATH,
+        signature,
+        s["columns"],
+        source_filename=s.get("import_info", {}).get("filename"),
+    )
+    return result
 
 
 @app.get("/api/metadata/{dataset_id}")

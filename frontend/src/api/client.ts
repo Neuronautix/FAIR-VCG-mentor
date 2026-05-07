@@ -1,5 +1,14 @@
 import axios from 'axios'
-import type { ColumnProfile, DatasetMetadata, FAIRScore, ImportInfo, Issue, TableStructure } from '../store/useStore'
+import type {
+  ColumnProfile,
+  DatasetMetadata,
+  FAIRScore,
+  ImportInfo,
+  InferenceMetrics,
+  Issue,
+  LowConfidenceColumn,
+  TableStructure,
+} from '../store/useStore'
 
 const api = axios.create({ baseURL: '/api' })
 
@@ -9,6 +18,8 @@ export interface UploadResponse {
   columns: ColumnProfile[]
   table_structure: TableStructure
   issues: Issue[]
+  template_applied?: number
+  low_confidence_columns?: LowConfidenceColumn[]
 }
 
 export const uploadCSV = (file: File): Promise<UploadResponse> => {
@@ -23,8 +34,31 @@ export const getProfile = (id: string) =>
 export const getIssues = (id: string) =>
   api.get<{ issues: Issue[] }>(`/issues/${id}`).then((r) => r.data)
 
+export interface UpdateColumnsResponse {
+  columns: ColumnProfile[]
+  issues: Issue[]
+  low_confidence_columns?: LowConfidenceColumn[]
+  inference_metrics?: InferenceMetrics
+}
+
 export const updateColumns = (id: string, columns: ColumnProfile[]) =>
-  api.put<{ columns: ColumnProfile[]; issues: Issue[] }>(`/columns/${id}`, columns).then((r) => r.data)
+  api.put<UpdateColumnsResponse>(`/columns/${id}`, columns).then((r) => r.data)
+
+export interface TemplateInfo {
+  signature: string | null
+  exists: boolean
+  applied: number
+  source_filename: string | null
+  updated_at: number | null
+  low_confidence_columns: LowConfidenceColumn[]
+  inference_metrics: InferenceMetrics
+}
+
+export const getTemplateInfo = (id: string) =>
+  api.get<TemplateInfo>(`/templates/${id}`).then((r) => r.data)
+
+export const saveTemplate = (id: string) =>
+  api.post<{ signature: string; n_columns: number }>(`/templates/${id}`).then((r) => r.data)
 
 export const getMetadata = (id: string) =>
   api.get<{ metadata: DatasetMetadata }>(`/metadata/${id}`).then((r) => r.data)

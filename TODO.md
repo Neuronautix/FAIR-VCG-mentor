@@ -7,28 +7,28 @@ Generated from code review on 2026-05-02.
 Goal: improve automatic column/data understanding while keeping latency and complexity low.
 
 ### Stage 0 — Baseline and acceptance gates (no model)
-- [ ] Create a repeatable benchmark from `test_data/*.csv` using expected mappings for key roles:
+- [x] Create a repeatable benchmark from `test_data/*.csv` using expected mappings for key roles:
 	- identifier, treatment/group, outcome, covariate, date/time, metadata/provenance
-- [ ] Add a script/report that prints precision/recall and per-column confidence distribution
-- [ ] Define release gate for "good enough without LLM":
+- [x] Add a script/report that prints precision/recall and per-column confidence distribution
+- [x] Define release gate for "good enough without LLM":
 	- >= 0.85 precision on key roles
 	- >= 0.80 recall on key roles
 	- <= 5% columns flagged "ambiguous" in known templates
 
 ### Stage 1 — Heuristic uplift (deterministic)
-- [ ] Expand synonym dictionaries for life-science terms:
+- [x] Expand synonym dictionaries for life-science terms:
 	- ALT/AST variants, dose/unit aliases, control/group labels, sex/strain/age forms
-- [ ] Add value-shape validators:
+- [x] Add value-shape validators:
 	- ID regexes, date parsing, numeric+unit coupling, categorical cardinality checks
-- [ ] Emit `inferred_role` + `confidence` + `reason_codes` per column
-- [ ] Add unit tests covering all current CSV examples in `test_data/`
+- [x] Emit `inferred_role` + `confidence` + `reason_codes` per column
+- [x] Add unit tests covering all current CSV examples in `test_data/`
 
 ### Stage 2 — User-in-the-loop disambiguation (still no LLM)
-- [ ] Add low-confidence prompts in wizard/chat:
+- [x] Add low-confidence prompts in wizard/chat:
 	- ask only for columns below threshold (e.g., confidence < 0.65)
-- [ ] Save confirmed mappings as reusable templates by dataset profile/signature
-- [ ] Re-apply templates automatically on upload before running advanced logic
-- [ ] Track correction rate and time-to-confirm metrics
+- [x] Save confirmed mappings as reusable templates by dataset profile/signature
+- [x] Re-apply templates automatically on upload before running advanced logic
+- [x] Track correction rate and time-to-confirm metrics
 
 ### Stage 3 — Lightweight semantic layer (optional, non-LLM)
 - [ ] Add optional embedding match against curated label bank/ontology aliases
@@ -50,8 +50,8 @@ Goal: improve automatic column/data understanding while keeping latency and comp
 	- New schema diversity outpaces rule/template maintenance capacity
 
 ### Recommended implementation order
-- [ ] First implement Stage 0 and Stage 1 (highest ROI, lowest risk)
-- [ ] Then Stage 2 template memory (largest UX gain)
+- [x] First implement Stage 0 and Stage 1 (highest ROI, lowest risk)
+- [x] Then Stage 2 template memory (largest UX gain)
 - [ ] Add Stage 3 only if ambiguity remains materially high
 - [ ] Add Stage 4 (LLM) last, as selective escalation rather than default path
 

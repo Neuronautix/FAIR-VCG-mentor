@@ -1,6 +1,9 @@
+import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'
 import SaveIcon from '@mui/icons-material/Save'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   Card,
@@ -14,6 +17,7 @@ import {
   Paper,
   Select,
   Snackbar,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -26,7 +30,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { updateColumns } from '../api/client'
+import { saveTemplate, updateColumns } from '../api/client'
 import { useStore } from '../store/useStore'
 import type { ColumnProfile } from '../store/useStore'
 
@@ -146,10 +150,22 @@ function ColumnEditor({
 
 export default function ColumnProfilePage() {
   const navigate = useNavigate()
-  const { datasetId, columns, setColumns, setIssues, setFairScore } = useStore()
+  const {
+    datasetId,
+    columns,
+    lowConfidenceColumns,
+    templateApplied,
+    setColumns,
+    setIssues,
+    setFairScore,
+    setLowConfidenceColumns,
+    setInferenceMetrics,
+  } = useStore()
   const [localCols, setLocalCols] = useState<ColumnProfile[]>(columns)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateMessage, setTemplateMessage] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
@@ -166,25 +182,92 @@ export default function ColumnProfilePage() {
       setIssues(result.issues)
       setFairScore(null)
       setLocalCols(result.columns)
+      if (result.low_confidence_columns) {
+        setLowConfidenceColumns(result.low_confidence_columns)
+      }
+      if (result.inference_metrics) {
+        setInferenceMetrics(result.inference_metrics)
+      }
       setSaved(true)
     } finally {
       setSaving(false)
     }
   }
 
+  const handleSaveTemplate = async () => {
+    setSavingTemplate(true)
+    try {
+      const result = await saveTemplate(datasetId)
+      setTemplateMessage(`Template saved (${result.n_columns} columns).`)
+    } catch {
+      setTemplateMessage('Could not save template.')
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  const lowConfidenceNames = new Set(lowConfidenceColumns.map((c) => c.name))
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5">Column Profile</Typography>
-        <Button
-          variant="contained"
-          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-          onClick={handleSave}
-          disabled={saving}
-        >
-          Save changes
-        </Button>
+        <Stack direction="row" spacing={1.5}>
+          <Button
+            variant="outlined"
+            startIcon={savingTemplate ? <CircularProgress size={16} /> : <BookmarkAddIcon />}
+            onClick={handleSaveTemplate}
+            disabled={savingTemplate}
+          >
+            Save as template
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            Save changes
+          </Button>
+        </Stack>
       </Box>
+
+      {templateApplied > 0 && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Re-applied a saved template to {templateApplied} column
+          {templateApplied === 1 ? '' : 's'} for this dataset signature.
+        </Alert>
+      )}
+
+      {lowConfidenceColumns.length > 0 && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={{ mb: 2 }}
+        >
+          <AlertTitle>
+            {lowConfidenceColumns.length} column{lowConfidenceColumns.length === 1 ? '' : 's'} need review
+          </AlertTitle>
+          The automatic classifier was not confident about these columns
+          (confidence &lt; 0.65). Please review and correct them, then click
+          <strong> Save as template</strong> so future uploads of the same
+          dataset shape are configured automatically.
+          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+            {lowConfidenceColumns.slice(0, 12).map((c) => (
+              <Chip
+                key={c.name}
+                size="small"
+                label={`${c.name} · ${c.inferred_type} · ${(c.confidence * 100).toFixed(0)}%`}
+                onClick={() => setExpanded(c.name)}
+                sx={{ cursor: 'pointer' }}
+              />
+            ))}
+            {lowConfidenceColumns.length > 12 && (
+              <Chip size="small" label={`+${lowConfidenceColumns.length - 12} more`} />
+            )}
+          </Box>
+        </Alert>
+      )}
 
       <Alert severity="info" sx={{ mb: 2 }}>
         Review and correct the automatic column classification below. Descriptions and units are used
@@ -212,7 +295,10 @@ export default function ColumnProfilePage() {
                   key={col.name}
                   hover
                   selected={expanded === col.name}
-                  sx={{ cursor: 'pointer' }}
+                  sx={{
+                    cursor: 'pointer',
+                    background: lowConfidenceNames.has(col.name) ? 'rgba(237,108,2,0.08)' : undefined,
+                  }}
                   onClick={() => setExpanded(expanded === col.name ? null : col.name)}
                 >
                   <TableCell>
@@ -309,6 +395,19 @@ export default function ColumnProfilePage() {
       <Snackbar open={saved} autoHideDuration={3000} onClose={() => setSaved(false)}>
         <Alert severity="success" onClose={() => setSaved(false)}>
           Column mappings saved.
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={!!templateMessage}
+        autoHideDuration={4000}
+        onClose={() => setTemplateMessage(null)}
+      >
+        <Alert
+          severity={templateMessage?.startsWith('Template saved') ? 'success' : 'error'}
+          onClose={() => setTemplateMessage(null)}
+        >
+          {templateMessage}
         </Alert>
       </Snackbar>
     </Box>

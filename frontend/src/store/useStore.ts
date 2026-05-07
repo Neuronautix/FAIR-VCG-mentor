@@ -12,6 +12,7 @@ export interface ColumnProfile {
   sample_values: string[]
   unit_guess: string | null
   confidence: number
+  reason_codes?: string[]
   user_label: string | null
   user_description: string | null
   user_unit: string | null
@@ -19,6 +20,21 @@ export interface ColumnProfile {
   allowed_values: string[] | null
   required: boolean
   uri: string | null
+}
+
+export interface LowConfidenceColumn {
+  name: string
+  inferred_type: string
+  confidence: number
+  sample_values: string[]
+  reason_codes: string[]
+}
+
+export interface InferenceMetrics {
+  total_updates: number
+  type_corrections: number
+  label_corrections: number
+  unit_corrections: number
 }
 
 export interface ImportInfo {
@@ -31,6 +47,7 @@ export interface ImportInfo {
   empty_columns: string[]
   duplicate_columns: string[]
   malformed_rows: number[]
+  signature?: string
 }
 
 export interface TableStructure {
@@ -153,6 +170,9 @@ interface AppState {
   issues: Issue[]
   fairScore: FAIRScore | null
   metadata: DatasetMetadata
+  lowConfidenceColumns: LowConfidenceColumn[]
+  templateApplied: number
+  inferenceMetrics: InferenceMetrics
 
   vcgStatus: 'not_started' | 'running' | 'done' | 'failed' | null
   vcgResults: VCGResults | null
@@ -165,12 +185,15 @@ interface AppState {
     importInfo: ImportInfo,
     columns: ColumnProfile[],
     tableStructure: TableStructure,
-    issues: Issue[]
+    issues: Issue[],
+    extras?: { lowConfidenceColumns?: LowConfidenceColumn[]; templateApplied?: number }
   ) => void
   setColumns: (columns: ColumnProfile[]) => void
   setIssues: (issues: Issue[]) => void
   setFairScore: (score: FAIRScore | null) => void
   setMetadata: (metadata: DatasetMetadata) => void
+  setLowConfidenceColumns: (cols: LowConfidenceColumn[]) => void
+  setInferenceMetrics: (metrics: InferenceMetrics) => void
   reset: () => void
 
   setVCGStatus: (status: AppState['vcgStatus']) => void
@@ -181,6 +204,13 @@ interface AppState {
   setVCGConfig: (config: VCGConfig) => void
 }
 
+const EMPTY_METRICS: InferenceMetrics = {
+  total_updates: 0,
+  type_corrections: 0,
+  label_corrections: 0,
+  unit_corrections: 0,
+}
+
 export const useStore = create<AppState>((set) => ({
   datasetId: null,
   importInfo: null,
@@ -189,6 +219,9 @@ export const useStore = create<AppState>((set) => ({
   issues: [],
   fairScore: null,
   metadata: { base_uri: 'https://your-lab.org' },
+  lowConfidenceColumns: [],
+  templateApplied: 0,
+  inferenceMetrics: EMPTY_METRICS,
 
   vcgStatus: null,
   vcgResults: null,
@@ -196,13 +229,25 @@ export const useStore = create<AppState>((set) => ({
   vcgColumnRoles: null,
   vcgConfig: null,
 
-  setUploadResult: (datasetId, importInfo, columns, tableStructure, issues) =>
-    set({ datasetId, importInfo, columns, tableStructure, issues, fairScore: null }),
+  setUploadResult: (datasetId, importInfo, columns, tableStructure, issues, extras) =>
+    set({
+      datasetId,
+      importInfo,
+      columns,
+      tableStructure,
+      issues,
+      fairScore: null,
+      lowConfidenceColumns: extras?.lowConfidenceColumns ?? [],
+      templateApplied: extras?.templateApplied ?? 0,
+      inferenceMetrics: EMPTY_METRICS,
+    }),
 
   setColumns: (columns) => set({ columns }),
   setIssues: (issues) => set({ issues }),
   setFairScore: (fairScore) => set({ fairScore }),
   setMetadata: (metadata) => set((s) => ({ metadata: { ...s.metadata, ...metadata } })),
+  setLowConfidenceColumns: (cols) => set({ lowConfidenceColumns: cols }),
+  setInferenceMetrics: (metrics) => set({ inferenceMetrics: metrics }),
 
   reset: () =>
     set({
@@ -213,6 +258,9 @@ export const useStore = create<AppState>((set) => ({
       issues: [],
       fairScore: null,
       metadata: { base_uri: 'https://your-lab.org' },
+      lowConfidenceColumns: [],
+      templateApplied: 0,
+      inferenceMetrics: EMPTY_METRICS,
       vcgStatus: null,
       vcgResults: null,
       vcgConversation: [],

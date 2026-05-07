@@ -54,12 +54,23 @@ EXPECTED_KEY_ROLES: Dict[str, Dict[str, str]] = {
 
 
 @dataclass(frozen=True)
+class ColumnPrediction:
+    filename: str
+    column: str
+    expected: str
+    predicted: str
+    confidence: float
+    correct: bool
+
+
+@dataclass(frozen=True)
 class DatasetBenchmark:
     filename: str
     evaluated_columns: int
     correct: int
     accuracy: float
     ambiguity_rate: float
+    predictions: Tuple[ColumnPrediction, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -70,6 +81,8 @@ class BenchmarkSummary:
     micro_recall: float
     ambiguity_rate: float
     per_dataset: Tuple[DatasetBenchmark, ...]
+    confidence_buckets: Mapping[str, int] = None  # type: ignore[assignment]
+    mistakes: Tuple[ColumnPrediction, ...] = ()
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -84,6 +97,22 @@ def _profile_dataset(data_dir: Path, filename: str) -> Mapping[str, Dict[str, ob
     return {c["name"]: c for c in result["columns"]}
 
 
+_BUCKET_EDGES = (
+    ("0.0-0.5", 0.0, 0.5),
+    ("0.5-0.65", 0.5, 0.65),
+    ("0.65-0.8", 0.65, 0.8),
+    ("0.8-0.9", 0.8, 0.9),
+    ("0.9-1.0", 0.9, 1.0001),
+)
+
+
+def _bucket_for(confidence: float) -> str:
+    for label, lo, hi in _BUCKET_EDGES:
+        if lo <= confidence < hi:
+            return label
+    return _BUCKET_EDGES[-1][0]
+
+
 def run_benchmark(
     data_dir: Path,
     expected_roles: Mapping[str, Mapping[str, str]] = EXPECTED_KEY_ROLES,
@@ -93,12 +122,15 @@ def run_benchmark(
     total_correct = 0
     total_ambiguous = 0
     per_dataset: List[DatasetBenchmark] = []
+    buckets: Dict[str, int] = {label: 0 for label, _, _ in _BUCKET_EDGES}
+    mistakes: List[ColumnPrediction] = []
 
     for filename, expectations in expected_roles.items():
         profiled = _profile_dataset(data_dir, filename)
         evaluated = 0
         correct = 0
         ambiguous = 0
+        dataset_predictions: List[ColumnPrediction] = []
 
         for col_name, expected_role in expectations.items():
             column = profiled.get(col_name)
@@ -108,11 +140,35 @@ def run_benchmark(
             evaluated += 1
             predicted_role = str(column.get("inferred_type", "unknown"))
             confidence = float(column.get("confidence", 0.0) or 0.0)
+            is_correct = predicted_role == expected_role
 
-            if predicted_role == expected_role:
+            if is_correct:
                 correct += 1
+            else:
+                mistakes.append(
+                    ColumnPrediction(
+                        filename=filename,
+                        column=col_name,
+                        expected=expected_role,
+                        predicted=predicted_role,
+                        confidence=confidence,
+                        correct=False,
+                    )
+                )
             if confidence < ambiguity_threshold:
                 ambiguous += 1
+
+            buckets[_bucket_for(confidence)] += 1
+            dataset_predictions.append(
+                ColumnPrediction(
+                    filename=filename,
+                    column=col_name,
+                    expected=expected_role,
+                    predicted=predicted_role,
+                    confidence=confidence,
+                    correct=is_correct,
+                )
+            )
 
         total_evaluated += evaluated
         total_correct += correct
@@ -125,6 +181,7 @@ def run_benchmark(
                 correct=correct,
                 accuracy=_safe_div(correct, evaluated),
                 ambiguity_rate=_safe_div(ambiguous, evaluated),
+                predictions=tuple(dataset_predictions),
             )
         )
 
@@ -136,6 +193,8 @@ def run_benchmark(
         micro_recall=micro,
         ambiguity_rate=_safe_div(total_ambiguous, total_evaluated),
         per_dataset=tuple(per_dataset),
+        confidence_buckets=buckets,
+        mistakes=tuple(mistakes),
     )
 
 
@@ -155,4 +214,21 @@ def format_summary(summary: BenchmarkSummary) -> str:
         lines.append(
             f"- {ds.filename}: accuracy={ds.accuracy:.3f}, ambiguity={ds.ambiguity_rate:.3f}, evaluated={ds.evaluated_columns}"
         )
+
+    if summary.confidence_buckets:
+        lines.append("")
+        lines.append("Confidence distribution:")
+        for label, _, _ in _BUCKET_EDGES:
+            count = summary.confidence_buckets.get(label, 0)
+            pct = _safe_div(count, summary.evaluated_columns) * 100
+            lines.append(f"  {label:>9s}: {count:3d} ({pct:5.1f}%)")
+
+    if summary.mistakes:
+        lines.append("")
+        lines.append("Misclassifications:")
+        for m in summary.mistakes:
+            lines.append(
+                f"  {m.filename}::{m.column} expected={m.expected} got={m.predicted} confidence={m.confidence:.2f}"
+            )
+
     return "\n".join(lines)

@@ -30,7 +30,11 @@ export default function UploadPage() {
           result.import_info,
           result.columns,
           result.table_structure,
-          result.issues
+          result.issues,
+          {
+            lowConfidenceColumns: result.low_confidence_columns ?? [],
+            templateApplied: result.template_applied ?? 0,
+          }
         )
         navigate('/overview')
       } catch (e: unknown) {

@@ -319,6 +319,23 @@ async def get_fair_score(dataset_id: str):
     return score
 
 
+@app.get("/api/fair-score/{dataset_id}/llm")
+async def get_llm_fair_score(dataset_id: str):
+    from llm_fair_scorer import run_llm_fair_score
+    s = _require(dataset_id)
+    arrive_data = s.get("metadata", {}).get("arrive")
+    try:
+        result = run_llm_fair_score(
+            s["import_info"], s["columns"], s["metadata"], s["issues"], arrive_data
+        )
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        logger.error("LLM FAIR score failed: %s", exc)
+        raise HTTPException(503, "LLM assessment temporarily unavailable.")
+    return result
+
+
 @app.get("/api/uris/{dataset_id}")
 async def get_uri_suggestions(dataset_id: str):
     s = _require(dataset_id)

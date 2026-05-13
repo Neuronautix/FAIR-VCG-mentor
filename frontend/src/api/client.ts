@@ -69,6 +69,9 @@ export const saveMetadata = (id: string, metadata: DatasetMetadata) =>
 export const getFairScore = (id: string): Promise<FAIRScore> =>
   api.get<FAIRScore>(`/fair-score/${id}`).then((r) => r.data)
 
+export const getLLMFairScore = (id: string) =>
+  api.get(`/fair-score/${id}/llm`).then((r) => r.data)
+
 export const getUriSuggestions = (id: string) =>
   api.get(`/uris/${id}`).then((r) => r.data)
 

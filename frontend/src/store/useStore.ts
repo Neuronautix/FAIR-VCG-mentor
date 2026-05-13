@@ -215,6 +215,7 @@ interface AppState {
   vcgConfig: VCGConfig | null
 
   paperExtraction: PaperExtraction | null
+  llmFairScore: any | null
 
   setUploadResult: (
     datasetId: string,
@@ -240,6 +241,7 @@ interface AppState {
   setVCGConfig: (config: VCGConfig) => void
 
   setPaperExtraction: (extraction: PaperExtraction | null) => void
+  setLLMFairScore: (score: any | null) => void
 }
 
 const EMPTY_METRICS: InferenceMetrics = {
@@ -268,6 +270,7 @@ export const useStore = create<AppState>((set) => ({
   vcgConfig: null,
 
   paperExtraction: null,
+  llmFairScore: null,
 
   setUploadResult: (datasetId, importInfo, columns, tableStructure, issues, extras) =>
     set({
@@ -307,6 +310,7 @@ export const useStore = create<AppState>((set) => ({
       vcgColumnRoles: null,
       vcgConfig: null,
       paperExtraction: null,
+      llmFairScore: null,
     }),
 
   setVCGStatus: (status) => set({ vcgStatus: status }),
@@ -317,4 +321,5 @@ export const useStore = create<AppState>((set) => ({
   setVCGConfig: (config) => set({ vcgConfig: config }),
 
   setPaperExtraction: (extraction) => set({ paperExtraction: extraction }),
+  setLLMFairScore: (score) => set({ llmFairScore: score }),
 }))

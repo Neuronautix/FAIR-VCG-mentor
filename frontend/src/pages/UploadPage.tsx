@@ -1,17 +1,18 @@
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
-import { Alert, Box, Button, CircularProgress, Paper, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Paper, Snackbar, Typography } from '@mui/material'
 import type { AxiosError } from 'axios'
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { uploadCSV } from '../api/client'
+import { saveMetadata, uploadCSV } from '../api/client'
 import { useStore } from '../store/useStore'
 
 export default function UploadPage() {
   const navigate = useNavigate()
-  const { setUploadResult, reset } = useStore()
+  const { setUploadResult, reset, paperExtraction } = useStore()
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [paperSnackbar, setPaperSnackbar] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(
@@ -36,6 +37,34 @@ export default function UploadPage() {
             templateApplied: result.template_applied ?? 0,
           }
         )
+
+        if (paperExtraction) {
+          const dm = paperExtraction.dataset_metadata
+          const patch: Record<string, any> = {}
+          if (dm.title != null) patch.title = dm.title
+          if (dm.description != null) patch.description = dm.description
+          if (dm.creator != null) patch.creator = dm.creator
+          if (dm.institution != null) patch.institution = dm.institution
+          if (dm.species != null) patch.species = dm.species
+          if (dm.study_type != null) patch.study_type = dm.study_type
+          if (dm.keywords && dm.keywords.length > 0) patch.keywords = dm.keywords
+          if (dm.license != null) patch.license = dm.license
+          if (dm.funding_source != null) patch.funding_source = dm.funding_source
+          if (dm.protocol_reference != null) patch.protocol_reference = dm.protocol_reference
+          patch.arrive = paperExtraction.arrive
+
+          if (Object.keys(patch).length > 0) {
+            try {
+              await saveMetadata(result.dataset_id, patch)
+              setPaperSnackbar(
+                `Pre-filled ${Object.keys(patch).length} metadata field(s) from "${paperExtraction._filename}"`
+              )
+            } catch {
+              // non-fatal: proceed to overview even if pre-fill fails
+            }
+          }
+        }
+
         navigate('/overview')
       } catch (e: unknown) {
         const axiosErr = e as AxiosError<{ detail: string }>
@@ -45,7 +74,7 @@ export default function UploadPage() {
         setLoading(false)
       }
     },
-    [navigate, reset, setUploadResult]
+    [navigate, reset, setUploadResult, paperExtraction]
   )
 
   const onDrop = useCallback(
@@ -112,6 +141,17 @@ export default function UploadPage() {
           {error}
         </Alert>
       )}
+
+      <Snackbar
+        open={paperSnackbar !== null}
+        autoHideDuration={5000}
+        onClose={() => setPaperSnackbar(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="info" onClose={() => setPaperSnackbar(null)}>
+          {paperSnackbar}
+        </Alert>
+      </Snackbar>
 
       <Button
         variant="contained"

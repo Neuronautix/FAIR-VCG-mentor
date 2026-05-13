@@ -1,3 +1,4 @@
+import ArticleIcon from '@mui/icons-material/Article'
 import {
   Alert,
   Box,
@@ -6,6 +7,7 @@ import {
   CardContent,
   Chip,
   FormControl,
+  FormHelperText,
   Grid,
   InputLabel,
   MenuItem,
@@ -57,7 +59,7 @@ const defaultForm: FormState = {
 
 export default function VCGWizardPage() {
   const navigate = useNavigate()
-  const { datasetId, columns, setVCGStatus } = useStore()
+  const { datasetId, columns, setVCGStatus, paperExtraction } = useStore()
 
   const [activeStep, setActiveStep] = useState(0)
   const [form, setForm] = useState<FormState>(defaultForm)
@@ -69,10 +71,36 @@ export default function VCGWizardPage() {
     if (activeStep === 1 && datasetId) {
       getVCGWizardPrefill(datasetId)
         .then((data: Partial<FormState>) => {
-          setForm((prev) => ({ ...prev, ...data }))
+          setForm((prev) => {
+            const next = { ...prev, ...data }
+            // Apply paper hints for fields still empty after API prefill
+            const hints = paperExtraction?.vcg_hints
+            if (hints) {
+              if (!next.treatment_col && hints.treatment_column_name && allColumnNames.includes(hints.treatment_column_name)) {
+                next.treatment_col = hints.treatment_column_name
+              }
+              if (!next.control_value && hints.control_group_label) {
+                next.control_value = hints.control_group_label
+              }
+            }
+            return next
+          })
         })
         .catch(() => {
-          // prefill unavailable — ignore
+          // prefill unavailable — still apply paper hints
+          setForm((prev) => {
+            const next = { ...prev }
+            const hints = paperExtraction?.vcg_hints
+            if (hints) {
+              if (!next.treatment_col && hints.treatment_column_name && allColumnNames.includes(hints.treatment_column_name)) {
+                next.treatment_col = hints.treatment_column_name
+              }
+              if (!next.control_value && hints.control_group_label) {
+                next.control_value = hints.control_group_label
+              }
+            }
+            return next
+          })
         })
     }
   }, [activeStep, datasetId])
@@ -219,6 +247,19 @@ export default function VCGWizardPage() {
             <Typography variant="h6" gutterBottom>
               Column Roles
             </Typography>
+
+            {/* Paper hints banner */}
+            {paperExtraction?.vcg_hints && (
+              paperExtraction.vcg_hints.treatment_column_name != null ||
+              paperExtraction.vcg_hints.control_group_label != null ||
+              paperExtraction.vcg_hints.outcome_columns.length > 0 ||
+              paperExtraction.vcg_hints.covariate_columns.length > 0
+            ) && (
+              <Alert severity="info" icon={<ArticleIcon />} sx={{ mb: 2 }}>
+                Paper hints available from "{paperExtraction._filename}" — highlighted below.
+              </Alert>
+            )}
+
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
@@ -234,6 +275,13 @@ export default function VCGWizardPage() {
                       </MenuItem>
                     ))}
                   </Select>
+                  {paperExtraction?.vcg_hints.treatment_column_name &&
+                    allColumnNames.includes(paperExtraction.vcg_hints.treatment_column_name) &&
+                    form.treatment_col !== paperExtraction.vcg_hints.treatment_column_name && (
+                      <FormHelperText>
+                        Suggested by paper: "{paperExtraction.vcg_hints.treatment_column_name}"
+                      </FormHelperText>
+                  )}
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -243,6 +291,12 @@ export default function VCGWizardPage() {
                   placeholder='e.g. "Vehicle" or "Placebo"'
                   value={form.control_value}
                   onChange={(e) => setForm({ ...form, control_value: e.target.value })}
+                  helperText={
+                    paperExtraction?.vcg_hints.control_group_label &&
+                    form.control_value === paperExtraction.vcg_hints.control_group_label
+                      ? '(pre-filled from paper)'
+                      : undefined
+                  }
                 />
               </Grid>
 
@@ -259,6 +313,7 @@ export default function VCGWizardPage() {
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                     {numericColumns.map((col) => {
                       const selected = form.outcome_cols.includes(col.name)
+                      const isPaperHint = paperExtraction?.vcg_hints.outcome_columns.includes(col.name) ?? false
                       return (
                         <Chip
                           key={col.name}
@@ -269,6 +324,7 @@ export default function VCGWizardPage() {
                           onClick={() =>
                             setForm({ ...form, outcome_cols: toggleItem(form.outcome_cols, col.name) })
                           }
+                          sx={{ ...(isPaperHint && { border: '2px solid', borderColor: 'warning.main' }) }}
                         />
                       )
                     })}
@@ -289,6 +345,7 @@ export default function VCGWizardPage() {
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                     {allColumnNames.map((col) => {
                       const selected = form.covariate_cols.includes(col)
+                      const isPaperHint = paperExtraction?.vcg_hints.covariate_columns.includes(col) ?? false
                       return (
                         <Chip
                           key={col}
@@ -302,6 +359,7 @@ export default function VCGWizardPage() {
                               covariate_cols: toggleItem(form.covariate_cols, col),
                             })
                           }
+                          sx={{ ...(isPaperHint && { border: '2px solid', borderColor: 'warning.main' }) }}
                         />
                       )
                     })}
@@ -311,6 +369,7 @@ export default function VCGWizardPage() {
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                     {bioColumns.map((col) => {
                       const selected = form.covariate_cols.includes(col.name)
+                      const isPaperHint = paperExtraction?.vcg_hints.covariate_columns.includes(col.name) ?? false
                       return (
                         <Chip
                           key={col.name}
@@ -324,12 +383,27 @@ export default function VCGWizardPage() {
                               covariate_cols: toggleItem(form.covariate_cols, col.name),
                             })
                           }
+                          sx={{ ...(isPaperHint && { border: '2px solid', borderColor: 'warning.main' }) }}
                         />
                       )
                     })}
                   </Box>
                 )}
               </Grid>
+
+              {/* Paper hint legend */}
+              {paperExtraction?.vcg_hints && (
+                numericColumns.some((col) => paperExtraction.vcg_hints.outcome_columns.includes(col.name)) ||
+                (bioColumns.length === 0
+                  ? allColumnNames.some((col) => paperExtraction.vcg_hints.covariate_columns.includes(col))
+                  : bioColumns.some((col) => paperExtraction.vcg_hints.covariate_columns.includes(col.name)))
+              ) && (
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary">
+                    ⬡ outlined in amber = suggested by paper
+                  </Typography>
+                </Grid>
+              )}
 
               {/* Preview of selected outcome columns */}
               {form.outcome_cols.length > 0 && (

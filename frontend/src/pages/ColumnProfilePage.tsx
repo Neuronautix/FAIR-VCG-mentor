@@ -160,6 +160,7 @@ export default function ColumnProfilePage() {
     setFairScore,
     setLowConfidenceColumns,
     setInferenceMetrics,
+    paperExtraction,
   } = useStore()
   const [localCols, setLocalCols] = useState<ColumnProfile[]>(columns)
   const [saving, setSaving] = useState(false)
@@ -169,6 +170,7 @@ export default function ColumnProfilePage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
+  const [paperHintDismissed, setPaperHintDismissed] = useState(false)
 
   if (!datasetId) {
     return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>
@@ -207,6 +209,16 @@ export default function ColumnProfilePage() {
   }
 
   const lowConfidenceNames = new Set(lowConfidenceColumns.map((c) => c.name))
+
+  const paperOutcomeSet = new Set(paperExtraction?.vcg_hints.outcome_columns ?? [])
+  const paperCovariateSet = new Set(paperExtraction?.vcg_hints.covariate_columns ?? [])
+  const paperMatchCount = localCols.filter(
+    (c) => paperOutcomeSet.has(c.name) || paperCovariateSet.has(c.name)
+  ).length
+  const showPaperHintBanner =
+    !paperHintDismissed &&
+    paperExtraction != null &&
+    paperMatchCount > 0
 
   return (
     <Box>
@@ -274,6 +286,17 @@ export default function ColumnProfilePage() {
         to generate the data dictionary, CSVW, and JSON-LD exports.
       </Alert>
 
+      {showPaperHintBanner && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          onClose={() => setPaperHintDismissed(true)}
+        >
+          {paperMatchCount} column{paperMatchCount === 1 ? '' : 's'} match paper hints from "
+          {paperExtraction!._filename}". Highlighted below.
+        </Alert>
+      )}
+
       {/* Summary table */}
       <Card sx={{ mb: 3 }}>
         <TableContainer>
@@ -305,6 +328,12 @@ export default function ColumnProfilePage() {
                     <Typography variant="body2" fontWeight={600}>
                       {col.name}
                     </Typography>
+                    {paperOutcomeSet.has(col.name) && (
+                      <Chip label="endpoint (paper)" color="warning" size="small" sx={{ mt: 0.5, mr: 0.5 }} />
+                    )}
+                    {paperCovariateSet.has(col.name) && (
+                      <Chip label="covariate (paper)" color="secondary" size="small" sx={{ mt: 0.5 }} />
+                    )}
                   </TableCell>
                   <TableCell>
                     <Chip

@@ -289,9 +289,10 @@ export default function PaperImportPage() {
       {!paperExtraction && !loading && (
         <>
           <Alert severity="info" sx={{ mb: 3 }}>
-            This feature uses the Claude AI API to analyse your paper. An{' '}
+            This feature sends the <strong>full PDF</strong> directly to the Claude API for
+            layout-aware processing (no text pre-extraction step). An{' '}
             <strong>ANTHROPIC_API_KEY</strong> must be set in the backend environment.
-            Your PDF is sent to the Anthropic API — do not upload unpublished or confidential work.
+            Do not upload unpublished or confidential manuscripts. Max file size: 32 MB.
           </Alert>
           <DropZone onFile={handleFile} />
         </>
@@ -332,9 +333,7 @@ export default function PaperImportPage() {
                     {paperExtraction._filename}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {Math.round(paperExtraction._chars_extracted / 1000)} k chars extracted ·{' '}
-                    {paperExtraction._chars_sent < paperExtraction._chars_extracted ? 'truncated to 100 k · ' : ''}
-                    extraction complete
+                    {paperExtraction._file_size_kb} KB · processed natively by Claude (layout-aware) · extraction complete
                   </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>

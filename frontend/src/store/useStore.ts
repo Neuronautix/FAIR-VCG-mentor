@@ -114,8 +114,8 @@ export interface ARRIVEField {
 
 export interface PaperExtraction {
   _filename: string
-  _chars_extracted: number
-  _chars_sent: number
+  _file_size_kb: number
+  _method: string
   dataset_metadata: {
     title: string | null
     description: string | null

@@ -1,9 +1,13 @@
+import base64
 import json
 import logging
 import os
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
+
+# 32 MB — Anthropic's hard limit for native PDF input
+_PDF_MAX_BYTES = 32 * 1024 * 1024
 
 _SYSTEM_PROMPT = (
     "You are a scientific data management assistant specialising in preclinical and "
@@ -61,26 +65,14 @@ n_control and n_treatment must be integers if mentioned, otherwise null.
 Outcome and covariate column name lists may be empty arrays if nothing can be inferred.
 """
 
-_USER_PREFIX = "Extract metadata from the following scientific paper text:\n\n"
-
-
-def extract_text_from_pdf(pdf_bytes: bytes) -> str:
-    try:
-        import fitz  # PyMuPDF
-    except ImportError:
-        raise RuntimeError(
-            "PyMuPDF is not installed. Add 'pymupdf' to requirements.txt."
-        )
-    try:
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        pages = [page.get_text() for page in doc]
-        doc.close()
-        return "\n".join(pages)
-    except Exception as exc:
-        raise RuntimeError(f"Could not extract text from PDF: {exc}") from exc
-
 
 def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
+    if len(pdf_bytes) > _PDF_MAX_BYTES:
+        raise RuntimeError(
+            f"PDF is {len(pdf_bytes) // (1024*1024):.1f} MB — "
+            f"the Anthropic API limit is 32 MB. Please use a smaller file."
+        )
+
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError(
@@ -96,17 +88,14 @@ def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
             "Add it to requirements.txt and reinstall dependencies."
         )
 
-    text = extract_text_from_pdf(pdf_bytes)
-    # Truncate to ~100 k chars to stay well within context limits
-    truncated = text[:100_000]
-
     client = anthropic.Anthropic(api_key=api_key)
+    pdf_b64 = base64.standard_b64encode(pdf_bytes).decode()
 
-    # Cache the static schema so repeated calls on the same server instance
-    # don't re-process the large prompt portion.
     message = client.messages.create(
         model=os.getenv("PAPER_EXTRACTION_MODEL", "claude-haiku-4-5-20251001"),
         max_tokens=4096,
+        # Cache the static schema — saves input tokens on repeated calls within
+        # the same server process (ephemeral cache TTL is ~5 min).
         system=[
             {
                 "type": "text",
@@ -117,7 +106,17 @@ def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
         messages=[
             {
                 "role": "user",
-                "content": _USER_PREFIX + truncated,
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": pdf_b64,
+                        },
+                    },
+                    {"type": "text", "text": "Extract metadata from this scientific paper."},
+                ],
             }
         ],
     )
@@ -138,6 +137,6 @@ def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
         raise RuntimeError(f"LLM returned malformed JSON: {exc}") from exc
 
     result["_filename"] = filename
-    result["_chars_extracted"] = len(text)
-    result["_chars_sent"] = len(truncated)
+    result["_file_size_kb"] = round(len(pdf_bytes) / 1024)
+    result["_method"] = "native_pdf"
     return result

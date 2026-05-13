@@ -9,5 +9,4 @@ scipy>=1.13.0
 statsmodels>=0.14.0
 pingouin>=0.5.4
 matplotlib>=3.9.0
-pymupdf>=1.24.0
 anthropic>=0.40.0

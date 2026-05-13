@@ -205,6 +205,18 @@ FAIR-vcg-mentor/
 
 The goal is to make FAIR-VCG Mentor a credible scientific instrument that genuinely reduces animal numbers in pre-clinical research — not just a useful tool, but one that an ethics committee, a journal reviewer, or a regulatory authority can point to. Items are grouped by time horizon and tagged by primary benefit: **[animal reduction]**, **[credibility]**, or **[usability]**.
 
+### Paper import & LLM enrichment
+
+- [ ] **Auto-apply paper extraction on CSV upload** — if a paper was imported before uploading the CSV, automatically pre-fill session metadata with no extra clicks. `[usability]`
+- [ ] **Metadata Wizard: pre-fill from paper** — pre-populate form fields from extracted paper metadata with visible "from paper" badges so users review and confirm rather than re-type. `[usability]`
+- [ ] **VCG Wizard: paper-hint column suggestions** — highlight outcome and covariate chips that match paper-hinted endpoint names; pre-fill control group label from paper. `[usability]`
+- [ ] **Column Profile: paper match badges** — mark columns matching paper-hinted endpoint or covariate names with a visual indicator. `[usability]`
+- [ ] **Persist paper extraction to SQLite** — store the extraction result in the session so it survives a page reload. `[usability]`
+- [ ] **Structured output via Anthropic tool_use** — replace JSON-from-text parsing in paper_extractor with guaranteed structured output via the tools API, eliminating parse-error edge cases. `[credibility]`
+- [ ] **Streaming extraction response** — use Anthropic streaming to show live progress during the 10–30 s extraction call instead of an opaque spinner. `[usability]`
+- [ ] **CrossRef DOI lookup** — accept a DOI as an alternative to PDF upload; fetch bibliographic metadata from CrossRef (free, no LLM required) as a fast path for published papers. `[usability]`
+- [ ] **LLM-powered FAIR scoring** — supplement the rule-based rubric with a Claude qualitative assessment that judges whether descriptions are genuinely informative, whether keywords are relevant, and whether ARRIVE fields are substantively complete rather than just present. `[credibility]`
+
 ### Short term
 
 Improvements to what already exists.

@@ -10,6 +10,7 @@ import UploadPage from './pages/UploadPage'
 import VCGPage from './pages/VCGPage'
 import VCGWizardPage from './pages/VCGWizardPage'
 import VCGResultsPage from './pages/VCGResultsPage'
+import PaperImportPage from './pages/PaperImportPage'
 
 const theme = createTheme({
   palette: {
@@ -54,6 +55,7 @@ export default function App() {
             <Route path="vcg" element={<VCGPage />} />
             <Route path="vcg/wizard" element={<VCGWizardPage />} />
             <Route path="vcg/results" element={<VCGResultsPage />} />
+            <Route path="paper-import" element={<PaperImportPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -105,3 +105,9 @@ export const getVCGConversation = (id: string) =>
 
 export const vcgExportUrl = (id: string, type: 'vcg-csv' | 'vcg-report') =>
   `/api/vcg/${id}/export/${type}`
+
+export const extractPaperMetadata = (file: File): Promise<any> => {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post('/paper/extract', form).then((r) => r.data)
+}

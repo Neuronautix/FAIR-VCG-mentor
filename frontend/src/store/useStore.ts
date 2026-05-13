@@ -107,6 +107,40 @@ export interface DatasetMetadata {
   base_uri?: string
 }
 
+export interface ARRIVEField {
+  value: string | null
+  status: 'found' | 'inferred' | 'missing'
+}
+
+export interface PaperExtraction {
+  _filename: string
+  _chars_extracted: number
+  _chars_sent: number
+  dataset_metadata: {
+    title: string | null
+    description: string | null
+    creator: string | null
+    institution: string | null
+    species: string | null
+    study_type: string | null
+    keywords: string[]
+    license: string | null
+    funding_source: string | null
+    protocol_reference: string | null
+  }
+  arrive: Record<string, ARRIVEField>
+  vcg_hints: {
+    treatment_column_name: string | null
+    control_group_label: string | null
+    treatment_group_label: string | null
+    outcome_columns: string[]
+    covariate_columns: string[]
+    n_control: number | null
+    n_treatment: number | null
+  }
+  summary: string
+}
+
 export interface VCGColumnRoles {
   subject_id: string | null
   treatment_col: string | null
@@ -180,6 +214,8 @@ interface AppState {
   vcgColumnRoles: VCGColumnRoles | null
   vcgConfig: VCGConfig | null
 
+  paperExtraction: PaperExtraction | null
+
   setUploadResult: (
     datasetId: string,
     importInfo: ImportInfo,
@@ -202,6 +238,8 @@ interface AppState {
   clearVCGConversation: () => void
   setVCGColumnRoles: (roles: VCGColumnRoles) => void
   setVCGConfig: (config: VCGConfig) => void
+
+  setPaperExtraction: (extraction: PaperExtraction | null) => void
 }
 
 const EMPTY_METRICS: InferenceMetrics = {
@@ -228,6 +266,8 @@ export const useStore = create<AppState>((set) => ({
   vcgConversation: [],
   vcgColumnRoles: null,
   vcgConfig: null,
+
+  paperExtraction: null,
 
   setUploadResult: (datasetId, importInfo, columns, tableStructure, issues, extras) =>
     set({
@@ -266,6 +306,7 @@ export const useStore = create<AppState>((set) => ({
       vcgConversation: [],
       vcgColumnRoles: null,
       vcgConfig: null,
+      paperExtraction: null,
     }),
 
   setVCGStatus: (status) => set({ vcgStatus: status }),
@@ -274,4 +315,6 @@ export const useStore = create<AppState>((set) => ({
   clearVCGConversation: () => set({ vcgConversation: [] }),
   setVCGColumnRoles: (roles) => set({ vcgColumnRoles: roles }),
   setVCGConfig: (config) => set({ vcgConfig: config }),
+
+  setPaperExtraction: (extraction) => set({ paperExtraction: extraction }),
 }))

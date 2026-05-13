@@ -414,6 +414,22 @@ async def export_arrive(dataset_id: str):
                     headers={"Content-Disposition": 'attachment; filename="arrive_guidelines.zip"'})
 
 
+@app.post("/api/paper/extract")
+async def extract_paper(file: UploadFile = File(...)):
+    from paper_extractor import extract_paper_metadata
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty file")
+    filename = file.filename or "paper.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Only PDF files are supported. Please upload a PDF.")
+    try:
+        result = extract_paper_metadata(content, filename)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    return result
+
+
 init_vcg_router(sessions, _save_session, _load_session)
 app.include_router(vcg_router)
 

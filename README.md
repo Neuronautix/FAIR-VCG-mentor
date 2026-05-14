@@ -223,6 +223,18 @@ Items needed before the tool is used in a real study, followed by quality-of-lif
 - [ ] **Ontology term lookup for column vocabulary.** The URI field in Column Profile accepts free text. Integrate a lightweight OLS or BioPortal search (debounced autocomplete) so researchers can attach real ontology terms rather than lab-internal strings. Required for machine-readable interoperability at the field level. `[usability]`
 - [ ] **Diff view for FAIR score before/after metadata edit.** Show +/- point changes when the user returns to the score page after filling in the Metadata Wizard, so the impact of each field is visible. `[usability]`
 
+### Vocabulary, HITL & schema verification (follow-ups)
+
+Follow-ups to the controlled vocabulary + HITL system landed in PR #4. The base layer (versioned vocabulary, enum-constrained tool inputs, cached schema system block, schema_version stamping, PDF discovery) is in place; these items tighten the loop.
+
+- [ ] **Structural schema verification pre-flight on validate.** Before flipping `vocabulary.validated = True`, run a structural check (unit fragments that don't parse, duplicate semantic-type assignments, columns with no role, controlled-value sets that overlap with declared identifiers). Surface findings inline and require an override for any blocking finding. `[credibility]`
+- [ ] **Per-field vocabulary templates.** Let users save vocabulary subsets as named templates (`pharmacology_units`, `arrive_metadata_keys`, `oncology_study_types`, …) and re-apply them to fresh sessions. Hooks into the existing `template_store.py` signature-based matching. `[usability]`
+- [ ] **OLS / BioPortal lookup for ontology IRIs.** Replace free-text vocabulary extensions with proposed IRIs drawn from EFO / UO / NCIT / CHEBI. HITL `schema_extension` suggestions then carry both the term and its canonical IRI so downstream FAIR exports can link out. Biggest single FAIR-interoperability win. `[credibility]` `[usability]`
+- [ ] **Vocabulary diff view.** Render the `vocabulary.history` entries on the Vocabulary panel so users can see what each version added/removed and why (init, user_validate, hitl_apply, etc.). Foundation for the audit trail required by regulatory reviewers. `[credibility]`
+- [ ] **Text-mode discovery.** Wire a "scan dataset description / methods" mode in `llm_vocab_discovery.discover_from_text` and expose it via `POST /api/llm/{id}/discover-vocab/from-text`. Removes the PDF dependency for users who only have a methods paragraph. `[usability]`
+- [ ] **Auto-stale on column edit.** When `PUT /api/columns/{id}` adds new sample values or renames a controlled-value entry, auto-bump `vocabulary.version` and mark older HITL suggestions stale. Currently the bump only fires on explicit validate / schema_extension approval. `[credibility]`
+- [ ] **In-place re-suggestion for stale cards.** Add a "Regenerate against v{N}" action on stale HITL cards that re-runs the originating LLM call against the latest vocabulary, replacing the stale suggestion with a fresh one. Removes the need to retrigger from each origin page. `[usability]`
+
 ---
 
 ## Roadmap

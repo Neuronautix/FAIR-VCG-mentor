@@ -403,7 +403,8 @@ async def llm_suggest_columns(dataset_id: str, body: Optional[Dict[str, Any]] = 
     only_columns = body.get("columns")
     try:
         suggestions = suggest_column_metadata(
-            s["columns"], only_columns=only_columns, metadata=s.get("metadata", {})
+            s["columns"], only_columns=only_columns, metadata=s.get("metadata", {}),
+            session=s,
         )
     except LLMUnavailable as exc:
         raise HTTPException(503, str(exc))
@@ -423,7 +424,7 @@ async def llm_suggest_issue_fixes(dataset_id: str):
     if not issues:
         return {"created": [], "n_raw": 0}
     try:
-        fixes = suggest_issue_fixes(issues, s.get("metadata", {}), s["columns"])
+        fixes = suggest_issue_fixes(issues, s.get("metadata", {}), s["columns"], session=s)
     except LLMUnavailable as exc:
         raise HTTPException(503, str(exc))
     by_id = {i["id"]: i for i in issues}
@@ -434,6 +435,50 @@ async def llm_suggest_issue_fixes(dataset_id: str):
     created = add_suggestions(s, items)
     _save_session(dataset_id, s)
     return {"created": created, "n_raw": len(fixes)}
+
+
+# ── Vocabulary endpoints ────────────────────────────────────────────────────
+
+@app.get("/api/vocabulary/{dataset_id}")
+async def get_vocabulary(dataset_id: str):
+    from vocabulary import ensure_vocabulary
+    s = _require(dataset_id)
+    return ensure_vocabulary(s)
+
+
+@app.post("/api/vocabulary/{dataset_id}/validate")
+async def validate_vocabulary(dataset_id: str):
+    """Flip vocabulary.validated → True and bump version (HITL stale-marks older proposals)."""
+    from vocabulary import validate
+    from hitl import mark_stale_for_version
+    s = _require(dataset_id)
+    vocab = validate(s)
+    marked = mark_stale_for_version(s, vocab["version"])
+    _save_session(dataset_id, s)
+    return {"vocabulary": vocab, "marked_stale": marked}
+
+
+@app.post("/api/llm/{dataset_id}/discover-vocab/from-pdf")
+async def discover_vocab_from_pdf(dataset_id: str, file: UploadFile = File(...)):
+    """Mine a PDF for vocabulary extensions; results queued as HITL schema_extension."""
+    from llm_vocab_discovery import discover_from_pdf, extension_to_hitl_payload
+    from llm_service import LLMUnavailable
+    from hitl import add_suggestions
+    s = _require(dataset_id)
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty file")
+    filename = file.filename or "paper.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Only PDF files are supported.")
+    try:
+        proposals = discover_from_pdf(s, content, filename)
+    except LLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    items = [extension_to_hitl_payload(p) for p in proposals]
+    created = add_suggestions(s, items)
+    _save_session(dataset_id, s)
+    return {"created": created, "n_raw": len(proposals)}
 
 
 @app.get("/api/uris/{dataset_id}")

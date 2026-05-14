@@ -34,6 +34,7 @@ const CATEGORY_LABELS: Record<HITLSuggestion['category'], string> = {
   vcg_config: 'VCG configuration',
   fair_recommendation: 'FAIR recommendation',
   issue_fix: 'Issue fix',
+  schema_extension: 'Schema extension',
 }
 
 const STATUS_COLORS: Record<HITLSuggestion['status'], 'default' | 'warning' | 'success' | 'error' | 'info'> = {
@@ -43,6 +44,7 @@ const STATUS_COLORS: Record<HITLSuggestion['status'], 'default' | 'warning' | 's
   applied: 'success',
   rejected: 'default',
   invalid: 'error',
+  stale: 'default',
 }
 
 interface Props {
@@ -92,7 +94,7 @@ export default function HITLPanel({
       : hitlSuggestions
     return [...list].sort((a, b) => {
       const order: Record<HITLSuggestion['status'], number> = {
-        pending: 0, edited: 1, invalid: 2, applied: 3, approved: 4, rejected: 5,
+        pending: 0, edited: 1, invalid: 2, stale: 3, applied: 4, approved: 5, rejected: 6,
       }
       const ds = order[a.status] - order[b.status]
       if (ds !== 0) return ds
@@ -226,10 +228,21 @@ function SuggestionCard({
   const [editError, setEditError] = useState<string | null>(null)
 
   const isActionable = s.status === 'pending' || s.status === 'edited'
+  const isStale = s.status === 'stale'
   const isAI = s.source.startsWith('llm:')
 
   return (
-    <Card variant="outlined" sx={{ bgcolor: isActionable ? 'rgba(255, 193, 7, 0.04)' : 'transparent' }}>
+    <Card
+      variant="outlined"
+      sx={{
+        bgcolor: isActionable
+          ? 'rgba(255, 193, 7, 0.04)'
+          : isStale
+            ? 'rgba(0, 0, 0, 0.03)'
+            : 'transparent',
+        opacity: isStale ? 0.65 : 1,
+      }}
+    >
       <CardContent sx={{ pb: '12px !important' }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
           <Box sx={{ flexGrow: 1 }}>
@@ -260,7 +273,22 @@ function SuggestionCard({
                 <Chip label={s.source} size="small" variant="outlined" sx={{ fontSize: 10 }} />
               )}
               <Chip label={`for: ${s.target}`} size="small" variant="outlined" sx={{ fontSize: 10 }} />
+              {typeof (s as any).schema_version === 'number' && (
+                <Chip
+                  label={`schema v${(s as any).schema_version}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: 10 }}
+                />
+              )}
             </Stack>
+
+            {isStale && (
+              <Alert severity="info" sx={{ mt: 0.5, mb: 0.5, fontSize: 11, py: 0 }}>
+                Vocabulary has changed since this suggestion was generated. Re-run the request
+                to get fresh proposals.
+              </Alert>
+            )}
 
             <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
               {s.title}

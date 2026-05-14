@@ -55,6 +55,16 @@ Goal: improve automatic column/data understanding while keeping latency and comp
 - [ ] Add Stage 3 only if ambiguity remains materially high
 - [ ] Add Stage 4 (LLM) last, as selective escalation rather than default path
 
+## Vocabulary, HITL, and schema verification (follow-ups)
+
+- [ ] **Schema verification pass** — when the user clicks "Validate vocabulary", run a structural pre-flight that flags weird/inconsistent terms (e.g., unit fragments that don't parse, duplicate semantic-type assignments across columns). Surface findings inline before flipping `validated=True`.
+- [ ] **Per-field templates** — let the user save vocabulary subsets as named templates (e.g., `pharmacology_units`, `arrive_metadata_keys`, `oncology_study_types`) and re-apply them to fresh sessions. Hooks into the existing `template_store.py`.
+- [ ] **Ontology lookup integration (OLS / BioPortal / UO / EFO)** — replace free-text vocabulary suggestions with proposed IRIs from community ontologies. Issue HITL `schema_extension` suggestions carrying both the term and its ontology IRI so downstream FAIR exports can link to the canonical concept.
+- [ ] **Vocabulary diff view** — show `history` entries on the Vocabulary panel so the user can see what each version added/removed and why.
+- [ ] **Discover from dataset description** — wire a "scan dataset description / methods" mode in `llm_vocab_discovery.py` (plain text input, not PDF only).
+- [ ] **Auto-stale on column edit** — bump vocabulary version when `PUT /api/columns` adds new sample values that change `controlled_values`.
+- [ ] **Schema_version aware re-suggestion** — UI "regenerate" action on stale HITL cards that re-asks Haiku against the latest vocabulary instead of forcing the user to retrigger from each origin page.
+
 ## Paper Import & LLM Features
 
 - [ ] **paper_extractor.py** — switch to Anthropic `tool_use` for guaranteed structured output (no JSON parse fallback needed)

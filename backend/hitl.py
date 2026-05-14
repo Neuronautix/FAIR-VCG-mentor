@@ -42,9 +42,10 @@ HITL_CATEGORIES = {
     "vcg_config",
     "fair_recommendation",
     "issue_fix",
+    "schema_extension",   # propose new vocabulary terms (units, controlled values, etc.)
 }
 
-HITL_STATUSES = {"pending", "approved", "rejected", "edited", "applied", "invalid"}
+HITL_STATUSES = {"pending", "approved", "rejected", "edited", "applied", "invalid", "stale"}
 
 
 def ensure_hitl(session: Dict[str, Any]) -> Dict[str, Any]:
@@ -89,6 +90,9 @@ def add_suggestion(
     if category not in HITL_CATEGORIES:
         raise ValueError(f"Unknown HITL category: {category}")
 
+    from vocabulary import ensure_vocabulary
+    schema_version = int(ensure_vocabulary(session).get("version", 0))
+
     validation = _dry_run_validate(session, category, target, payload)
     suggestion = {
         "id": str(uuid.uuid4()),
@@ -101,11 +105,27 @@ def add_suggestion(
         "payload": payload,
         "status": "pending" if validation["ok"] else "invalid",
         "validation": validation,
+        "schema_version": schema_version,
         "created_at": time.time(),
         "applied_at": None,
     }
     ensure_hitl(session)["suggestions"].append(suggestion)
     return suggestion
+
+
+def mark_stale_for_version(session: Dict[str, Any], current_version: int) -> int:
+    """
+    Mark every pending/edited suggestion stamped with an older schema_version
+    as 'stale'. Applied/rejected suggestions are left alone — they are history.
+    Returns number of suggestions marked.
+    """
+    marked = 0
+    for s in ensure_hitl(session)["suggestions"]:
+        sv = int(s.get("schema_version") or 0)
+        if sv < current_version and s.get("status") in ("pending", "edited", "invalid"):
+            s["status"] = "stale"
+            marked += 1
+    return marked
 
 
 def add_suggestions(session: Dict[str, Any], items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -218,6 +238,22 @@ def _dry_run_validate(
         if not (payload.get("recommendation") or payload.get("text") or payload.get("metadata_patch")):
             errors.append("Suggestion payload is empty.")
 
+    elif category == "schema_extension":
+        valid_keys = {"units", "metadata_keys", "licenses", "study_types"}
+        key = payload.get("key")
+        values = payload.get("values")
+        if not (key in valid_keys or (isinstance(key, str) and key.startswith("controlled_values:"))):
+            errors.append(
+                "schema_extension payload.key must be one of "
+                f"{sorted(valid_keys)} or 'controlled_values:<column>'."
+            )
+        if not isinstance(values, list) or not values:
+            errors.append("schema_extension payload.values must be a non-empty list.")
+        if isinstance(key, str) and key.startswith("controlled_values:"):
+            col = key.split(":", 1)[1]
+            if col not in col_names:
+                errors.append(f"controlled_values target column '{col}' does not exist.")
+
     return {"ok": not errors, "errors": errors}
 
 
@@ -238,7 +274,21 @@ def _apply(
         if patch:
             return _apply_dataset_metadata(session, patch)
         return {"applied": True, "note": "Marked as acknowledged; no state change."}
+    if category == "schema_extension":
+        return _apply_schema_extension(session, payload)
     return {"applied": False, "errors": [f"Unknown category {category}"]}
+
+
+def _apply_schema_extension(session: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    from vocabulary import extend_terms
+    key = payload["key"]
+    values = payload["values"]
+    source = payload.get("source") or "hitl_apply"
+    result = extend_terms(session, key, values, source=source)
+    # Stamp older pending suggestions as stale — they referenced an older schema.
+    new_version = int(result["version"])
+    marked = mark_stale_for_version(session, new_version)
+    return {"applied": True, "added": result["added"], "schema_version": new_version, "marked_stale": marked}
 
 
 def _apply_column_metadata(

@@ -184,17 +184,35 @@ export const getStoredPaperExtraction = (id: string): Promise<any> =>
 
 // ── HITL (human-in-the-loop) ─────────────────────────────────────────────
 
+export type HITLCategory =
+  | 'column_metadata'
+  | 'dataset_metadata'
+  | 'vcg_config'
+  | 'fair_recommendation'
+  | 'issue_fix'
+  | 'schema_extension'
+
+export type HITLStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'edited'
+  | 'applied'
+  | 'invalid'
+  | 'stale'
+
 export interface HITLSuggestion {
   id: string
-  category: 'column_metadata' | 'dataset_metadata' | 'vcg_config' | 'fair_recommendation' | 'issue_fix'
+  category: HITLCategory
   target: string
   source: string
   confidence: number
   title: string
   rationale: string
   payload: Record<string, any>
-  status: 'pending' | 'approved' | 'rejected' | 'edited' | 'applied' | 'invalid'
+  status: HITLStatus
   validation: { ok: boolean; errors: string[] }
+  schema_version?: number
   created_at: number
   applied_at: number | null
 }
@@ -242,3 +260,38 @@ export const requestVCGLLMSuggest = (id: string) =>
   api
     .post<{ agent_msg: any; suggestion: HITLSuggestion | null }>(`/vcg/${id}/llm-suggest`)
     .then((r) => r.data)
+
+// ── Vocabulary ─────────────────────────────────────────────────────────────
+
+export interface Vocabulary {
+  version: number
+  validated: boolean
+  validated_at: number | null
+  column_names: string[]
+  semantic_types: string[]
+  units: string[]
+  metadata_keys: string[]
+  licenses: string[]
+  study_types: string[]
+  controlled_values: Record<string, string[]>
+  history: Array<{ version: number; at: number; source: string; added?: Record<string, any> }>
+}
+
+export const getVocabulary = (id: string) =>
+  api.get<Vocabulary>(`/vocabulary/${id}`).then((r) => r.data)
+
+export const validateVocabulary = (id: string) =>
+  api
+    .post<{ vocabulary: Vocabulary; marked_stale: number }>(`/vocabulary/${id}/validate`)
+    .then((r) => r.data)
+
+export const discoverVocabFromPDF = (id: string, file: File) => {
+  const form = new FormData()
+  form.append('file', file)
+  return api
+    .post<{ created: HITLSuggestion[]; n_raw: number }>(
+      `/llm/${id}/discover-vocab/from-pdf`,
+      form,
+    )
+    .then((r) => r.data)
+}

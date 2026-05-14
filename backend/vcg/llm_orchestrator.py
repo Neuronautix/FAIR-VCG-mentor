@@ -31,6 +31,7 @@ from typing import Any, Dict, List
 
 from llm_service import LLMUnavailable, call_haiku, validate_columns_exist
 from vcg.constants import CONTROL_KEYWORDS
+from vocabulary import enum_array, enum_or_null, ensure_vocabulary, schema_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -52,73 +53,87 @@ SYSTEM_PROMPT = (
 )
 
 
-_TOOL = {
-    "name": "vcg_chat_turn",
-    "description": (
-        "Produce the next assistant message and the current best-guess VCG "
-        "configuration. Re-emit the full configuration on every turn — fields "
-        "you haven't established yet should be null or empty arrays."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "assistant_message": {
-                "type": "string",
-                "description": "Markdown message to display to the user.",
-            },
-            "quick_reply_options": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "0–6 short button-friendly options the user may click.",
-            },
-            "column_roles": {
-                "type": "object",
-                "properties": {
-                    "subject_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-                    "treatment_col": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-                    "control_value": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-                    "treatment_value": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-                    "outcome_cols": {"type": "array", "items": {"type": "string"}},
-                    "covariate_cols": {"type": "array", "items": {"type": "string"}},
-                    "time_col": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-                    "exclude_cols": {"type": "array", "items": {"type": "string"}},
+def _build_tool(vocab: Dict[str, Any]) -> Dict[str, Any]:
+    col_enum = vocab["column_names"] or ["__unused__"]
+    # Union of every controlled value seen across columns — narrows
+    # the model's options for control/treatment values even before it
+    # commits to a specific treatment_col.
+    value_union: List[str] = []
+    for vals in (vocab.get("controlled_values") or {}).values():
+        for v in vals:
+            if v not in value_union:
+                value_union.append(v)
+
+    study_types = vocab.get("study_types") or []
+    return {
+        "name": "vcg_chat_turn",
+        "description": (
+            "Produce the next assistant message and the current best-guess VCG "
+            "configuration. Re-emit the full configuration on every turn — fields "
+            "you haven't established yet should be null or empty arrays."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "assistant_message": {
+                    "type": "string",
+                    "description": "Markdown message to display to the user.",
                 },
-                "required": [
-                    "subject_id", "treatment_col", "control_value",
-                    "treatment_value", "outcome_cols", "covariate_cols",
-                    "time_col", "exclude_cols",
-                ],
-            },
-            "vcg_config": {
-                "type": "object",
-                "properties": {
-                    "method": {"type": "string", "enum": ["auto", "bootstrap", "synthetic"]},
-                    "n_synthetic": {"type": "integer", "minimum": 5, "maximum": 1000},
-                    "seed": {"type": "integer"},
-                    "confidence_level": {"type": "number"},
+                "quick_reply_options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "0–6 short button-friendly options the user may click.",
                 },
-                "required": ["method", "n_synthetic", "seed", "confidence_level"],
-            },
-            "research_context": {
-                "type": "object",
-                "properties": {
-                    "domain": {"type": "string"},
-                    "study_type": {"type": "string"},
-                    "design": {"type": "string"},
+                "column_roles": {
+                    "type": "object",
+                    "properties": {
+                        "subject_id": {"anyOf": [{"enum": col_enum}, {"type": "null"}]},
+                        "treatment_col": {"anyOf": [{"enum": col_enum}, {"type": "null"}]},
+                        "control_value": enum_or_null(value_union),
+                        "treatment_value": enum_or_null(value_union),
+                        "outcome_cols": enum_array(vocab["column_names"]),
+                        "covariate_cols": enum_array(vocab["column_names"]),
+                        "time_col": {"anyOf": [{"enum": col_enum}, {"type": "null"}]},
+                        "exclude_cols": enum_array(vocab["column_names"]),
+                    },
+                    "required": [
+                        "subject_id", "treatment_col", "control_value",
+                        "treatment_value", "outcome_cols", "covariate_cols",
+                        "time_col", "exclude_cols",
+                    ],
                 },
-                "required": ["domain", "study_type", "design"],
+                "vcg_config": {
+                    "type": "object",
+                    "properties": {
+                        "method": {"enum": ["auto", "bootstrap", "synthetic"]},
+                        "n_synthetic": {"type": "integer", "minimum": 5, "maximum": 1000},
+                        "seed": {"type": "integer"},
+                        "confidence_level": {"type": "number"},
+                    },
+                    "required": ["method", "n_synthetic", "seed", "confidence_level"],
+                },
+                "research_context": {
+                    "type": "object",
+                    "properties": {
+                        "domain": {"type": "string"},
+                        "study_type": (
+                            {"enum": study_types} if study_types else {"type": "string"}
+                        ),
+                        "design": {"type": "string"},
+                    },
+                    "required": ["domain", "study_type", "design"],
+                },
+                "ready_to_build": {
+                    "type": "boolean",
+                    "description": "True only after explicit user confirmation of the summary.",
+                },
             },
-            "ready_to_build": {
-                "type": "boolean",
-                "description": "True only after explicit user confirmation of the summary.",
-            },
+            "required": [
+                "assistant_message", "quick_reply_options",
+                "column_roles", "vcg_config", "research_context", "ready_to_build",
+            ],
         },
-        "required": [
-            "assistant_message", "quick_reply_options",
-            "column_roles", "vcg_config", "research_context", "ready_to_build",
-        ],
-    },
-}
+    }
 
 
 def _column_summary(columns: List[Dict[str, Any]]) -> str:
@@ -245,12 +260,14 @@ def llm_turn(session: Dict[str, Any], user_message: str | None) -> Dict[str, Any
         {"type": "text", "text": prelude + "\n" + _format_history(history_msgs)}
     ]
 
+    vocab = ensure_vocabulary(session)
     raw = call_haiku(
         system_prompt=SYSTEM_PROMPT,
-        tool=_TOOL,
+        tool=_build_tool(vocab),
         user_message=user_content,
         model_env="VCG_ORCHESTRATOR_MODEL",
         max_tokens=1024,
+        extra_system_blocks=[{"text": schema_prompt_block(session)}],
     )
     raw = _enforce_grounding(raw, session)
 

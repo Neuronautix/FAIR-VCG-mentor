@@ -61,11 +61,15 @@ def call_haiku(
     max_tokens: int = 1024,
     cache_system: bool = True,
     max_retries: int = 2,
+    extra_system_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Call Claude Haiku with a single forced tool, return the parsed tool input dict.
 
     `user_message` may be a string or a list of content blocks (e.g. for PDF input).
+    `extra_system_blocks` lets callers append additional cached system blocks
+    (e.g. the validated vocabulary). Each must be a `{"type": "text", "text": ...}`
+    dict; cache_control is added automatically when cache_system is True.
 
     Raises LLMUnavailable on auth/network failure after retries are exhausted.
     """
@@ -77,9 +81,16 @@ def call_haiku(
     else:
         user_content = user_message
 
-    system_block = [{"type": "text", "text": system_prompt}]
+    system_block: List[Dict[str, Any]] = [{"type": "text", "text": system_prompt}]
     if cache_system:
         system_block[0]["cache_control"] = {"type": "ephemeral"}
+    for extra in extra_system_blocks or []:
+        block = {"type": "text", "text": extra["text"]} if isinstance(extra, dict) and "text" in extra else None
+        if block is None:
+            continue
+        if cache_system:
+            block["cache_control"] = {"type": "ephemeral"}
+        system_block.append(block)
 
     last_err: Optional[Exception] = None
     for attempt in range(max_retries + 1):

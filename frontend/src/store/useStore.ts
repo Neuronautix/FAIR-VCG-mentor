@@ -219,6 +219,7 @@ interface AppState {
 
   llmEnabled: boolean | null
   hitlSuggestions: import('../api/client').HITLSuggestion[]
+  vocabulary: import('../api/client').Vocabulary | null
 
   setUploadResult: (
     datasetId: string,
@@ -248,6 +249,7 @@ interface AppState {
 
   setLLMEnabled: (enabled: boolean | null) => void
   setHITLSuggestions: (suggestions: import('../api/client').HITLSuggestion[]) => void
+  setVocabulary: (vocab: import('../api/client').Vocabulary | null) => void
 }
 
 const EMPTY_METRICS: InferenceMetrics = {
@@ -280,6 +282,7 @@ export const useStore = create<AppState>((set) => ({
 
   llmEnabled: null,
   hitlSuggestions: [],
+  vocabulary: null,
 
   setUploadResult: (datasetId, importInfo, columns, tableStructure, issues, extras) =>
     set({
@@ -321,6 +324,7 @@ export const useStore = create<AppState>((set) => ({
       paperExtraction: null,
       llmFairScore: null,
       hitlSuggestions: [],
+      vocabulary: null,
     }),
 
   setVCGStatus: (status) => set({ vcgStatus: status }),
@@ -335,4 +339,5 @@ export const useStore = create<AppState>((set) => ({
 
   setLLMEnabled: (llmEnabled) => set({ llmEnabled }),
   setHITLSuggestions: (hitlSuggestions) => set({ hitlSuggestions }),
+  setVocabulary: (vocabulary) => set({ vocabulary }),
 }))

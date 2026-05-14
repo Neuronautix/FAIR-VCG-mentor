@@ -1,0 +1,190 @@
+"""FastAPI router for template registry + dataset-scoped template assignment."""
+from __future__ import annotations
+
+import json
+from typing import Any, Callable, Dict, Optional
+
+import yaml
+from fastapi import APIRouter, HTTPException, Request
+
+from template_engine import (
+    conformance_to_issues,
+    get_template,
+    load_templates,
+    save_user_template,
+    suggest_templates,
+    template_summary,
+    validate_against_template,
+)
+
+template_router = APIRouter(tags=["templates"])
+
+_sessions: Dict[str, Any] = {}
+_save_fn: Optional[Callable] = None
+_load_fn: Optional[Callable] = None
+
+
+def init_template_router(sessions: dict, save_fn: Callable, load_fn: Callable) -> None:
+    global _sessions, _save_fn, _load_fn
+    _sessions = sessions
+    _save_fn = save_fn
+    _load_fn = load_fn
+
+
+def _require(dataset_id: str) -> dict:
+    s = _sessions.get(dataset_id)
+    if not s and _load_fn:
+        s = _load_fn(dataset_id)
+        if s:
+            _sessions[dataset_id] = s
+    if not s:
+        raise HTTPException(404, "Dataset not found. Please upload your CSV again.")
+    s.setdefault("template_id", None)
+    s.setdefault("template_candidates", [])
+    s.setdefault("template_validation", [])
+    return s
+
+
+def _persist(dataset_id: str, session: dict) -> None:
+    if _save_fn:
+        _save_fn(dataset_id, session)
+
+
+def _strip_template_issues(session: dict) -> None:
+    session["issues"] = [
+        i for i in session.get("issues", [])
+        if i.get("category") != "template_compliance"
+    ]
+
+
+# ── Registry routes ────────────────────────────────────────────────────────
+
+@template_router.get("/api/templates")
+async def list_templates():
+    templates = load_templates(force=True)
+    builtin = [template_summary(t) for t in templates.values() if t.source == "builtin"]
+    user = [template_summary(t) for t in templates.values() if t.source == "user"]
+    return {"builtin": builtin, "user": user}
+
+
+@template_router.get("/api/templates/registry/{tid}")
+async def get_template_full(tid: str):
+    tpl = get_template(tid)
+    if not tpl:
+        raise HTTPException(404, f"Template '{tid}' not found.")
+    return tpl.to_dict()
+
+
+@template_router.post("/api/templates")
+async def upload_template(request: Request):
+    raw = await request.body()
+    if not raw:
+        raise HTTPException(400, "Empty request body.")
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "json" in content_type:
+        source_format = "json"
+    elif "yaml" in content_type or "yml" in content_type:
+        source_format = "yaml"
+    else:
+        try:
+            json.loads(raw)
+            source_format = "json"
+        except Exception:
+            source_format = "yaml"
+    try:
+        tpl = save_user_template(raw.decode("utf-8"), source_format=source_format)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return template_summary(tpl)
+
+
+@template_router.post("/api/templates/import-linkml")
+async def import_linkml(request: Request):
+    body = await request.json()
+    linkml_yaml = body.get("linkml_yaml")
+    target_class = body.get("target_class") or None
+    save = bool(body.get("save_as_user_template", False))
+    if not isinstance(linkml_yaml, str) or not linkml_yaml.strip():
+        raise HTTPException(400, "Field 'linkml_yaml' is required and must be a non-empty string.")
+    from linkml_import import parse_linkml_yaml, linkml_to_template
+    try:
+        parsed = parse_linkml_yaml(linkml_yaml)
+        template_dict = linkml_to_template(parsed, target_class)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    saved_summary = None
+    if save:
+        try:
+            tpl = save_user_template(yaml.safe_dump(template_dict, sort_keys=False), "yaml")
+            saved_summary = template_summary(tpl)
+        except ValueError as exc:
+            raise HTTPException(400, f"Generated template rejected on save: {exc}")
+    return {
+        "template": template_dict,
+        "saved": saved_summary,
+        "as_yaml": yaml.safe_dump(template_dict, sort_keys=False, allow_unicode=True),
+    }
+
+
+# ── Dataset-scoped routes ──────────────────────────────────────────────────
+
+@template_router.get("/api/{dataset_id}/template/suggestions")
+async def template_suggestions(dataset_id: str):
+    s = _require(dataset_id)
+    templates = load_templates()
+    candidates = suggest_templates(templates, s.get("columns", []), s.get("metadata", {}))
+    auto_assigned: Optional[str] = None
+    if candidates and candidates[0]["score"] >= 0.9 and not s.get("template_id"):
+        tid = candidates[0]["id"]
+        tpl = get_template(tid)
+        if tpl is not None:
+            report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
+            _strip_template_issues(s)
+            s["template_id"] = tid
+            s["template_validation"] = report
+            s["template_candidates"] = candidates
+            s["issues"].extend(conformance_to_issues(report, tid))
+            _persist(dataset_id, s)
+            auto_assigned = tid
+    else:
+        s["template_candidates"] = candidates
+        _persist(dataset_id, s)
+    return {"candidates": candidates, "auto_assigned": auto_assigned}
+
+
+@template_router.post("/api/{dataset_id}/template/{tid}")
+async def assign_template(dataset_id: str, tid: str):
+    s = _require(dataset_id)
+    tpl = get_template(tid)
+    if not tpl:
+        raise HTTPException(404, f"Template '{tid}' not found.")
+    report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
+    _strip_template_issues(s)
+    s["template_id"] = tid
+    s["template_validation"] = report
+    s["issues"].extend(conformance_to_issues(report, tid))
+    _persist(dataset_id, s)
+    return {"template_id": tid, "conformance_report": report}
+
+
+@template_router.delete("/api/{dataset_id}/template")
+async def unassign_template(dataset_id: str):
+    s = _require(dataset_id)
+    _strip_template_issues(s)
+    s["template_id"] = None
+    s["template_validation"] = []
+    _persist(dataset_id, s)
+    return {"template_id": None}
+
+
+@template_router.get("/api/{dataset_id}/template/validation")
+async def template_validation(dataset_id: str):
+    s = _require(dataset_id)
+    tid = s.get("template_id")
+    if not tid:
+        return {"template_id": None, "conformance_report": []}
+    tpl = get_template(tid)
+    if not tpl:
+        raise HTTPException(404, f"Template '{tid}' not found.")
+    report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
+    return {"template_id": tid, "conformance_report": report}

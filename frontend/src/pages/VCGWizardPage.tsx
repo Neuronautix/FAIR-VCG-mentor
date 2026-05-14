@@ -43,6 +43,13 @@ interface FormState {
   seed: number
 }
 
+interface PrefillExtras {
+  template_locked: string[]
+  clustering_warning?: string | null
+  clustering_unit?: string | null
+  template_id?: string | null
+}
+
 const defaultForm: FormState = {
   domain: '',
   study_type: 'parallel_group',
@@ -57,6 +64,23 @@ const defaultForm: FormState = {
   seed: 42,
 }
 
+function flattenPrefill(data: any): Partial<FormState> {
+  if (!data || typeof data !== 'object') return {}
+  const out: Partial<FormState> = {}
+  const roles = data.column_roles || {}
+  const cfg = data.vcg_config || {}
+  if (typeof roles.treatment_col === 'string') out.treatment_col = roles.treatment_col
+  if (typeof roles.control_value === 'string') out.control_value = roles.control_value
+  if (Array.isArray(roles.outcome_cols)) out.outcome_cols = roles.outcome_cols
+  if (Array.isArray(roles.covariate_cols)) out.covariate_cols = roles.covariate_cols
+  if (typeof cfg.method === 'string') out.method = cfg.method
+  if (typeof data.method === 'string') out.method = data.method
+  if (typeof cfg.n_synthetic === 'number') out.n_synthetic = cfg.n_synthetic
+  if (typeof cfg.confidence_level === 'number') out.confidence_level = cfg.confidence_level
+  if (typeof cfg.seed === 'number') out.seed = cfg.seed
+  return out
+}
+
 export default function VCGWizardPage() {
   const navigate = useNavigate()
   const { datasetId, columns, setVCGStatus, paperExtraction } = useStore()
@@ -65,15 +89,22 @@ export default function VCGWizardPage() {
   const [form, setForm] = useState<FormState>(defaultForm)
   const [saving, setSaving] = useState(false)
   const [suitability, setSuitability] = useState<{ suitable: boolean; blocking_issues: string[]; warnings: string[] } | null>(null)
+  const [prefillExtras, setPrefillExtras] = useState<PrefillExtras>({ template_locked: [] })
 
   const allColumnNames = useMemo(() => columns.map((c) => c.name), [columns])
 
-  // Prefill on step 2 mount
-  useEffect(() => {
-    if (activeStep !== 1 || !datasetId) return
+  const isLocked = (field: string): boolean => prefillExtras.template_locked.includes(field)
 
-    const applyPaperHints = (base: FormState, data?: Partial<FormState>): FormState => {
-      const next = { ...base, ...data }
+  const applyPrefillResponse = (data: any) => {
+    const flat = flattenPrefill(data)
+    setPrefillExtras({
+      template_locked: Array.isArray(data?.template_locked) ? data.template_locked : [],
+      clustering_warning: data?.clustering_warning ?? null,
+      clustering_unit: data?.clustering_unit ?? null,
+      template_id: data?.template_id ?? null,
+    })
+    setForm((prev) => {
+      const next = { ...prev, ...flat }
       const hints = paperExtraction?.vcg_hints
       if (hints) {
         if (!next.treatment_col && hints.treatment_column_name && allColumnNames.includes(hints.treatment_column_name))
@@ -82,11 +113,23 @@ export default function VCGWizardPage() {
           next.control_value = hints.control_group_label
       }
       return next
-    }
+    })
+  }
 
+  const refetchPrefill = () => {
+    if (!datasetId) return
     getVCGWizardPrefill(datasetId)
-      .then((data: Partial<FormState>) => setForm((prev) => applyPaperHints(prev, data)))
-      .catch(() => setForm((prev) => applyPaperHints(prev)))
+      .then(applyPrefillResponse)
+      .catch(() => {
+        setPrefillExtras({ template_locked: [] })
+      })
+  }
+
+  // Prefill on step 2 mount
+  useEffect(() => {
+    if (activeStep !== 1 || !datasetId) return
+    refetchPrefill()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, datasetId, allColumnNames])
   const numericColumns = columns.filter((c) =>
     ['integer', 'float', 'numeric', 'number'].includes((c.data_type ?? '').toLowerCase())
@@ -226,9 +269,21 @@ export default function VCGWizardPage() {
       {activeStep === 1 && (
         <Card>
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Column Roles
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="h6">Column Roles</Typography>
+              {prefillExtras.template_locked.length > 0 && (
+                <Button size="small" variant="text" onClick={refetchPrefill}>
+                  Reset template defaults
+                </Button>
+              )}
+            </Box>
+
+            {/* Clustering warning banner */}
+            {prefillExtras.clustering_warning && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                {prefillExtras.clustering_warning}
+              </Alert>
+            )}
 
             {/* Paper hints banner */}
             {paperExtraction?.vcg_hints &&
@@ -243,12 +298,23 @@ export default function VCGWizardPage() {
 
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth disabled={isLocked('treatment_col')}>
                   <InputLabel>Treatment column</InputLabel>
                   <Select
                     value={form.treatment_col}
                     label="Treatment column"
                     onChange={(e) => setForm({ ...form, treatment_col: e.target.value })}
+                    endAdornment={
+                      isLocked('treatment_col') ? (
+                        <Chip
+                          size="small"
+                          label="Locked by template"
+                          color="primary"
+                          variant="outlined"
+                          sx={{ mr: 3 }}
+                        />
+                      ) : undefined
+                    }
                   >
                     {allColumnNames.map((col) => (
                       <MenuItem key={col} value={col}>
@@ -272,6 +338,17 @@ export default function VCGWizardPage() {
                   placeholder='e.g. "Vehicle" or "Placebo"'
                   value={form.control_value}
                   onChange={(e) => setForm({ ...form, control_value: e.target.value })}
+                  disabled={isLocked('control_value')}
+                  InputProps={{
+                    endAdornment: isLocked('control_value') ? (
+                      <Chip
+                        size="small"
+                        label="Locked by template"
+                        color="primary"
+                        variant="outlined"
+                      />
+                    ) : undefined,
+                  }}
                   helperText={
                     paperExtraction?.vcg_hints.control_group_label &&
                     form.control_value === paperExtraction.vcg_hints.control_group_label
@@ -283,9 +360,14 @@ export default function VCGWizardPage() {
 
               {/* Outcome columns */}
               <Grid item xs={12}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Outcome columns (select all that apply)
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="subtitle2">
+                    Outcome columns (select all that apply)
+                  </Typography>
+                  {isLocked('outcome_cols') && (
+                    <Chip size="small" label="Locked by template" color="primary" variant="outlined" />
+                  )}
+                </Box>
                 {numericColumns.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
                     No numeric columns detected.
@@ -295,15 +377,20 @@ export default function VCGWizardPage() {
                     {numericColumns.map((col) => {
                       const selected = form.outcome_cols.includes(col.name)
                       const isPaperHint = paperExtraction?.vcg_hints.outcome_columns.includes(col.name) ?? false
+                      const locked = isLocked('outcome_cols')
                       return (
                         <Chip
                           key={col.name}
                           label={col.name}
-                          clickable
+                          clickable={!locked}
+                          disabled={locked}
                           color={selected ? 'primary' : 'default'}
                           variant={selected ? 'filled' : 'outlined'}
-                          onClick={() =>
-                            setForm({ ...form, outcome_cols: toggleItem(form.outcome_cols, col.name) })
+                          onClick={
+                            locked
+                              ? undefined
+                              : () =>
+                                  setForm({ ...form, outcome_cols: toggleItem(form.outcome_cols, col.name) })
                           }
                           sx={{ ...(isPaperHint && { border: '2px solid', borderColor: 'warning.main' }) }}
                         />
@@ -315,9 +402,14 @@ export default function VCGWizardPage() {
 
               {/* Covariate columns */}
               <Grid item xs={12}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Covariate columns (select all that apply)
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="subtitle2">
+                    Covariate columns (select all that apply)
+                  </Typography>
+                  {isLocked('covariate_cols') && (
+                    <Chip size="small" label="Locked by template" color="primary" variant="outlined" />
+                  )}
+                </Box>
                 {bioColumns.length === 0 ? (
                   <Box>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
@@ -327,18 +419,23 @@ export default function VCGWizardPage() {
                     {allColumnNames.map((col) => {
                       const selected = form.covariate_cols.includes(col)
                       const isPaperHint = paperExtraction?.vcg_hints.covariate_columns.includes(col) ?? false
+                      const locked = isLocked('covariate_cols')
                       return (
                         <Chip
                           key={col}
                           label={col}
-                          clickable
+                          clickable={!locked}
+                          disabled={locked}
                           color={selected ? 'secondary' : 'default'}
                           variant={selected ? 'filled' : 'outlined'}
-                          onClick={() =>
-                            setForm({
-                              ...form,
-                              covariate_cols: toggleItem(form.covariate_cols, col),
-                            })
+                          onClick={
+                            locked
+                              ? undefined
+                              : () =>
+                                  setForm({
+                                    ...form,
+                                    covariate_cols: toggleItem(form.covariate_cols, col),
+                                  })
                           }
                           sx={{ ...(isPaperHint && { border: '2px solid', borderColor: 'warning.main' }) }}
                         />
@@ -351,18 +448,23 @@ export default function VCGWizardPage() {
                     {bioColumns.map((col) => {
                       const selected = form.covariate_cols.includes(col.name)
                       const isPaperHint = paperExtraction?.vcg_hints.covariate_columns.includes(col.name) ?? false
+                      const locked = isLocked('covariate_cols')
                       return (
                         <Chip
                           key={col.name}
                           label={col.name}
-                          clickable
+                          clickable={!locked}
+                          disabled={locked}
                           color={selected ? 'secondary' : 'default'}
                           variant={selected ? 'filled' : 'outlined'}
-                          onClick={() =>
-                            setForm({
-                              ...form,
-                              covariate_cols: toggleItem(form.covariate_cols, col.name),
-                            })
+                          onClick={
+                            locked
+                              ? undefined
+                              : () =>
+                                  setForm({
+                                    ...form,
+                                    covariate_cols: toggleItem(form.covariate_cols, col.name),
+                                  })
                           }
                           sx={{ ...(isPaperHint && { border: '2px solid', borderColor: 'warning.main' }) }}
                         />
@@ -434,12 +536,23 @@ export default function VCGWizardPage() {
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth disabled={isLocked('method')}>
                   <InputLabel>Generation method</InputLabel>
                   <Select
                     value={form.method}
                     label="Generation method"
                     onChange={(e) => setForm({ ...form, method: e.target.value })}
+                    endAdornment={
+                      isLocked('method') ? (
+                        <Chip
+                          size="small"
+                          label="Locked by template"
+                          color="primary"
+                          variant="outlined"
+                          sx={{ mr: 3 }}
+                        />
+                      ) : undefined
+                    }
                   >
                     <MenuItem value="auto">Auto (recommended)</MenuItem>
                     <MenuItem value="bootstrap">Bootstrap — resample from real control subjects</MenuItem>

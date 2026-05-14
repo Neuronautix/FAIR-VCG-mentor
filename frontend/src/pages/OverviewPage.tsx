@@ -1,4 +1,5 @@
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
+import RuleIcon from '@mui/icons-material/Rule'
 import {
   Alert,
   Box,
@@ -8,6 +9,7 @@ import {
   Chip,
   Divider,
   Grid,
+  Link,
   Typography,
 } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
@@ -36,7 +38,16 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function OverviewPage() {
   const navigate = useNavigate()
-  const { importInfo, tableStructure, columns, issues } = useStore()
+  const { importInfo, tableStructure, columns, issues, templateId, templateCandidates, availableTemplates } =
+    useStore()
+  const activeTemplate = (() => {
+    if (!templateId) return null
+    const all = [...availableTemplates.builtin, ...availableTemplates.user]
+    const found = all.find((t) => t.id === templateId)
+    if (found) return found
+    const cand = templateCandidates.find((c) => c.id === templateId)
+    return cand ? { id: cand.id, name: cand.name } : { id: templateId, name: templateId }
+  })()
 
   if (!importInfo || !tableStructure) {
     return (
@@ -66,6 +77,28 @@ export default function OverviewPage() {
         >
           Inspect Columns
         </Button>
+      </Box>
+
+      <Box sx={{ mb: 2 }}>
+        {activeTemplate ? (
+          <Chip
+            icon={<RuleIcon />}
+            label={`Template: ${activeTemplate.name}`}
+            size="small"
+            color="primary"
+            variant="outlined"
+            onClick={() => navigate('/templates')}
+            sx={{ cursor: 'pointer' }}
+          />
+        ) : (
+          <Link
+            component="button"
+            onClick={() => navigate('/templates')}
+            sx={{ fontSize: 13 }}
+          >
+            No template assigned — browse templates
+          </Link>
+        )}
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>

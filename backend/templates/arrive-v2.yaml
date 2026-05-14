@@ -1,0 +1,173 @@
+id: arrive-v2
+name: ARRIVE 2.0
+version: 2.0.0
+description: ARRIVE 2.0 reporting guidelines (Essential 10 + Recommended Set). Metadata-only template.
+identifier: https://arriveguidelines.org/arrive-guidelines
+ontology:
+  iri: https://arriveguidelines.org/
+  prefix: arrive
+
+required_columns: []
+optional_columns: []
+
+required_metadata:
+  # Study details
+  - id: study_title
+    arrive_section: Study details
+    severity: high
+  - id: grant_code
+    arrive_section: Study details
+    severity: medium
+  - id: start_date
+    arrive_section: Study details
+    severity: medium
+  - id: end_date
+    arrive_section: Study details
+    severity: medium
+  - id: project_licence
+    arrive_section: Study details
+    severity: medium
+  - id: protocol_numbers
+    arrive_section: Study details
+    severity: medium
+  - id: severity_classification
+    arrive_section: Study details
+    severity: medium
+  - id: primary_contact
+    arrive_section: Study details
+    severity: medium
+
+  # Experimental animals
+  - id: species
+    arrive_section: Experimental animals
+    severity: high
+  - id: strain
+    arrive_section: Experimental animals
+    severity: medium
+  - id: sex
+    arrive_section: Experimental animals
+    severity: high
+  - id: age
+    arrive_section: Experimental animals
+    severity: high
+  - id: weight
+    arrive_section: Experimental animals
+    severity: medium
+  - id: supplier
+    arrive_section: Experimental animals
+    severity: medium
+  - id: total_n
+    arrive_section: Experimental animals
+    severity: high
+  - id: housing_density
+    arrive_section: Experimental animals
+    severity: medium
+
+  # Experimental procedures
+  - id: procedures_description
+    arrive_section: Experimental procedures
+    severity: medium
+  - id: surgical_procedures
+    arrive_section: Experimental procedures
+    severity: medium
+  - id: anaesthesia
+    arrive_section: Experimental procedures
+    severity: medium
+  - id: analgesia
+    arrive_section: Experimental procedures
+    severity: medium
+  - id: locations
+    arrive_section: Experimental procedures
+    severity: medium
+  - id: acclimatisation
+    arrive_section: Experimental procedures
+    severity: medium
+
+  # Animal care & monitoring
+  - id: adverse_events
+    arrive_section: Animal care & monitoring
+    severity: medium
+  - id: humane_endpoints
+    arrive_section: Animal care & monitoring
+    severity: medium
+  - id: welfare_monitoring
+    arrive_section: Animal care & monitoring
+    severity: medium
+  - id: clinical_assessment_form
+    arrive_section: Animal care & monitoring
+    severity: medium
+  - id: housing_changes
+    arrive_section: Animal care & monitoring
+    severity: medium
+  - id: vet_restrictions
+    arrive_section: Animal care & monitoring
+    severity: medium
+
+  # Study design & sample size
+  - id: experimental_groups
+    arrive_section: Study design & sample size
+    severity: high
+  - id: experimental_unit
+    arrive_section: Study design & sample size
+    severity: medium
+  - id: sample_size_per_group
+    arrive_section: Study design & sample size
+    severity: medium
+  - id: sample_size_justification
+    arrive_section: Study design & sample size
+    severity: high
+  - id: eda_workflow
+    arrive_section: Study design & sample size
+    severity: medium
+
+  # Inclusion/exclusion
+  - id: inclusion_criteria
+    arrive_section: Inclusion/exclusion
+    severity: medium
+  - id: exclusion_criteria
+    arrive_section: Inclusion/exclusion
+    severity: medium
+  - id: expected_attrition
+    arrive_section: Inclusion/exclusion
+    severity: medium
+
+  # Randomisation & blinding
+  - id: randomisation_method
+    arrive_section: Randomisation & blinding
+    severity: high
+  - id: confounder_minimisation
+    arrive_section: Randomisation & blinding
+    severity: medium
+  - id: blinding_strategy
+    arrive_section: Randomisation & blinding
+    severity: high
+
+  # Outcome & statistics
+  - id: outcome_measures
+    arrive_section: Outcome & statistics
+    severity: high
+  - id: primary_outcome
+    arrive_section: Outcome & statistics
+    severity: medium
+  - id: analysis_plan
+    arrive_section: Outcome & statistics
+    severity: medium
+
+  # Risk assessment
+  - id: emergency_procedures
+    arrive_section: Risk assessment
+    severity: medium
+  - id: personnel_risks
+    arrive_section: Risk assessment
+    severity: medium
+
+  # Personnel
+  - id: personnel_names
+    arrive_section: Personnel
+    severity: medium
+  - id: personnel_procedures
+    arrive_section: Personnel
+    severity: medium
+  - id: personnel_training
+    arrive_section: Personnel
+    severity: medium

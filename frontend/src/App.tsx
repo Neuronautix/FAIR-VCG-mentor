@@ -11,6 +11,7 @@ import VCGPage from './pages/VCGPage'
 import VCGWizardPage from './pages/VCGWizardPage'
 import VCGResultsPage from './pages/VCGResultsPage'
 import PaperImportPage from './pages/PaperImportPage'
+import TemplateSelectorPage from './pages/TemplateSelectorPage'
 
 const theme = createTheme({
   palette: {
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="columns" element={<ColumnProfilePage />} />
             <Route path="fair-score" element={<FAIRScorePage />} />
             <Route path="metadata" element={<MetadataWizardPage />} />
+            <Route path="templates" element={<TemplateSelectorPage />} />
             <Route path="export" element={<ExportPage />} />
             <Route path="vcg" element={<VCGPage />} />
             <Route path="vcg/wizard" element={<VCGWizardPage />} />

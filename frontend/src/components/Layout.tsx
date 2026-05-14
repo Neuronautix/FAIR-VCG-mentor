@@ -6,6 +6,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoIcon from '@mui/icons-material/Info'
 import ScienceIcon from '@mui/icons-material/Science'
+import RuleIcon from '@mui/icons-material/Rule'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
@@ -45,14 +46,15 @@ const navItems: NavItem[] = [
   { label: 'Column Profile', path: '/columns' },
   { label: 'FAIR Score', path: '/fair-score' },
   { label: 'Metadata Wizard', path: '/metadata' },
-  { label: 'Export', path: '/export' },
+  { label: 'Templates', path: '/templates', alwaysEnabled: true },
   { label: 'VCG Wizard', path: '/vcg' },
+  { label: 'Export', path: '/export' },
   { label: 'VCG Results', path: '/vcg/results', vcgResultsOnly: true },
 ].map((item, i) => ({
   ...item,
   icon: [
     <CloudUploadIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
-    <TuneIcon />, <DownloadIcon />, <ScienceIcon />, <BarChartIcon />,
+    <TuneIcon />, <RuleIcon />, <ScienceIcon />, <DownloadIcon />, <BarChartIcon />,
   ][i],
 }))
 

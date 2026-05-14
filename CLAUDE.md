@@ -4,7 +4,7 @@
 
 FAIR-VCG Mentor is a web application with two main capabilities:
 
-1. **FAIR Assessment** — profiles CSV datasets against the [FAIR data principles](https://www.go-fair.org/fair-principles/) (Findable, Accessible, Interoperable, Reusable), scores them on a 100-point rubric, guides metadata enrichment through a wizard, and exports results in standards-compliant formats (Frictionless DataPackage, CSVW, JSON-LD, RO-Crate).
+1. **FAIR Assessment** — profiles CSV datasets against the [FAIR data principles](https://www.go-fair.org/fair-principles/) (Findable, Accessible, Interoperable, Reusable), scores them on a 105-point rubric, guides metadata enrichment through a wizard, and exports results in standards-compliant formats (Frictionless DataPackage, CSVW, JSON-LD, RO-Crate).
 
 2. **Virtual Control Group (VCG) Generation** — generates statistically rigorous synthetic control cohorts from a real concurrent control group, using either a Gaussian copula bootstrap or KDE/Normal sampling, with optional covariate balancing. Configured through a rule-based chat assistant or a four-step wizard; no external LLM API required.
 
@@ -25,6 +25,14 @@ FAIR-vcg-mentor/
 │   ├── entity_detector.py    # Table-shape inference (repeated measures, long/wide)
 │   ├── uri_suggester.py      # Linked-data URI pattern generation
 │   ├── export_engine.py      # Multi-format export (CSV, CSVW, JSON-LD, RO-Crate, etc.)
+│   ├── template_engine.py    # Template loader, matcher, validator, conformance reporting
+│   ├── template_router.py    # FastAPI router — /api/templates/* and /api/{id}/template/* endpoints
+│   ├── linkml_import.py      # LinkML schema → starter template converter
+│   ├── templates/
+│   │   ├── arrive-v2.yaml    # ARRIVE 2.0 reporting standard (dataset-level metadata)
+│   │   ├── mnms-v1.yaml      # MNMS schema for DVC cages (conforms_to ARRIVE)
+│   │   ├── namo-nam-assay-v1.yaml  # NAMO NAM dose-response / functional assay (hand-crafted)
+│   │   └── user/             # User-uploaded custom templates
 │   └── vcg/
 │       ├── __init__.py
 │       ├── vcg_router.py     # FastAPI router — all /api/vcg/* endpoints
@@ -66,7 +74,8 @@ FAIR-vcg-mentor/
             ├── ExportPage.tsx
             ├── VCGPage.tsx           # Chat interface + generation status polling
             ├── VCGWizardPage.tsx     # Four-step configuration wizard
-            └── VCGResultsPage.tsx    # Results, diagnostics, export
+            ├── VCGResultsPage.tsx    # Results, diagnostics, export
+            └── TemplateSelectorPage.tsx  # Template selection, conformance report, custom upload
 ```
 
 ---
@@ -116,7 +125,7 @@ PUT /api/metadata/{id}  → update dataset-level metadata
         │
         ▼
 GET /api/fair-score/{id}
-  └── fair_engine.py     → score F/A/I/R dimensions (25/20/30/25 pts)
+  └── fair_engine.py     → score F/A/I/R dimensions (25/20/30/30 pts)
         │
         ▼
 GET /api/export/{id}/{type}
@@ -152,6 +161,44 @@ GET /api/vcg/{id}/export/vcg-report  → Markdown statistical report
 
 **Session model:** State lives in a Python dict keyed by UUID, persisted to SQLite via `_save_session` / `_load_session` in `main.py`. The `df` (pandas DataFrame) and `original_bytes` are excluded from JSON serialisation and reconstructed on load.
 
+### Template layer
+
+```
+On /api/upload:
+  └── template_engine.suggest_templates(columns, metadata)
+        ├── if top score ≥ 0.9 → auto-assign, run validation, append conformance issues
+        └── else → store candidates for user review
+
+User opens /templates page (TemplateSelectorPage)
+  ├── GET /api/templates                  → registry (builtin + user)
+  ├── GET /api/{id}/template/suggestions  → ranked candidates with reasons
+  ├── POST /api/{id}/template/{tid}       → assign + validate + append issues
+  ├── DELETE /api/{id}/template           → unassign + strip template issues
+  ├── GET /api/{id}/template/validation   → re-run validation (read-only)
+  ├── POST /api/templates                 → upload custom template (YAML/JSON)
+  └── POST /api/templates/import-linkml   → convert LinkML schema → starter template
+
+Downstream effects (when template assigned):
+  ├── GET /api/vcg/{id}/wizard-prefill    → overlays vcg_defaults (treatment_col,
+  │                                         outcome_cols, covariates, clustering)
+  │                                         and returns template_locked + clustering_warning
+  ├── POST /api/vcg/{id}/generate         → also runs template.predefined_analyses
+  │                                         (arrive_completeness, cage_effect_check)
+  │                                         attached to vcg_results.template_analyses
+  └── GET /api/fair-score/{id}            → adds declares_template_conformance criterion
+                                            under R dimension (5 pts)
+```
+
+**Templates conform to a hierarchical model.** `mnms-v1` declares `conforms_to: [arrive-v2]` and inherits ARRIVE's `required_metadata`. MNMS columns annotated with `arrive_section` satisfy specific ARRIVE fields automatically, so the conformance report cross-walks column presence against the reporting standard.
+
+**Two compliance tiers per template:**
+- **Column-level** (`required_columns`): the CSV must contain matching columns.
+- **Dataset-level** (`required_metadata`): the metadata wizard must contain matching fields.
+
+**Missing fields degrade, never block.** Failed conformance items appear in `session["issues"]` with `category="template_compliance"` and reduce the FAIR R-dimension score (`declares_template_conformance` criterion: 0/1/3/5 pts based on % satisfaction). VCG generation still runs.
+
+**Auto-assign threshold: score ≥ 0.9.** Score = 0.7 × (matched_required_columns / total) + 0.3 × (matched_required_metadata / total). Below 0.9, candidates are surfaced as suggestions on the upload banner and the Templates page.
+
 ---
 
 ## Backend Module Reference
@@ -181,7 +228,7 @@ GET /api/vcg/{id}/export/vcg-report  → Markdown statistical report
 ### `fair_engine.py`
 - `compute_fair_score(import_info, columns, table_structure, metadata, issues)` → `FAIRScore`
 - `detect_issues(import_info, columns, table_structure)` → `list[Issue]`
-- FAIR rubric: F=25, A=20, I=30, R=25 points (5 pts per criterion)
+- FAIR rubric: F=25, A=20, I=30, R=30 points (5 pts per criterion); R includes `declares_template_conformance` (template layer, scaled 0/1/3/5)
 - Issue severities: `high | medium | low`
 
 ### `entity_detector.py`
@@ -323,6 +370,7 @@ Thin Axios wrapper. Base URL is `/api` (proxied to backend by Vite). Each backen
 | **Backend – VCG Agents** | `vcg/agents/*.py`, `vcg/utils/*.py` | Statistical methods, agent logic, distribution fitting |
 | **Backend – VCG Chat** | `vcg/orchestrator.py`, `vcg/vcg_wizard.py` | Conversation states, wizard validation |
 | **Backend – VCG Router** | `vcg/vcg_router.py` | API endpoints for VCG sub-system |
+| **Backend – Templates** | `template_engine.py`, `template_router.py`, `templates/*.yaml` | Template schema, loader, matcher, validator, conformance reporting |
 | **Frontend – Pages** | `pages/*.tsx` | UI layout, user flows, form behaviour |
 | **Frontend – State** | `store/useStore.ts`, `api/client.ts` | State shape changes, API contract alignment |
 | **Frontend – Components** | `components/*.tsx` | Shared UI components |
@@ -419,3 +467,13 @@ docker-compose up --build
 - `run_vcg_pipeline` is synchronous and must be called via `asyncio.to_thread`. Do not make it async; the agents use blocking scipy/statsmodels calls.
 - The VCG router receives `sessions`, `_save_session`, and `_load_session` by injection from `main.py`. It must not import from `main.py` directly (circular import).
 - `session["df"]` must be present when `run_vcg_pipeline` is called. If loaded from SQLite, `_load_session` reconstructs it from `original_bytes` via `profile_csv`.
+
+**Template layer**
+- `session["template_id"]` is `str | None`. `session["template_validation"]` is the conformance report (list of entries). `session["template_candidates"]` is the ranked suggestion list. All three are initialised on upload; do not assume they exist on older sessions — guard with `.get()`.
+- Conformance entries always have the shape `{standard, section, field_id, status, satisfied_by, severity, is_column_field}`. Adding fields is safe; renaming breaks frontend `ConformanceEntry` typing and the FAIR scorer.
+- Template-derived issues use `category="template_compliance"` and id pattern `"template_{template_id}_{field_id}"`. The `DELETE /api/{id}/template` endpoint strips by this prefix — don't change the naming.
+- Auto-assign threshold is **0.9**. Changing it requires updating `template_engine.suggest_templates` callers in `main.py:/api/upload` and the documented behaviour here.
+- The template router uses the same `init_template_router(sessions, save_fn, load_fn)` injection as VCG. It must not import from `main.py`.
+- Templates are loaded once at app startup. New user uploads via `POST /api/templates` must call `load_templates()` again (or invalidate cache) to be picked up by `suggest_templates`.
+- `wizard-prefill` returns `template_locked: list[str]` and optionally `clustering_warning: str` when a template is assigned. The frontend reads these field names exactly; do not rename.
+- `vcg_results["template_analyses"]` is appended only when the assigned template declares `predefined_analyses`. Each entry has `{id, type, status, description, result, error}`.

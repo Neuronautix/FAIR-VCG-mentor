@@ -19,11 +19,11 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMetadata, saveMetadata } from '../api/client'
+import { getMetadata, getTemplateValidation, saveMetadata } from '../api/client'
 import HITLPanel from '../components/HITLPanel'
 import VocabularyPanel from '../components/VocabularyPanel'
 import { useStore } from '../store/useStore'
-import type { DatasetMetadata } from '../store/useStore'
+import type { ConformanceEntry, DatasetMetadata } from '../store/useStore'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 
 const LICENSES = [
@@ -81,13 +81,41 @@ function FieldLabel({ text, fromPaper }: { text: string; fromPaper: boolean }) {
 
 export default function MetadataWizardPage() {
   const navigate = useNavigate()
-  const { datasetId, metadata, setMetadata, setFairScore, columns, tableStructure, paperExtraction } = useStore()
+  const {
+    datasetId,
+    metadata,
+    setMetadata,
+    setFairScore,
+    columns,
+    tableStructure,
+    paperExtraction,
+    templateConformance,
+    setTemplateConformance,
+    setTemplateId,
+    templateId,
+  } = useStore()
   const [form, setForm] = useState<DatasetMetadata>(metadata)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paperFilledFields, setPaperFilledFields] = useState<Set<string>>(new Set())
   const [paperAlertDismissed, setPaperAlertDismissed] = useState(false)
+
+  useEffect(() => {
+    if (!datasetId) return
+    getTemplateValidation(datasetId)
+      .then((r) => {
+        setTemplateId(r.template_id ?? null)
+        setTemplateConformance(r.conformance_report ?? [])
+      })
+      .catch(() => {
+        // non-fatal
+      })
+  }, [datasetId, setTemplateConformance, setTemplateId])
+
+  const missingTemplateMetadata: ConformanceEntry[] = templateConformance.filter(
+    (e) => !e.is_column_field && e.status === 'missing',
+  )
 
   useEffect(() => {
     if (datasetId) {
@@ -187,6 +215,25 @@ export default function MetadataWizardPage() {
       {paperFilledFields.size > 0 && !paperAlertDismissed && paperExtraction && (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => setPaperAlertDismissed(true)}>
           {paperFilledFields.size} field(s) pre-filled from &ldquo;{paperExtraction._filename}&rdquo; — review before saving.
+        </Alert>
+      )}
+
+      {templateId && missingTemplateMetadata.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
+            Template requires the following dataset-level metadata:
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+            {missingTemplateMetadata.map((e) => (
+              <Chip
+                key={`${e.standard}-${e.field_id}`}
+                label={`${e.field_id} · ${e.standard}`}
+                size="small"
+                color="error"
+                variant="outlined"
+              />
+            ))}
+          </Box>
         </Alert>
       )}
 

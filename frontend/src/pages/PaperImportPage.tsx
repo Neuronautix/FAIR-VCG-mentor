@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import ArticleIcon from '@mui/icons-material/Article'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
@@ -19,11 +19,18 @@ import {
   ListItem,
   ListItemText,
   Stack,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
-import { extractPaperMetadata, saveMetadata } from '../api/client'
+import {
+  extractPaperMetadataStream,
+  fetchPaperByDOI,
+  getStoredPaperExtraction,
+  saveMetadata,
+  storePaperExtraction,
+} from '../api/client'
 import type { PaperExtraction } from '../store/useStore'
 import { useStore } from '../store/useStore'
 
@@ -225,25 +232,74 @@ export default function PaperImportPage() {
   const { datasetId, paperExtraction, setPaperExtraction, setMetadata } = useStore()
 
   const [loading, setLoading] = useState(false)
+  const [statusMessage, setStatusMessage] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [applySuccess, setApplySuccess] = useState(false)
   const [showArrive, setShowArrive] = useState(false)
+  const [doi, setDoi] = useState('')
+  const [doiLoading, setDoiLoading] = useState(false)
+
+  // Restore persisted extraction when a dataset is loaded
+  useEffect(() => {
+    if (datasetId && !paperExtraction) {
+      getStoredPaperExtraction(datasetId)
+        .then((data) => { if (data) setPaperExtraction(data as PaperExtraction) })
+        .catch(() => {})
+    }
+  }, [datasetId])
 
   const handleFile = async (file: File) => {
     setError(null)
     setApplySuccess(false)
     setLoading(true)
+    setStatusMessage('Starting extraction…')
     try {
-      const result = await extractPaperMetadata(file)
-      setPaperExtraction(result as PaperExtraction)
+      await extractPaperMetadataStream(
+        file,
+        (msg) => setStatusMessage(msg),
+        (data) => {
+          const extraction = data as PaperExtraction
+          setPaperExtraction(extraction)
+          if (datasetId) {
+            storePaperExtraction(datasetId, extraction).catch(() => {})
+          }
+          setLoading(false)
+        },
+        (msg) => {
+          setError(msg)
+          setLoading(false)
+        },
+      )
+    } catch (err: any) {
+      const msg =
+        err?.message ??
+        'Extraction failed. Check that ANTHROPIC_API_KEY is configured on the server.'
+      setError(msg)
+      setLoading(false)
+    }
+  }
+
+  const handleDOI = async () => {
+    const trimmed = doi.trim()
+    if (!trimmed) return
+    setError(null)
+    setApplySuccess(false)
+    setDoiLoading(true)
+    try {
+      const data = await fetchPaperByDOI(trimmed)
+      const extraction = data as PaperExtraction
+      setPaperExtraction(extraction)
+      if (datasetId) {
+        storePaperExtraction(datasetId, extraction).catch(() => {})
+      }
     } catch (err: any) {
       const msg =
         err?.response?.data?.detail ??
         err?.message ??
-        'Extraction failed. Check that ANTHROPIC_API_KEY is configured on the server.'
+        'DOI lookup failed. Check the DOI and your network connection.'
       setError(msg)
     } finally {
-      setLoading(false)
+      setDoiLoading(false)
     }
   }
 
@@ -295,6 +351,31 @@ export default function PaperImportPage() {
             Do not upload unpublished or confidential manuscripts. Max file size: 32 MB.
           </Alert>
           <DropZone onFile={handleFile} />
+
+          <Divider sx={{ my: 3 }}>
+            <Typography variant="caption" color="text.secondary">or enter a DOI</Typography>
+          </Divider>
+
+          <Stack direction="row" spacing={1} alignItems="flex-start">
+            <TextField
+              size="small"
+              fullWidth
+              label="DOI"
+              placeholder="10.1234/example or https://doi.org/10.1234/example"
+              value={doi}
+              onChange={(e) => setDoi(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleDOI() }}
+              helperText="Fetches bibliographic metadata from CrossRef (no PDF required, no API key needed)"
+            />
+            <Button
+              variant="outlined"
+              onClick={handleDOI}
+              disabled={doiLoading || !doi.trim()}
+              sx={{ mt: 0.25, whiteSpace: 'nowrap', minWidth: 120 }}
+            >
+              {doiLoading ? <CircularProgress size={18} /> : 'Fetch DOI'}
+            </Button>
+          </Stack>
         </>
       )}
 
@@ -303,7 +384,7 @@ export default function PaperImportPage() {
           <CircularProgress size={52} sx={{ mb: 2 }} />
           <Typography variant="h6" gutterBottom>Analysing paper…</Typography>
           <Typography variant="body2" color="text.secondary">
-            Extracting text and running LLM extraction — this usually takes 10–30 seconds.
+            {statusMessage || 'Extracting metadata — this usually takes 10–30 seconds.'}
           </Typography>
         </Box>
       )}
@@ -333,7 +414,9 @@ export default function PaperImportPage() {
                     {paperExtraction._filename}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {paperExtraction._file_size_kb} KB · processed natively by Claude (layout-aware) · extraction complete
+                    {paperExtraction._method === 'crossref_doi'
+                      ? 'Bibliographic metadata via CrossRef · ARRIVE fields require full PDF'
+                      : `${paperExtraction._file_size_kb} KB · processed natively by Claude (layout-aware) · extraction complete`}
                   </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>

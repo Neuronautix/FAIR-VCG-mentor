@@ -447,6 +447,91 @@ async def extract_paper(file: UploadFile = File(...)):
     return result
 
 
+@app.post("/api/paper/extract/stream")
+async def stream_paper_extract(file: UploadFile = File(...)):
+    import asyncio as _asyncio
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty file")
+    filename = file.filename or "paper.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Only PDF files are supported.")
+
+    async def generate():
+        from paper_extractor import extract_paper_metadata
+        from fastapi.responses import Response as _R  # noqa
+
+        yield f"data: {json.dumps({'type': 'status', 'message': 'Sending PDF to Claude…'})}\n\n"
+
+        task = _asyncio.create_task(_asyncio.to_thread(extract_paper_metadata, content, filename))
+
+        status_messages = [
+            "Analysing paper structure…",
+            "Extracting study metadata…",
+            "Checking ARRIVE compliance…",
+            "Inferring VCG column hints…",
+            "Finalising extraction…",
+        ]
+        for msg in status_messages:
+            try:
+                result = await _asyncio.wait_for(_asyncio.shield(task), timeout=7.0)
+                yield f"data: {json.dumps({'type': 'result', 'data': result})}\n\n"
+                return
+            except _asyncio.TimeoutError:
+                yield f"data: {json.dumps({'type': 'status', 'message': msg})}\n\n"
+            except RuntimeError as exc:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+                return
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+                return
+
+        try:
+            result = await task
+            yield f"data: {json.dumps({'type': 'result', 'data': result})}\n\n"
+        except RuntimeError as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/paper/doi")
+async def fetch_paper_by_doi(body: Dict[str, Any]):
+    from doi_fetcher import fetch_doi_metadata
+    doi = (body.get("doi") or "").strip()
+    if not doi:
+        raise HTTPException(400, "doi field is required")
+    try:
+        result = fetch_doi_metadata(doi)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    return result
+
+
+@app.put("/api/paper/{dataset_id}/extraction")
+async def store_paper_extraction(dataset_id: str, body: Dict[str, Any]):
+    s = _require(dataset_id)
+    s["paper_extraction"] = body
+    _save_session(dataset_id, s)
+    return {"stored": True}
+
+
+@app.get("/api/paper/{dataset_id}/extraction")
+async def get_stored_paper_extraction(dataset_id: str):
+    s = _require(dataset_id)
+    stored = s.get("paper_extraction")
+    if not stored:
+        raise HTTPException(404, "No paper extraction stored for this dataset.")
+    return stored
+
+
 init_vcg_router(sessions, _save_session, _load_session)
 app.include_router(vcg_router)
 

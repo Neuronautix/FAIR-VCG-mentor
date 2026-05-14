@@ -114,3 +114,48 @@ export const extractPaperMetadata = (file: File): Promise<any> => {
   form.append('file', file)
   return api.post('/paper/extract', form).then((r) => r.data)
 }
+
+export const extractPaperMetadataStream = (
+  file: File,
+  onStatus: (msg: string) => void,
+  onResult: (data: any) => void,
+  onError: (msg: string) => void,
+): Promise<void> => {
+  const form = new FormData()
+  form.append('file', file)
+  return fetch('/api/paper/extract/stream', { method: 'POST', body: form }).then(async (res) => {
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text)
+    }
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6))
+            if (event.type === 'status') onStatus(event.message)
+            else if (event.type === 'result') onResult(event.data)
+            else if (event.type === 'error') onError(event.message)
+          } catch {}
+        }
+      }
+    }
+  })
+}
+
+export const fetchPaperByDOI = (doi: string): Promise<any> =>
+  api.post('/paper/doi', { doi }).then((r) => r.data)
+
+export const storePaperExtraction = (id: string, extraction: any): Promise<void> =>
+  api.put(`/paper/${id}/extraction`, extraction).then(() => undefined)
+
+export const getStoredPaperExtraction = (id: string): Promise<any> =>
+  api.get(`/paper/${id}/extraction`).then((r) => r.data)

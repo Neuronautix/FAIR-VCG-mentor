@@ -217,6 +217,10 @@ interface AppState {
   paperExtraction: PaperExtraction | null
   llmFairScore: any | null
 
+  llmEnabled: boolean | null
+  hitlSuggestions: import('../api/client').HITLSuggestion[]
+  vocabulary: import('../api/client').Vocabulary | null
+
   setUploadResult: (
     datasetId: string,
     importInfo: ImportInfo,
@@ -242,6 +246,10 @@ interface AppState {
 
   setPaperExtraction: (extraction: PaperExtraction | null) => void
   setLLMFairScore: (score: any | null) => void
+
+  setLLMEnabled: (enabled: boolean | null) => void
+  setHITLSuggestions: (suggestions: import('../api/client').HITLSuggestion[]) => void
+  setVocabulary: (vocab: import('../api/client').Vocabulary | null) => void
 }
 
 const EMPTY_METRICS: InferenceMetrics = {
@@ -271,6 +279,10 @@ export const useStore = create<AppState>((set) => ({
 
   paperExtraction: null,
   llmFairScore: null,
+
+  llmEnabled: null,
+  hitlSuggestions: [],
+  vocabulary: null,
 
   setUploadResult: (datasetId, importInfo, columns, tableStructure, issues, extras) =>
     set({
@@ -311,6 +323,8 @@ export const useStore = create<AppState>((set) => ({
       vcgConfig: null,
       paperExtraction: null,
       llmFairScore: null,
+      hitlSuggestions: [],
+      vocabulary: null,
     }),
 
   setVCGStatus: (status) => set({ vcgStatus: status }),
@@ -322,4 +336,8 @@ export const useStore = create<AppState>((set) => ({
 
   setPaperExtraction: (extraction) => set({ paperExtraction: extraction }),
   setLLMFairScore: (score) => set({ llmFairScore: score }),
+
+  setLLMEnabled: (llmEnabled) => set({ llmEnabled }),
+  setHITLSuggestions: (hitlSuggestions) => set({ hitlSuggestions }),
+  setVocabulary: (vocabulary) => set({ vocabulary }),
 }))

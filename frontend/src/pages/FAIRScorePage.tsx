@@ -19,8 +19,14 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getFairScore, getLLMFairScore } from '../api/client'
+import {
+  getFairScore,
+  getLLMFairScore,
+  listHITLSuggestions,
+  requestLLMIssueFixes,
+} from '../api/client'
 import FAIRScoreBreakdown from '../components/FAIRScoreBreakdown'
+import HITLPanel from '../components/HITLPanel'
 import { useStore } from '../store/useStore'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
@@ -40,11 +46,31 @@ const DIMENSION_LABELS: Record<string, string> = {
 
 export default function FAIRScorePage() {
   const navigate = useNavigate()
-  const { datasetId, fairScore, setFairScore, llmFairScore, setLLMFairScore } = useStore()
+  const {
+    datasetId,
+    fairScore,
+    setFairScore,
+    llmFairScore,
+    setLLMFairScore,
+    setHITLSuggestions,
+  } = useStore()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [llmLoading, setLlmLoading] = useState(false)
   const [llmError, setLlmError] = useState<string | null>(null)
+  const [issueFixLoading, setIssueFixLoading] = useState(false)
+
+  const requestIssueFixes = async () => {
+    if (!datasetId) return
+    setIssueFixLoading(true)
+    try {
+      await requestLLMIssueFixes(datasetId)
+      const fresh = await listHITLSuggestions(datasetId)
+      setHITLSuggestions(fresh)
+    } finally {
+      setIssueFixLoading(false)
+    }
+  }
 
   const load = async () => {
     if (!datasetId) return
@@ -102,6 +128,21 @@ export default function FAIRScorePage() {
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      <HITLPanel
+        title="AI-suggested fixes — Human review required"
+        emptyHint="Click 'Ask Claude Haiku' to propose concrete fixes for the detected FAIR issues."
+        refreshAction={{
+          label: 'Ask Claude Haiku',
+          onClick: requestIssueFixes,
+          pending: issueFixLoading,
+        }}
+        onApplied={() => {
+          // metadata may have changed; let the FAIR score recompute on next mount
+          setFairScore(null)
+          load()
+        }}
+      />
 
       {loading && (
         <Box sx={{ textAlign: 'center', py: 6 }}>

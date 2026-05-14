@@ -1,15 +1,19 @@
-import { Alert, Box, Button, Typography } from '@mui/material'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   getVCGResults,
   getVCGStatus,
+  listHITLSuggestions,
+  requestVCGLLMSuggest,
   respondVCGChat,
   startVCGChat,
   startVCGGeneration,
 } from '../api/client'
 import AgentStatusBar from '../components/AgentStatusBar'
 import ChatInterface from '../components/ChatInterface'
+import HITLPanel from '../components/HITLPanel'
 import type { ChatMessage } from '../store/useStore'
 import { useStore } from '../store/useStore'
 
@@ -22,12 +26,28 @@ export default function VCGPage() {
     addChatMessage,
     setVCGStatus,
     setVCGResults,
+    llmEnabled,
+    setHITLSuggestions,
   } = useStore()
 
   const [loading, setLoading] = useState(false)
   const [activeStep, setActiveStep] = useState<string>('')
   const [errorMsg, setErrorMsg] = useState<string>('')
+  const [llmSuggesting, setLlmSuggesting] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const requestVCGSuggestion = async () => {
+    if (!datasetId) return
+    setLlmSuggesting(true)
+    try {
+      const res = await requestVCGLLMSuggest(datasetId)
+      if (res?.agent_msg) addChatMessage(res.agent_msg)
+      const fresh = await listHITLSuggestions(datasetId)
+      setHITLSuggestions(fresh)
+    } finally {
+      setLlmSuggesting(false)
+    }
+  }
 
   // Start chat on mount if no conversation yet
   useEffect(() => {
@@ -124,6 +144,12 @@ export default function VCGPage() {
       const response: ChatMessage = await respondVCGChat(datasetId, text)
       addChatMessage(response)
 
+      // Refresh HITL queue — the LLM orchestrator queues a vcg_config suggestion
+      // when it thinks it has enough info. We never auto-start generation; the
+      // user must approve in the HITL panel.
+      const fresh = await listHITLSuggestions(datasetId)
+      setHITLSuggestions(fresh)
+
       if (response.ready_to_build) {
         setVCGStatus('running')
         await startVCGGeneration(datasetId)
@@ -138,6 +164,18 @@ export default function VCGPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleVCGApproved = async () => {
+    if (!datasetId) return
+    setVCGStatus('running')
+    addChatMessage({
+      role: 'agent',
+      content: 'Configuration approved. Starting VCG generation…',
+      timestamp: new Date().toISOString(),
+    })
+    await startVCGGeneration(datasetId)
+    startPolling(datasetId)
   }
 
   if (!datasetId) {
@@ -157,13 +195,39 @@ export default function VCGPage() {
         <Box>
           <Typography variant="h5">Virtual Control Group — AI Assistant</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Answer the agent's questions to configure and generate a synthetic control group for your dataset.
+            {llmEnabled
+              ? 'Chat with Claude Haiku to configure the VCG. The proposed configuration is queued for your approval below before any generation runs.'
+              : 'Answer the agent\'s questions to configure and generate a synthetic control group for your dataset.'}
           </Typography>
         </Box>
-        <Button variant="outlined" onClick={() => navigate('/vcg/wizard')} sx={{ ml: 2, flexShrink: 0 }}>
-          Open Wizard
-        </Button>
+        <Stack direction="row" spacing={1} sx={{ ml: 2, flexShrink: 0 }}>
+          {llmEnabled && (
+            <Button
+              variant="outlined"
+              startIcon={llmSuggesting ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+              onClick={requestVCGSuggestion}
+              disabled={llmSuggesting || chatDisabled}
+            >
+              One-shot LLM proposal
+            </Button>
+          )}
+          <Button variant="outlined" onClick={() => navigate('/vcg/wizard')}>
+            Open Wizard
+          </Button>
+        </Stack>
       </Box>
+
+      {/* HITL panel — proposed configs must be approved before generation runs */}
+      <HITLPanel
+        category="vcg_config"
+        title="Proposed VCG configurations — Human approval required"
+        emptyHint={
+          llmEnabled
+            ? 'Claude Haiku will queue a configuration here once it has enough information from the chat. You may also click "One-shot LLM proposal" above.'
+            : 'No AI proposals yet. Use the wizard or chat to configure the VCG manually.'
+        }
+        onApplied={handleVCGApproved}
+      />
 
       {/* Chat */}
       <ChatInterface

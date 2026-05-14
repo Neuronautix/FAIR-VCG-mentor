@@ -23,7 +23,9 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { getLLMStatus } from '../api/client'
 import { useStore } from '../store/useStore'
 
 const DRAWER_WIDTH = 220
@@ -58,7 +60,14 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const theme = useTheme()
-  const { datasetId, importInfo, vcgStatus } = useStore()
+  const { datasetId, importInfo, vcgStatus, llmEnabled, setLLMEnabled } = useStore()
+
+  useEffect(() => {
+    if (llmEnabled !== null) return
+    getLLMStatus()
+      .then((r) => setLLMEnabled(r.enabled))
+      .catch(() => setLLMEnabled(false))
+  }, [llmEnabled, setLLMEnabled])
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -76,6 +85,19 @@ export default function Layout() {
               label={importInfo.filename}
               size="small"
               sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.6)', mr: 1 }}
+              variant="outlined"
+            />
+          )}
+          {llmEnabled !== null && (
+            <Chip
+              label={llmEnabled ? 'Claude Haiku · on' : 'Claude Haiku · off'}
+              size="small"
+              sx={{
+                color: 'white',
+                borderColor: llmEnabled ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)',
+                mr: 1,
+                fontSize: 11,
+              }}
               variant="outlined"
             />
           )}

@@ -1,10 +1,22 @@
 import asyncio
+import os
 from typing import Any, Callable, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 vcg_router = APIRouter(prefix="/api/vcg", tags=["vcg"])
+
+
+def _use_llm_orchestrator() -> bool:
+    """LLM orchestrator on by default when an API key is available."""
+    from llm_service import llm_enabled
+    flag = os.getenv("VCG_LLM_CHAT", "auto").lower()
+    if flag in ("0", "off", "false"):
+        return False
+    if flag in ("1", "on", "true"):
+        return True
+    return llm_enabled()
 
 # Injected by main.py via init_vcg_router()
 _sessions: Dict[str, Any] = {}
@@ -71,6 +83,24 @@ async def save_wizard(dataset_id: str, payload: Dict[str, Any]):
 async def chat_start(dataset_id: str):
     s = _require(dataset_id)
     _ensure_vcg(s)
+
+    if _use_llm_orchestrator():
+        from vcg.llm_orchestrator import llm_turn
+        from llm_service import LLMUnavailable
+        from hitl import add_suggestion
+        try:
+            turn = await asyncio.to_thread(llm_turn, s, None)
+        except LLMUnavailable:
+            from vcg.orchestrator import VCGOrchestrator
+            msg = VCGOrchestrator(s).start()
+            _persist(dataset_id, s)
+            return msg
+
+        if turn.get("hitl_suggestion"):
+            add_suggestion(s, **turn["hitl_suggestion"])
+        _persist(dataset_id, s)
+        return turn["agent_msg"]
+
     from vcg.orchestrator import VCGOrchestrator
     msg = VCGOrchestrator(s).start()
     _persist(dataset_id, s)
@@ -82,6 +112,24 @@ async def chat_respond(dataset_id: str, body: Dict[str, Any]):
     s = _require(dataset_id)
     _ensure_vcg(s)
     user_message = body.get("message", "")
+
+    if _use_llm_orchestrator():
+        from vcg.llm_orchestrator import llm_turn
+        from llm_service import LLMUnavailable
+        from hitl import add_suggestion
+        try:
+            turn = await asyncio.to_thread(llm_turn, s, user_message)
+        except LLMUnavailable:
+            from vcg.orchestrator import VCGOrchestrator
+            msg = VCGOrchestrator(s).respond(user_message)
+            _persist(dataset_id, s)
+            return msg
+
+        if turn.get("hitl_suggestion"):
+            add_suggestion(s, **turn["hitl_suggestion"])
+        _persist(dataset_id, s)
+        return turn["agent_msg"]
+
     from vcg.orchestrator import VCGOrchestrator
     msg = VCGOrchestrator(s).respond(user_message)
     _persist(dataset_id, s)
@@ -92,6 +140,33 @@ async def chat_respond(dataset_id: str, body: Dict[str, Any]):
 async def get_conversation(dataset_id: str):
     s = _require(dataset_id)
     return {"conversation": s.get("vcg", {}).get("conversation", [])}
+
+
+@vcg_router.post("/{dataset_id}/llm-suggest")
+async def vcg_llm_suggest(dataset_id: str):
+    """One-shot LLM proposal of column roles, queued as HITL suggestion."""
+    s = _require(dataset_id)
+    _ensure_vcg(s)
+    from vcg.llm_orchestrator import llm_turn
+    from llm_service import LLMUnavailable
+    from hitl import add_suggestion
+    try:
+        # Inject a synthetic user prompt asking for a one-shot proposal.
+        turn = await asyncio.to_thread(
+            llm_turn, s,
+            "Please propose the best VCG configuration you can from the column "
+            "metadata. Be explicit about what you're unsure of. Set "
+            "ready_to_build=true only if you have confidently identified "
+            "treatment_col, control_value, and at least one outcome column.",
+        )
+    except LLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+
+    created = None
+    if turn.get("hitl_suggestion"):
+        created = add_suggestion(s, **turn["hitl_suggestion"])
+    _persist(dataset_id, s)
+    return {"agent_msg": turn["agent_msg"], "suggestion": created}
 
 
 # ── Generation endpoints ────────────────────────────────────────────────────

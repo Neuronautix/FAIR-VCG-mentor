@@ -181,3 +181,117 @@ export const storePaperExtraction = (id: string, extraction: any): Promise<void>
 
 export const getStoredPaperExtraction = (id: string): Promise<any> =>
   api.get(`/paper/${id}/extraction`).then((r) => r.data)
+
+// ── HITL (human-in-the-loop) ─────────────────────────────────────────────
+
+export type HITLCategory =
+  | 'column_metadata'
+  | 'dataset_metadata'
+  | 'vcg_config'
+  | 'fair_recommendation'
+  | 'issue_fix'
+  | 'schema_extension'
+
+export type HITLStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'edited'
+  | 'applied'
+  | 'invalid'
+  | 'stale'
+
+export interface HITLSuggestion {
+  id: string
+  category: HITLCategory
+  target: string
+  source: string
+  confidence: number
+  title: string
+  rationale: string
+  payload: Record<string, any>
+  status: HITLStatus
+  validation: { ok: boolean; errors: string[] }
+  schema_version?: number
+  created_at: number
+  applied_at: number | null
+}
+
+export const getLLMStatus = (): Promise<{ enabled: boolean }> =>
+  api.get('/llm/status').then((r) => r.data)
+
+export const listHITLSuggestions = (
+  id: string,
+  filters?: { status?: string; category?: string },
+) =>
+  api
+    .get<{ suggestions: HITLSuggestion[] }>(`/hitl/${id}/suggestions`, { params: filters })
+    .then((r) => r.data.suggestions)
+
+export const approveHITLSuggestion = (id: string, sid: string) =>
+  api
+    .post<{ suggestion: HITLSuggestion; result: any }>(`/hitl/${id}/suggestions/${sid}/approve`)
+    .then((r) => r.data)
+
+export const rejectHITLSuggestion = (id: string, sid: string) =>
+  api
+    .post<{ suggestion: HITLSuggestion }>(`/hitl/${id}/suggestions/${sid}/reject`)
+    .then((r) => r.data)
+
+export const editHITLSuggestion = (id: string, sid: string, payload: Record<string, any>) =>
+  api
+    .put<{ suggestion: HITLSuggestion }>(`/hitl/${id}/suggestions/${sid}`, { payload })
+    .then((r) => r.data)
+
+export const requestLLMColumnSuggestions = (id: string, columns?: string[]) =>
+  api
+    .post<{ created: HITLSuggestion[]; n_raw: number }>(
+      `/llm/${id}/suggest/columns`,
+      columns ? { columns } : {},
+    )
+    .then((r) => r.data)
+
+export const requestLLMIssueFixes = (id: string) =>
+  api
+    .post<{ created: HITLSuggestion[]; n_raw: number }>(`/llm/${id}/suggest/issue-fixes`)
+    .then((r) => r.data)
+
+export const requestVCGLLMSuggest = (id: string) =>
+  api
+    .post<{ agent_msg: any; suggestion: HITLSuggestion | null }>(`/vcg/${id}/llm-suggest`)
+    .then((r) => r.data)
+
+// ── Vocabulary ─────────────────────────────────────────────────────────────
+
+export interface Vocabulary {
+  version: number
+  validated: boolean
+  validated_at: number | null
+  column_names: string[]
+  semantic_types: string[]
+  units: string[]
+  metadata_keys: string[]
+  licenses: string[]
+  study_types: string[]
+  controlled_values: Record<string, string[]>
+  history: Array<{ version: number; at: number; source: string; added?: Record<string, any> }>
+}
+
+export const getVocabulary = (id: string) =>
+  api.get<Vocabulary>(`/vocabulary/${id}`).then((r) => r.data)
+
+export const validateVocabulary = (id: string) =>
+  api
+    .post<{ vocabulary: Vocabulary; marked_stale: number }>(`/vocabulary/${id}/validate`)
+    .then((r) => r.data)
+
+export const discoverVocabFromPDF = (id: string, file: File) => {
+  const form = new FormData()
+  form.append('file', file)
+  return api
+    .post<{ created: HITLSuggestion[]; n_raw: number }>(
+      `/llm/${id}/discover-vocab/from-pdf`,
+      form,
+    )
+    .then((r) => r.data)
+}

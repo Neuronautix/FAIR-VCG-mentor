@@ -20,6 +20,8 @@ import {
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMetadata, saveMetadata } from '../api/client'
+import HITLPanel from '../components/HITLPanel'
+import VocabularyPanel from '../components/VocabularyPanel'
 import { useStore } from '../store/useStore'
 import type { DatasetMetadata } from '../store/useStore'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
@@ -187,6 +189,14 @@ export default function MetadataWizardPage() {
           {paperFilledFields.size} field(s) pre-filled from &ldquo;{paperExtraction._filename}&rdquo; — review before saving.
         </Alert>
       )}
+
+      <VocabularyPanel />
+
+      <HITLPanel
+        category="schema_extension"
+        title="Proposed vocabulary extensions — Human review required"
+        emptyHint="No proposed schema extensions. Use the Discover button in the vocabulary panel above."
+      />
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={7}>

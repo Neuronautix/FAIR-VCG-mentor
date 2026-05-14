@@ -1,5 +1,5 @@
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
-import { Alert, Box, Button, CircularProgress, Paper, Snackbar, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Link, Paper, Snackbar, Typography } from '@mui/material'
 import type { AxiosError } from 'axios'
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -13,6 +13,11 @@ export default function UploadPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paperSnackbar, setPaperSnackbar] = useState<string | null>(null)
+  const [templateBanner, setTemplateBanner] = useState<
+    | { kind: 'auto'; name: string }
+    | { kind: 'suggestion'; name: string }
+    | null
+  >(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(
@@ -35,6 +40,8 @@ export default function UploadPage() {
           {
             lowConfidenceColumns: result.low_confidence_columns ?? [],
             templateApplied: result.template_applied ?? 0,
+            templateId: result.template_id ?? null,
+            templateCandidates: result.template_candidates ?? [],
           }
         )
 
@@ -50,7 +57,16 @@ export default function UploadPage() {
           }
         }
 
-        navigate('/overview')
+        if (result.template_id) {
+          const match = (result.template_candidates ?? []).find((c) => c.id === result.template_id)
+          setTemplateBanner({ kind: 'auto', name: match?.name ?? result.template_id })
+        } else if (result.template_candidates && result.template_candidates.length > 0) {
+          setTemplateBanner({ kind: 'suggestion', name: result.template_candidates[0].name })
+        } else {
+          setTemplateBanner(null)
+          navigate('/overview')
+          return
+        }
       } catch (e: unknown) {
         const axiosErr = e as AxiosError<{ detail: string }>
         const msg = axiosErr.response?.data?.detail ?? (e instanceof Error ? e.message : 'Upload failed')
@@ -124,6 +140,34 @@ export default function UploadPage() {
       {error && (
         <Alert severity="error" sx={{ mt: 2 }}>
           {error}
+        </Alert>
+      )}
+
+      {templateBanner && (
+        <Alert
+          severity={templateBanner.kind === 'auto' ? 'success' : 'warning'}
+          sx={{ mt: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => navigate('/overview')}>
+              Continue
+            </Button>
+          }
+        >
+          {templateBanner.kind === 'auto' ? (
+            <>
+              Auto-detected template: <strong>{templateBanner.name}</strong>.{' '}
+              <Link component="button" onClick={() => navigate('/templates')}>
+                Review templates
+              </Link>
+            </>
+          ) : (
+            <>
+              We suggest <strong>{templateBanner.name}</strong>.{' '}
+              <Link component="button" onClick={() => navigate('/templates')}>
+                Review templates
+              </Link>
+            </>
+          )}
         </Alert>
       )}
 

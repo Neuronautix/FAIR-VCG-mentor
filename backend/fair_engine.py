@@ -1,4 +1,41 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+
+
+def _template_conformance_score(template_validation: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
+    """Score the declares_template_conformance criterion (0/1/3/5 pts)."""
+    if not template_validation:
+        return {
+            "satisfied": False,
+            "points": 0,
+            "pct": 0.0,
+            "recommendation": (
+                "Assign a community template (ARRIVE, MNMS, ...) to declare conformance"
+            ),
+        }
+    total = len(template_validation)
+    satisfied = sum(1 for e in template_validation if e.get("status") == "satisfied")
+    pct = (satisfied / total) * 100.0 if total else 0.0
+    if pct >= 90.0:
+        return {"satisfied": True, "points": 5, "pct": pct, "recommendation": None}
+    if pct >= 50.0:
+        return {
+            "satisfied": False,
+            "points": 3,
+            "pct": pct,
+            "recommendation": (
+                f"Template only {pct:.0f}% satisfied; address remaining required fields "
+                "for full conformance points."
+            ),
+        }
+    return {
+        "satisfied": False,
+        "points": 1,
+        "pct": pct,
+        "recommendation": (
+            f"Template only {pct:.0f}% satisfied; address remaining required fields "
+            "for full conformance points."
+        ),
+    }
 
 
 def compute_fair_score(
@@ -7,6 +44,7 @@ def compute_fair_score(
     table_structure: Dict,
     metadata: Dict,
     issues: List[Dict],
+    template_validation: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     def has(field: str) -> bool:
         val = metadata.get(field)
@@ -72,7 +110,8 @@ def compute_fair_score(
         else 'No column descriptions'
     )
 
-    # ── Reusable (25 pts, 5 each) ──────────────────────────────────────────
+    # ── Reusable (30 pts, 5 each) ──────────────────────────────────────────
+    template_conformance = _template_conformance_score(template_validation)
     r = {
         'Protocol or method described': has('protocol_reference'),
         'Provenance captured': has('creator') and has('date_created'),
@@ -82,13 +121,19 @@ def compute_fair_score(
             for c in columns
         ),
         'Version or date recorded': has('version') or has('date_created'),
+        'declares_template_conformance': template_conformance['satisfied'],
     }
-    r_score = sum(5 for v in r.values() if v)
+    r_score = sum(5 for k, v in r.items() if v and k != 'declares_template_conformance')
+    r_score += template_conformance['points']
     r_weak = (
         'No protocol or method described'
         if not r['Protocol or method described']
         else 'No provenance captured'
         if not r['Provenance captured']
+        else 'No data dictionary'
+        if not r['Data dictionary present']
+        else 'No reporting-standard template declared'
+        if not r['declares_template_conformance']
         else 'No data dictionary'
     )
 
@@ -113,13 +158,15 @@ def compute_fair_score(
         recs.append('Add column descriptions to create a data dictionary.')
     if not r['Provenance captured']:
         recs.append('Record provenance: creator name and date of data collection.')
+    if template_conformance.get('recommendation'):
+        recs.append(template_conformance['recommendation'])
 
     return {
         'fair_score': total,
         'findable': {'score': f_score, 'max_score': 25, 'main_weakness': f_weak, 'criteria': f},
         'accessible': {'score': a_score, 'max_score': 20, 'main_weakness': a_weak, 'criteria': a},
         'interoperable': {'score': i_score, 'max_score': 30, 'main_weakness': i_weak, 'criteria': i},
-        'reusable': {'score': r_score, 'max_score': 25, 'main_weakness': r_weak, 'criteria': r},
+        'reusable': {'score': r_score, 'max_score': 30, 'main_weakness': r_weak, 'criteria': r},
         'main_recommendations': recs[:7],
     }
 

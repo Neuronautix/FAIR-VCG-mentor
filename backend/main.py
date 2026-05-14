@@ -38,6 +38,14 @@ from template_store import (
 app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 
 from vcg.vcg_router import vcg_router, init_vcg_router  # noqa: E402
+from template_router import template_router, init_template_router  # noqa: E402
+from template_engine import (  # noqa: E402
+    conformance_to_issues,
+    get_template,
+    load_templates,
+    suggest_templates,
+    validate_against_template,
+)
 
 _cors_origins_env = os.getenv(
     "CORS_ORIGINS",
@@ -127,7 +135,8 @@ def _prepare_exports(dataset_id: str) -> Dict[str, Any]:
     s = _require(dataset_id)
     if "fair_score" not in s:
         s["fair_score"] = compute_fair_score(
-            s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"]
+            s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"],
+            template_validation=s.get("template_validation", []),
         )
     if "uri_suggestions" not in s:
         s["uri_suggestions"] = suggest_uris(s["columns"], s["metadata"], s["import_info"])
@@ -193,7 +202,7 @@ async def upload_csv(file: UploadFile = File(...)):
         template_applied = apply_template(result["columns"], template["mappings"])
 
     dataset_id = str(uuid.uuid4())
-    sessions[dataset_id] = {
+    session = {
         "dataset_id": dataset_id,
         "import_info": result["import_info"],
         "columns": result["columns"],
@@ -204,6 +213,9 @@ async def upload_csv(file: UploadFile = File(...)):
         "original_bytes": content,
         "template_signature": signature,
         "template_applied": template_applied,
+        "template_id": None,
+        "template_candidates": [],
+        "template_validation": [],
         "inference_metrics": {
             "total_updates": 0,
             "type_corrections": 0,
@@ -211,6 +223,23 @@ async def upload_csv(file: UploadFile = File(...)):
             "unit_corrections": 0,
         },
     }
+
+    try:
+        loaded = load_templates()
+        candidates = suggest_templates(loaded, session["columns"], session["metadata"])
+        session["template_candidates"] = candidates
+        if candidates and candidates[0]["score"] >= 0.9:
+            tid = candidates[0]["id"]
+            tpl = get_template(tid)
+            if tpl is not None:
+                report = validate_against_template(tpl, session["columns"], session["metadata"])
+                session["template_id"] = tid
+                session["template_validation"] = report
+                session["issues"].extend(conformance_to_issues(report, tid))
+    except Exception as exc:
+        logger.warning("Template auto-match failed for dataset %s: %s", dataset_id, exc)
+
+    sessions[dataset_id] = session
     _save_session(dataset_id, sessions[dataset_id])
 
     return {
@@ -218,8 +247,10 @@ async def upload_csv(file: UploadFile = File(...)):
         "import_info": result["import_info"],
         "columns": result["columns"],
         "table_structure": table_structure,
-        "issues": issues,
+        "issues": session["issues"],
         "template_applied": template_applied,
+        "template_id": session["template_id"],
+        "template_candidates": session["template_candidates"],
         "low_confidence_columns": low_confidence_columns(result["columns"]),
     }
 
@@ -313,7 +344,8 @@ async def save_metadata(dataset_id: str, metadata: Dict[str, Any]):
 async def get_fair_score(dataset_id: str):
     s = _require(dataset_id)
     score = compute_fair_score(
-        s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"]
+        s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"],
+        template_validation=s.get("template_validation", []),
     )
     s["fair_score"] = score
     return score
@@ -671,6 +703,9 @@ async def get_stored_paper_extraction(dataset_id: str):
 
 init_vcg_router(sessions, _save_session, _load_session)
 app.include_router(vcg_router)
+
+init_template_router(sessions, _save_session, _load_session)
+app.include_router(template_router)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,116 @@
 import asyncio
 import os
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 vcg_router = APIRouter(prefix="/api/vcg", tags=["vcg"])
+
+
+def _find_column_by_pattern(pattern: str, columns: List[Dict[str, Any]]) -> Optional[str]:
+    """Case-insensitive substring match between pattern and each column['name']."""
+    if not pattern:
+        return None
+    p = pattern.lower()
+    for col in columns:
+        name = str(col.get("name") or "")
+        if p in name.lower():
+            return name
+    return None
+
+
+def _apply_template_defaults(
+    roles_dict: Dict[str, Any],
+    template: Any,
+    columns: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Overlay template.vcg_defaults onto the heuristic prefill dict.
+
+    Adds `template_locked` (list of field names sourced from the template),
+    `clustering_unit` + `clustering_warning` when clustering is declared,
+    and may set `method` and `template_id`.
+    """
+    locked: List[str] = []
+    column_roles = roles_dict.setdefault("column_roles", {})
+
+    if template is None or template.vcg_defaults is None:
+        roles_dict.setdefault("template_locked", [])
+        return roles_dict
+
+    defaults = template.vcg_defaults
+
+    if defaults.treatment_col:
+        resolved = _find_column_by_pattern(defaults.treatment_col, columns)
+        if resolved:
+            column_roles["treatment_col"] = resolved
+            locked.append("treatment_col")
+
+    if defaults.control_value:
+        column_roles["control_value"] = defaults.control_value
+        locked.append("control_value")
+
+    if defaults.treatment_value:
+        column_roles["treatment_value"] = defaults.treatment_value
+        locked.append("treatment_value")
+
+    outcome_spec = defaults.outcome_cols_from
+    resolved_outcomes: List[str] = []
+    if outcome_spec is not None:
+        if isinstance(outcome_spec, list):
+            for pat in outcome_spec:
+                m = _find_column_by_pattern(str(pat), columns)
+                if m and m not in resolved_outcomes:
+                    resolved_outcomes.append(m)
+        elif isinstance(outcome_spec, str):
+            spec = outcome_spec.strip()
+            if spec.lower() == "measurement":
+                for col in columns:
+                    if col.get("inferred_type") == "measurement":
+                        nm = str(col.get("name"))
+                        if nm and nm not in resolved_outcomes:
+                            resolved_outcomes.append(nm)
+            elif spec.lower().startswith("semantic_type:"):
+                target = spec.split(":", 1)[1].strip().lower()
+                for col in columns:
+                    sem = str(col.get("semantic_type") or col.get("inferred_type") or "").lower()
+                    if sem == target:
+                        nm = str(col.get("name"))
+                        if nm and nm not in resolved_outcomes:
+                            resolved_outcomes.append(nm)
+            else:
+                m = _find_column_by_pattern(spec, columns)
+                if m:
+                    resolved_outcomes.append(m)
+        if resolved_outcomes:
+            column_roles["outcome_cols"] = resolved_outcomes
+            locked.append("outcome_cols")
+
+    if defaults.covariate_cols:
+        existing = list(column_roles.get("covariate_cols") or [])
+        merged = list(existing)
+        for pat in defaults.covariate_cols:
+            m = _find_column_by_pattern(str(pat), columns)
+            if m and m not in merged:
+                merged.append(m)
+        column_roles["covariate_cols"] = merged
+        locked.append("covariate_cols")
+
+    if defaults.clustering:
+        resolved_cluster = _find_column_by_pattern(defaults.clustering, columns) or defaults.clustering
+        roles_dict["clustering_unit"] = resolved_cluster
+        roles_dict["clustering_warning"] = (
+            f"Template declares cage-level clustering on {resolved_cluster}. "
+            "Consider modelling pseudo-replication; current VCG pipeline does not adjust for it."
+        )
+
+    if defaults.method:
+        vcg_cfg = roles_dict.setdefault("vcg_config", {})
+        vcg_cfg["method"] = defaults.method
+        roles_dict["method"] = defaults.method
+
+    roles_dict["template_locked"] = locked
+    return roles_dict
 
 
 def _use_llm_orchestrator() -> bool:
@@ -59,7 +164,20 @@ def _persist(dataset_id: str, session: dict) -> None:
 async def wizard_prefill(dataset_id: str):
     s = _require(dataset_id)
     from vcg.vcg_wizard import infer_column_roles
-    return infer_column_roles(s["columns"], s["table_structure"], s["metadata"])
+    prefill = infer_column_roles(s["columns"], s["table_structure"], s["metadata"])
+    template_id = s.get("template_id")
+    if template_id:
+        try:
+            from template_engine import get_template
+            tpl = get_template(template_id)
+            if tpl is not None:
+                _apply_template_defaults(prefill, tpl, s["columns"])
+                prefill["template_id"] = template_id
+        except Exception:
+            prefill.setdefault("template_locked", [])
+    else:
+        prefill.setdefault("template_locked", [])
+    return prefill
 
 
 @vcg_router.put("/{dataset_id}/wizard")

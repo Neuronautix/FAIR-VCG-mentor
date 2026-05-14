@@ -169,6 +169,32 @@ export interface ChatMessage {
   timestamp: string
 }
 
+export interface TemplateSummary {
+  id: string
+  name: string
+  version: string
+  description?: string
+  source: 'builtin' | 'user'
+  conforms_to: string[]
+}
+
+export interface TemplateCandidate {
+  id: string
+  name: string
+  score: number
+  reasons: string[]
+}
+
+export interface ConformanceEntry {
+  standard: string
+  section: string
+  field_id: string
+  status: 'satisfied' | 'missing' | 'partial'
+  satisfied_by: { column?: string; metadata?: string } | null
+  severity: 'high' | 'medium' | 'low'
+  is_column_field: boolean
+}
+
 export interface VCGResults {
   method_used: string
   n_subjects_real: number
@@ -221,13 +247,23 @@ interface AppState {
   hitlSuggestions: import('../api/client').HITLSuggestion[]
   vocabulary: import('../api/client').Vocabulary | null
 
+  templateId: string | null
+  templateCandidates: TemplateCandidate[]
+  templateConformance: ConformanceEntry[]
+  availableTemplates: { builtin: TemplateSummary[]; user: TemplateSummary[] }
+
   setUploadResult: (
     datasetId: string,
     importInfo: ImportInfo,
     columns: ColumnProfile[],
     tableStructure: TableStructure,
     issues: Issue[],
-    extras?: { lowConfidenceColumns?: LowConfidenceColumn[]; templateApplied?: number }
+    extras?: {
+      lowConfidenceColumns?: LowConfidenceColumn[]
+      templateApplied?: number
+      templateId?: string | null
+      templateCandidates?: TemplateCandidate[]
+    }
   ) => void
   setColumns: (columns: ColumnProfile[]) => void
   setIssues: (issues: Issue[]) => void
@@ -250,6 +286,11 @@ interface AppState {
   setLLMEnabled: (enabled: boolean | null) => void
   setHITLSuggestions: (suggestions: import('../api/client').HITLSuggestion[]) => void
   setVocabulary: (vocab: import('../api/client').Vocabulary | null) => void
+
+  setTemplateId: (id: string | null) => void
+  setTemplateCandidates: (c: TemplateCandidate[]) => void
+  setTemplateConformance: (r: ConformanceEntry[]) => void
+  setAvailableTemplates: (t: { builtin: TemplateSummary[]; user: TemplateSummary[] }) => void
 }
 
 const EMPTY_METRICS: InferenceMetrics = {
@@ -284,6 +325,11 @@ export const useStore = create<AppState>((set) => ({
   hitlSuggestions: [],
   vocabulary: null,
 
+  templateId: null,
+  templateCandidates: [],
+  templateConformance: [],
+  availableTemplates: { builtin: [], user: [] },
+
   setUploadResult: (datasetId, importInfo, columns, tableStructure, issues, extras) =>
     set({
       datasetId,
@@ -295,6 +341,9 @@ export const useStore = create<AppState>((set) => ({
       lowConfidenceColumns: extras?.lowConfidenceColumns ?? [],
       templateApplied: extras?.templateApplied ?? 0,
       inferenceMetrics: EMPTY_METRICS,
+      templateId: extras?.templateId ?? null,
+      templateCandidates: extras?.templateCandidates ?? [],
+      templateConformance: [],
     }),
 
   setColumns: (columns) => set({ columns }),
@@ -325,6 +374,9 @@ export const useStore = create<AppState>((set) => ({
       llmFairScore: null,
       hitlSuggestions: [],
       vocabulary: null,
+      templateId: null,
+      templateCandidates: [],
+      templateConformance: [],
     }),
 
   setVCGStatus: (status) => set({ vcgStatus: status }),
@@ -340,4 +392,9 @@ export const useStore = create<AppState>((set) => ({
   setLLMEnabled: (llmEnabled) => set({ llmEnabled }),
   setHITLSuggestions: (hitlSuggestions) => set({ hitlSuggestions }),
   setVocabulary: (vocabulary) => set({ vocabulary }),
+
+  setTemplateId: (templateId) => set({ templateId }),
+  setTemplateCandidates: (templateCandidates) => set({ templateCandidates }),
+  setTemplateConformance: (templateConformance) => set({ templateConformance }),
+  setAvailableTemplates: (availableTemplates) => set({ availableTemplates }),
 }))

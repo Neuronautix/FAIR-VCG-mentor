@@ -20,6 +20,8 @@ export interface UploadResponse {
   issues: Issue[]
   template_applied?: number
   low_confidence_columns?: LowConfidenceColumn[]
+  template_id?: string | null
+  template_candidates?: { id: string; name: string; score: number; reasons: string[] }[]
 }
 
 export const uploadCSV = (file: File): Promise<UploadResponse> => {
@@ -295,3 +297,29 @@ export const discoverVocabFromPDF = (id: string, file: File) => {
     )
     .then((r) => r.data)
 }
+
+export const listTemplates = () => api.get('/templates').then((r) => r.data)
+
+export const getTemplate = (tid: string) =>
+  api.get(`/templates/registry/${tid}`).then((r) => r.data)
+
+export const uploadTemplate = (body: string, format: 'yaml' | 'json') =>
+  api
+    .post('/templates', body, {
+      headers: {
+        'Content-Type': format === 'yaml' ? 'application/x-yaml' : 'application/json',
+      },
+    })
+    .then((r) => r.data)
+
+export const getTemplateSuggestions = (id: string) =>
+  api.get(`/${id}/template/suggestions`).then((r) => r.data)
+
+export const assignTemplate = (id: string, tid: string) =>
+  api.post(`/${id}/template/${tid}`).then((r) => r.data)
+
+export const unassignTemplate = (id: string) =>
+  api.delete(`/${id}/template`).then((r) => r.data)
+
+export const getTemplateValidation = (id: string) =>
+  api.get(`/${id}/template/validation`).then((r) => r.data)

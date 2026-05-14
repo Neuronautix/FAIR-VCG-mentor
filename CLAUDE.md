@@ -27,9 +27,11 @@ FAIR-vcg-mentor/
 │   ├── export_engine.py      # Multi-format export (CSV, CSVW, JSON-LD, RO-Crate, etc.)
 │   ├── template_engine.py    # Template loader, matcher, validator, conformance reporting
 │   ├── template_router.py    # FastAPI router — /api/templates/* and /api/{id}/template/* endpoints
+│   ├── linkml_import.py      # LinkML schema → starter template converter
 │   ├── templates/
 │   │   ├── arrive-v2.yaml    # ARRIVE 2.0 reporting standard (dataset-level metadata)
 │   │   ├── mnms-v1.yaml      # MNMS schema for DVC cages (conforms_to ARRIVE)
+│   │   ├── namo-nam-assay-v1.yaml  # NAMO NAM dose-response / functional assay (hand-crafted)
 │   │   └── user/             # User-uploaded custom templates
 │   └── vcg/
 │       ├── __init__.py
@@ -173,7 +175,8 @@ User opens /templates page (TemplateSelectorPage)
   ├── POST /api/{id}/template/{tid}       → assign + validate + append issues
   ├── DELETE /api/{id}/template           → unassign + strip template issues
   ├── GET /api/{id}/template/validation   → re-run validation (read-only)
-  └── POST /api/templates                 → upload custom template (YAML/JSON)
+  ├── POST /api/templates                 → upload custom template (YAML/JSON)
+  └── POST /api/templates/import-linkml   → convert LinkML schema → starter template
 
 Downstream effects (when template assigned):
   ├── GET /api/vcg/{id}/wizard-prefill    → overlays vcg_defaults (treatment_col,

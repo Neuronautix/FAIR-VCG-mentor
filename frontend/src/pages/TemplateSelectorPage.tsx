@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -15,6 +16,7 @@ import {
   DialogTitle,
   Divider,
   FormControl,
+  FormControlLabel,
   Grid,
   IconButton,
   InputLabel,
@@ -43,6 +45,7 @@ import {
   listTemplates,
   unassignTemplate,
   uploadTemplate,
+  importLinkmlTemplate,
 } from '../api/client'
 import { useStore } from '../store/useStore'
 import type {
@@ -103,6 +106,11 @@ export default function TemplateSelectorPage() {
   const [uploadBody, setUploadBody] = useState('')
   const [uploadFormat, setUploadFormat] = useState<'yaml' | 'json'>('yaml')
   const [uploadBusy, setUploadBusy] = useState(false)
+  const [linkmlBody, setLinkmlBody] = useState('')
+  const [linkmlTarget, setLinkmlTarget] = useState('')
+  const [linkmlSave, setLinkmlSave] = useState(false)
+  const [linkmlBusy, setLinkmlBusy] = useState(false)
+  const [linkmlPreview, setLinkmlPreview] = useState<string | null>(null)
 
   const refreshAll = async () => {
     if (!datasetId) {
@@ -220,6 +228,54 @@ export default function TemplateSelectorPage() {
       setError(e?.response?.data?.detail ?? 'Template upload failed.')
     } finally {
       setUploadBusy(false)
+    }
+  }
+
+  const handleImportLinkml = async () => {
+    if (!linkmlBody.trim()) {
+      setError('Paste a LinkML schema first.')
+      return
+    }
+    setLinkmlBusy(true)
+    setError(null)
+    setLinkmlPreview(null)
+    try {
+      const result = await importLinkmlTemplate(
+        linkmlBody,
+        linkmlTarget.trim() || null,
+        linkmlSave,
+      )
+      setLinkmlPreview(result.as_yaml ?? '')
+      if (linkmlSave) {
+        const list = await listTemplates()
+        setAvailableTemplates(list)
+        setToast('LinkML schema imported and saved as user template.')
+      } else {
+        setToast('LinkML schema converted — review the preview below.')
+      }
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'LinkML import failed.')
+    } finally {
+      setLinkmlBusy(false)
+    }
+  }
+
+  const handleSaveImported = async () => {
+    if (!linkmlPreview) return
+    setLinkmlBusy(true)
+    setError(null)
+    try {
+      await uploadTemplate(linkmlPreview, 'yaml')
+      const list = await listTemplates()
+      setAvailableTemplates(list)
+      setLinkmlPreview(null)
+      setLinkmlBody('')
+      setLinkmlTarget('')
+      setToast('Imported template saved.')
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Failed to save imported template.')
+    } finally {
+      setLinkmlBusy(false)
     }
   }
 
@@ -461,6 +517,100 @@ export default function TemplateSelectorPage() {
                 Upload Template
               </Button>
             </Box>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Import from LinkML Schema
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Paste a LinkML schema YAML (e.g. NAMO at{' '}
+            <a
+              href="https://raw.githubusercontent.com/monarch-initiative/namo/main/src/namo/schema/namo.yaml"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              monarch-initiative/namo
+            </a>
+            ) and the converter will produce a starter FAIR-VCG template. Leave the target class
+            empty to extract dataset-level metadata from all data-like classes, or specify a class
+            (e.g. <code>FunctionalAssay</code>, <code>DoseResponseSimilarity</code>) to produce
+            required_columns from its attributes.
+          </Typography>
+          <Stack spacing={2}>
+            <TextField
+              multiline
+              minRows={6}
+              maxRows={20}
+              fullWidth
+              size="small"
+              placeholder={'id: https://example.org/my-schema\nname: my-schema\nclasses:\n  Foo:\n    attributes:\n      bar:\n        range: float'}
+              value={linkmlBody}
+              onChange={(e) => setLinkmlBody(e.target.value)}
+              sx={{ fontFamily: 'monospace' }}
+            />
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+              <TextField
+                size="small"
+                label="Target class (optional)"
+                value={linkmlTarget}
+                onChange={(e) => setLinkmlTarget(e.target.value)}
+                placeholder="FunctionalAssay"
+                sx={{ width: 280 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={linkmlSave}
+                    onChange={(e) => setLinkmlSave(e.target.checked)}
+                  />
+                }
+                label="Save as user template"
+              />
+              <Button
+                variant="contained"
+                onClick={handleImportLinkml}
+                disabled={linkmlBusy}
+                startIcon={linkmlBusy ? <CircularProgress size={16} color="inherit" /> : <UploadFileIcon />}
+              >
+                Convert
+              </Button>
+            </Box>
+            {linkmlPreview && (
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Generated template preview
+                </Typography>
+                <Box
+                  component="pre"
+                  sx={{
+                    p: 2,
+                    bgcolor: 'grey.100',
+                    borderRadius: 1,
+                    fontSize: 12,
+                    maxHeight: 360,
+                    overflow: 'auto',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {linkmlPreview}
+                </Box>
+                {!linkmlSave && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    sx={{ mt: 1 }}
+                    onClick={handleSaveImported}
+                    disabled={linkmlBusy}
+                  >
+                    Save now
+                  </Button>
+                )}
+              </Box>
+            )}
           </Stack>
         </CardContent>
       </Card>

@@ -323,3 +323,12 @@ export const unassignTemplate = (id: string) =>
 
 export const getTemplateValidation = (id: string) =>
   api.get(`/${id}/template/validation`).then((r) => r.data)
+
+export const importLinkmlTemplate = (
+  linkml_yaml: string,
+  target_class: string | null,
+  save_as_user_template: boolean,
+) =>
+  api
+    .post('/templates/import-linkml', { linkml_yaml, target_class, save_as_user_template })
+    .then((r) => r.data)

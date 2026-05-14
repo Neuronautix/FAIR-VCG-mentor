@@ -1,31 +1,50 @@
 import RefreshIcon from '@mui/icons-material/Refresh'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import {
   Alert,
   Box,
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Grid,
+  IconButton,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getFairScore } from '../api/client'
+import { getFairScore, getLLMFairScore } from '../api/client'
 import FAIRScoreBreakdown from '../components/FAIRScoreBreakdown'
 import { useStore } from '../store/useStore'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
 
+const VERDICT_COLOR: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+  good: 'success',
+  adequate: 'warning',
+  weak: 'error',
+}
+
+const DIMENSION_LABELS: Record<string, string> = {
+  findable: 'Findable',
+  accessible: 'Accessible',
+  interoperable: 'Interoperable',
+  reusable: 'Reusable',
+}
+
 export default function FAIRScorePage() {
   const navigate = useNavigate()
-  const { datasetId, fairScore, setFairScore } = useStore()
+  const { datasetId, fairScore, setFairScore, llmFairScore, setLLMFairScore } = useStore()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [llmLoading, setLlmLoading] = useState(false)
+  const [llmError, setLlmError] = useState<string | null>(null)
 
   const load = async () => {
     if (!datasetId) return
@@ -38,6 +57,25 @@ export default function FAIRScorePage() {
       setError('Could not compute FAIR score. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchLLMScore = async () => {
+    if (!datasetId) return
+    setLlmLoading(true)
+    setLlmError(null)
+    try {
+      const result = await getLLMFairScore(datasetId)
+      setLLMFairScore(result)
+    } catch (e: any) {
+      const msg: string = e?.response?.data?.detail ?? e?.message ?? 'Unknown error'
+      if (msg.includes('ANTHROPIC_API_KEY')) {
+        setLlmError('AI assessment requires ANTHROPIC_API_KEY to be configured on the server.')
+      } else {
+        setLlmError('AI assessment failed. Please try again.')
+      }
+    } finally {
+      setLlmLoading(false)
     }
   }
 
@@ -106,6 +144,98 @@ export default function FAIRScorePage() {
                       </ListItem>
                     ))}
                   </List>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="h6">AI Assessment (Claude)</Typography>
+                  {llmFairScore && (
+                    <Tooltip title="Refresh AI assessment">
+                      <IconButton
+                        size="small"
+                        onClick={() => { setLLMFairScore(null); fetchLLMScore() }}
+                        disabled={llmLoading}
+                      >
+                        <RefreshIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
+
+                {!llmFairScore && !llmLoading && !llmError && (
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Claude analyses whether your metadata is substantively complete — not just present.
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      startIcon={<AutoAwesomeIcon />}
+                      onClick={fetchLLMScore}
+                    >
+                      Get AI Assessment (Claude Haiku)
+                    </Button>
+                  </Box>
+                )}
+
+                {llmLoading && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <CircularProgress size={20} />
+                    <Typography variant="body2" color="text.secondary">
+                      Claude is analysing your metadata…
+                    </Typography>
+                  </Box>
+                )}
+
+                {llmError && (
+                  <Alert severity="error" sx={{ mt: 1 }}>
+                    {llmError}
+                  </Alert>
+                )}
+
+                {llmFairScore && !llmLoading && (
+                  <Box>
+                    {llmFairScore.overall_assessment && (
+                      <Typography variant="body2" sx={{ mb: 2 }}>
+                        {llmFairScore.overall_assessment}
+                      </Typography>
+                    )}
+
+                    {llmFairScore.top_priority && (
+                      <Alert severity="warning" sx={{ mb: 2 }}>
+                        <strong>Top priority:</strong> {llmFairScore.top_priority}
+                      </Alert>
+                    )}
+
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {Object.entries(DIMENSION_LABELS).map(([key, label]) => {
+                        const dim = llmFairScore[key]
+                        if (!dim) return null
+                        const verdict: string = (dim.verdict ?? '').toLowerCase()
+                        const color = VERDICT_COLOR[verdict] ?? 'default'
+                        return (
+                          <Box key={key} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                            <Box sx={{ minWidth: 100, pt: 0.25 }}>
+                              <Typography variant="caption" fontWeight={700} sx={{ mr: 0.5 }}>
+                                {label}
+                              </Typography>
+                              <Chip
+                                label={dim.verdict ?? '—'}
+                                size="small"
+                                color={color}
+                                sx={{ height: 18, fontSize: 10 }}
+                              />
+                            </Box>
+                            <Typography variant="body2" color="text.secondary">
+                              {dim.commentary ?? dim.comment ?? ''}
+                            </Typography>
+                          </Box>
+                        )
+                      })}
+                    </Box>
+                  </Box>
                 )}
               </CardContent>
             </Card>

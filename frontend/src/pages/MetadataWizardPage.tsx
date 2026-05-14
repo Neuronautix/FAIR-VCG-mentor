@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Divider,
   FormControl,
@@ -67,21 +68,71 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+function FieldLabel({ text, fromPaper }: { text: string; fromPaper: boolean }) {
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      {text}
+      {fromPaper && <Chip label="from paper" size="small" color="info" sx={{ fontSize: 10, height: 18 }} />}
+    </span>
+  )
+}
+
 export default function MetadataWizardPage() {
   const navigate = useNavigate()
-  const { datasetId, metadata, setMetadata, setFairScore, columns, tableStructure } = useStore()
+  const { datasetId, metadata, setMetadata, setFairScore, columns, tableStructure, paperExtraction } = useStore()
   const [form, setForm] = useState<DatasetMetadata>(metadata)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [paperFilledFields, setPaperFilledFields] = useState<Set<string>>(new Set())
+  const [paperAlertDismissed, setPaperAlertDismissed] = useState(false)
 
   useEffect(() => {
     if (datasetId) {
       getMetadata(datasetId)
-        .then((r) => setForm((prev) => ({ ...prev, ...r.metadata })))
+        .then((r) => {
+          const fetched = r.metadata
+          setForm((prev) => {
+            const merged = { ...prev, ...fetched }
+
+            if (paperExtraction) {
+              const dm = paperExtraction.dataset_metadata
+              const filled = new Set<string>()
+
+              const tryFill = (formKey: keyof DatasetMetadata, paperValue: string | string[] | null) => {
+                if (paperValue != null) {
+                  const current = merged[formKey]
+                  const isEmpty = !current || (Array.isArray(current) ? current.length === 0 : current === '')
+                  if (isEmpty) {
+                    ;(merged as any)[formKey] = paperValue
+                    filled.add(formKey)
+                  }
+                }
+              }
+
+              tryFill('title', dm.title)
+              tryFill('description', dm.description)
+              tryFill('creator', dm.creator)
+              tryFill('institution', dm.institution)
+              tryFill('species', dm.species)
+              tryFill('license', dm.license)
+              tryFill('funding_source', dm.funding_source)
+              tryFill('protocol_reference', dm.protocol_reference)
+              if (dm.keywords?.length) tryFill('keywords', dm.keywords)
+
+              if (filled.size > 0) {
+                setPaperFilledFields(filled)
+              }
+
+              return merged
+            }
+
+            return merged
+          })
+        })
         .catch(() => setError('Failed to load existing metadata.'))
     }
-  }, [datasetId])
+  }, [datasetId, paperExtraction]) // re-run when extraction arrives after page is already mounted
 
   if (!datasetId) {
     return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>
@@ -108,6 +159,8 @@ export default function MetadataWizardPage() {
   const identifiers = tableStructure?.detected_identifiers ?? []
   const identifierOptions = identifiers.length > 0 ? identifiers : columns.map((c) => c.name)
 
+  const fp = (field: string) => paperFilledFields.has(field)
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -129,6 +182,12 @@ export default function MetadataWizardPage() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
+      {paperFilledFields.size > 0 && !paperAlertDismissed && paperExtraction && (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => setPaperAlertDismissed(true)}>
+          {paperFilledFields.size} field(s) pre-filled from &ldquo;{paperExtraction._filename}&rdquo; — review before saving.
+        </Alert>
+      )}
+
       <Grid container spacing={3}>
         <Grid item xs={12} md={7}>
           <Card>
@@ -136,11 +195,14 @@ export default function MetadataWizardPage() {
               <Section title="Dataset Identity">
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
-                    <TextField label="Dataset title *" fullWidth size="small" value={form.title ?? ''} onChange={f('title')} />
+                    <TextField
+                      label={<FieldLabel text="Dataset title *" fromPaper={fp('title')} />}
+                      fullWidth size="small" value={form.title ?? ''} onChange={f('title')}
+                    />
                   </Grid>
                   <Grid item xs={12}>
                     <TextField
-                      label="Description"
+                      label={<FieldLabel text="Description" fromPaper={fp('description')} />}
                       fullWidth
                       size="small"
                       multiline
@@ -151,10 +213,16 @@ export default function MetadataWizardPage() {
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <TextField label="Creator / Author *" fullWidth size="small" value={form.creator ?? ''} onChange={f('creator')} />
+                    <TextField
+                      label={<FieldLabel text="Creator / Author *" fromPaper={fp('creator')} />}
+                      fullWidth size="small" value={form.creator ?? ''} onChange={f('creator')}
+                    />
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <TextField label="Institution" fullWidth size="small" value={form.institution ?? ''} onChange={f('institution')} />
+                    <TextField
+                      label={<FieldLabel text="Institution" fromPaper={fp('institution')} />}
+                      fullWidth size="small" value={form.institution ?? ''} onChange={f('institution')}
+                    />
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <TextField label="Contact email" fullWidth size="small" type="email" value={form.contact_email ?? ''} onChange={f('contact_email')} />
@@ -174,8 +242,14 @@ export default function MetadataWizardPage() {
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
                     <FormControl size="small" fullWidth>
-                      <InputLabel>License *</InputLabel>
-                      <Select label="License *" value={form.license ?? ''} onChange={(e) => setForm((p) => ({ ...p, license: e.target.value }))}>
+                      <InputLabel>
+                        <FieldLabel text="License *" fromPaper={fp('license')} />
+                      </InputLabel>
+                      <Select
+                        label={<FieldLabel text="License *" fromPaper={fp('license')} />}
+                        value={form.license ?? ''}
+                        onChange={(e) => setForm((p) => ({ ...p, license: e.target.value }))}
+                      >
                         {LICENSES.map((l) => <MenuItem key={l} value={l}>{l}</MenuItem>)}
                       </Select>
                     </FormControl>
@@ -190,7 +264,7 @@ export default function MetadataWizardPage() {
                   </Grid>
                   <Grid item xs={12}>
                     <TextField
-                      label="Keywords (comma-separated)"
+                      label={<FieldLabel text="Keywords (comma-separated)" fromPaper={fp('keywords')} />}
                       fullWidth
                       size="small"
                       value={form.keywords?.join(', ') ?? ''}
@@ -206,7 +280,10 @@ export default function MetadataWizardPage() {
               <Section title="Experimental Context">
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
-                    <TextField label="Species" fullWidth size="small" value={form.species ?? ''} onChange={f('species')} placeholder="Mus musculus" />
+                    <TextField
+                      label={<FieldLabel text="Species" fromPaper={fp('species')} />}
+                      fullWidth size="small" value={form.species ?? ''} onChange={f('species')} placeholder="Mus musculus"
+                    />
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <FormControl size="small" fullWidth>
@@ -218,7 +295,7 @@ export default function MetadataWizardPage() {
                   </Grid>
                   <Grid item xs={12}>
                     <TextField
-                      label="Protocol reference"
+                      label={<FieldLabel text="Protocol reference" fromPaper={fp('protocol_reference')} />}
                       fullWidth
                       size="small"
                       value={form.protocol_reference ?? ''}
@@ -227,7 +304,10 @@ export default function MetadataWizardPage() {
                     />
                   </Grid>
                   <Grid item xs={12}>
-                    <TextField label="Funding source" fullWidth size="small" value={form.funding_source ?? ''} onChange={f('funding_source')} />
+                    <TextField
+                      label={<FieldLabel text="Funding source" fromPaper={fp('funding_source')} />}
+                      fullWidth size="small" value={form.funding_source ?? ''} onChange={f('funding_source')}
+                    />
                   </Grid>
                 </Grid>
               </Section>

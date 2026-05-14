@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import ArticleIcon from '@mui/icons-material/Article'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
@@ -31,11 +32,13 @@ interface NavItem {
   label: string
   path: string
   icon: ReactNode
+  alwaysEnabled?: boolean
   vcgResultsOnly?: boolean
 }
 
 const navItems: NavItem[] = [
   { label: 'Upload CSV', path: '/' },
+  { label: 'Paper Import', path: '/paper-import', alwaysEnabled: true },
   { label: 'Overview', path: '/overview' },
   { label: 'Column Profile', path: '/columns' },
   { label: 'FAIR Score', path: '/fair-score' },
@@ -46,7 +49,7 @@ const navItems: NavItem[] = [
 ].map((item, i) => ({
   ...item,
   icon: [
-    <CloudUploadIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
+    <CloudUploadIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
     <TuneIcon />, <DownloadIcon />, <ScienceIcon />, <BarChartIcon />,
   ][i],
 }))
@@ -103,7 +106,10 @@ export default function Layout() {
           <List dense>
             {navItems.map((item) => {
               const active = location.pathname === item.path
-              const disabled = item.path !== '/' && (!datasetId || (item.vcgResultsOnly === true && vcgStatus !== 'done'))
+              const disabled =
+                !item.alwaysEnabled &&
+                item.path !== '/' &&
+                (!datasetId || (item.vcgResultsOnly === true && vcgStatus !== 'done'))
               return (
                 <ListItem key={item.path} disablePadding>
                   <ListItemButton

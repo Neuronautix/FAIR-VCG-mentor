@@ -1,17 +1,18 @@
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
-import { Alert, Box, Button, CircularProgress, Paper, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Paper, Snackbar, Typography } from '@mui/material'
 import type { AxiosError } from 'axios'
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { uploadCSV } from '../api/client'
+import { buildMetadataPatch, saveMetadata, uploadCSV } from '../api/client'
 import { useStore } from '../store/useStore'
 
 export default function UploadPage() {
   const navigate = useNavigate()
-  const { setUploadResult, reset } = useStore()
+  const { setUploadResult, reset, paperExtraction } = useStore()
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [paperSnackbar, setPaperSnackbar] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(
@@ -36,6 +37,19 @@ export default function UploadPage() {
             templateApplied: result.template_applied ?? 0,
           }
         )
+
+        if (paperExtraction) {
+          const patch = buildMetadataPatch(paperExtraction)
+          try {
+            await saveMetadata(result.dataset_id, patch)
+            setPaperSnackbar(
+              `Pre-filled ${Object.keys(patch).length} metadata field(s) from "${paperExtraction._filename}"`
+            )
+          } catch {
+            // non-fatal: proceed to overview even if pre-fill fails
+          }
+        }
+
         navigate('/overview')
       } catch (e: unknown) {
         const axiosErr = e as AxiosError<{ detail: string }>
@@ -45,7 +59,7 @@ export default function UploadPage() {
         setLoading(false)
       }
     },
-    [navigate, reset, setUploadResult]
+    [navigate, reset, setUploadResult, paperExtraction]
   )
 
   const onDrop = useCallback(
@@ -112,6 +126,17 @@ export default function UploadPage() {
           {error}
         </Alert>
       )}
+
+      <Snackbar
+        open={paperSnackbar !== null}
+        autoHideDuration={5000}
+        onClose={() => setPaperSnackbar(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="info" onClose={() => setPaperSnackbar(null)}>
+          {paperSnackbar}
+        </Alert>
+      </Snackbar>
 
       <Button
         variant="contained"

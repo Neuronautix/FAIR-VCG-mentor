@@ -55,6 +55,20 @@ Goal: improve automatic column/data understanding while keeping latency and comp
 - [ ] Add Stage 3 only if ambiguity remains materially high
 - [ ] Add Stage 4 (LLM) last, as selective escalation rather than default path
 
+## Paper Import & LLM Features
+
+- [ ] **paper_extractor.py** — switch to Anthropic `tool_use` for guaranteed structured output (no JSON parse fallback needed)
+- [ ] **llm_fair_scorer.py** — new module: Claude qualitative commentary on all four FAIR dimensions
+- [ ] **GET /api/fair-score/{id}/llm** — new endpoint calling `llm_fair_scorer`; returns per-dimension verdict + commentary
+- [ ] **FAIRScorePage.tsx** — "AI Assessment" card with LLM verdicts, per-dimension commentary, and top priority recommendation
+- [ ] **UploadPage.tsx** — after CSV upload, if `paperExtraction` is in store, auto-call `saveMetadata` and show "Pre-filled from paper" toast
+- [ ] **MetadataWizardPage.tsx** — pre-fill empty form fields from `paperExtraction.dataset_metadata`; show "from paper" Chip on pre-filled fields
+- [ ] **VCGWizardPage.tsx Step 2** — highlight outcome/covariate chips matching `vcg_hints`; pre-fill control group label if empty
+- [ ] **ColumnProfilePage.tsx** — show paper-hint badges on columns matching `vcg_hints.outcome_columns` / `covariate_columns`
+- [ ] Persist `session["paper_extraction"]` in SQLite and add GET `/api/paper/{id}` retrieval endpoint
+- [ ] Streaming paper extraction via SSE + `client.messages.stream()`
+- [ ] CrossRef DOI input on Paper Import page
+
 ## Backend
 
 ### Critical bugs

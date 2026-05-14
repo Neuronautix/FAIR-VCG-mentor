@@ -69,6 +69,9 @@ export const saveMetadata = (id: string, metadata: DatasetMetadata) =>
 export const getFairScore = (id: string): Promise<FAIRScore> =>
   api.get<FAIRScore>(`/fair-score/${id}`).then((r) => r.data)
 
+export const getLLMFairScore = (id: string) =>
+  api.get(`/fair-score/${id}/llm`).then((r) => r.data)
+
 export const getUriSuggestions = (id: string) =>
   api.get(`/uris/${id}`).then((r) => r.data)
 
@@ -105,3 +108,76 @@ export const getVCGConversation = (id: string) =>
 
 export const vcgExportUrl = (id: string, type: 'vcg-csv' | 'vcg-report') =>
   `/api/vcg/${id}/export/${type}`
+
+export const extractPaperMetadata = (file: File): Promise<any> => {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post('/paper/extract', form).then((r) => r.data)
+}
+
+export const extractPaperMetadataStream = (
+  file: File,
+  onStatus: (msg: string) => void,
+  onResult: (data: any) => void,
+  onError: (msg: string) => void,
+  signal?: AbortSignal,
+): Promise<void> => {
+  const form = new FormData()
+  form.append('file', file)
+  return fetch('/api/paper/extract/stream', { method: 'POST', body: form, signal }).then(async (res) => {
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text)
+    }
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    try {
+      while (true) {
+        if (signal?.aborted) break
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6))
+              if (event.type === 'status') onStatus(event.message)
+              else if (event.type === 'result') onResult(event.data)
+              else if (event.type === 'error') onError(event.message)
+            } catch {}
+          }
+        }
+      }
+    } finally {
+      reader.cancel()
+    }
+  })
+}
+
+export const buildMetadataPatch = (extraction: {
+  dataset_metadata: Record<string, any>
+  arrive: Record<string, any>
+}): Record<string, any> => {
+  const dm = extraction.dataset_metadata
+  const patch: Record<string, any> = {}
+  const scalar = ['title', 'description', 'creator', 'institution', 'species',
+                   'study_type', 'license', 'funding_source', 'protocol_reference']
+  for (const key of scalar) {
+    if (dm[key] != null) patch[key] = dm[key]
+  }
+  if (dm.keywords?.length) patch.keywords = dm.keywords
+  patch.arrive = extraction.arrive
+  return patch
+}
+
+export const fetchPaperByDOI = (doi: string): Promise<any> =>
+  api.post('/paper/doi', { doi }).then((r) => r.data)
+
+export const storePaperExtraction = (id: string, extraction: any): Promise<void> =>
+  api.put(`/paper/${id}/extraction`, extraction).then(() => undefined)
+
+export const getStoredPaperExtraction = (id: string): Promise<any> =>
+  api.get(`/paper/${id}/extraction`).then((r) => r.data)

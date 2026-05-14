@@ -201,9 +201,45 @@ FAIR-vcg-mentor/
 
 ---
 
+## Priority Punch List
+
+Items needed before the tool is used in a real study, followed by quality-of-life improvements. These supplement the long-form roadmap below.
+
+### Must Have
+
+- [ ] **Test suite — zero coverage is a critical risk.** `vcg_bootstrap.py`, `vcg_synthetic.py`, `stats_agent.py`, and `csv_profiler.py` do statistical computation with no tests. Any refactor of these files carries silent regression risk. Add `backend/tests/` with at least happy-path and edge-case (N=5, high CV, all-missing column) scenarios. `[credibility]`
+- [ ] **VCG type-mismatch guard.** Control-group matching uses `df[treatment_col] == control_value` with string equality. If the column is numeric (`int64`, `float64`), the comparison silently produces an empty control set and the pipeline fails without a clear error. Add a type-aware equality check (or coerce to string before matching) in `ingestion_agent.py`. `[credibility]`
+- [ ] **Server-side PDF size enforcement.** The 32 MB guard lives inside `paper_extractor.py` but the full file is already in memory by then. Add `Content-Length` rejection (or post-read length check) at the FastAPI layer in `main.py` before calling `extract_paper_metadata`, so large uploads fail fast with a clear 413 response rather than OOM. `[usability]`
+- [ ] **Frontend error boundary.** An unhandled exception in any page component (e.g., from a null-dereference on unexpected API shape) silently white-screens the app with no recovery path. Wrap `<App>` in a React error boundary that shows a "Something went wrong — reload" message. `[usability]`
+- [ ] **Persist VCG conversation to SQLite.** Reloading the VCG Chat page loses the entire conversation; the user must restart from the beginning. The session model already supports arbitrary keys; add `vcgConversation` serialisation to `_save_session`. `[usability]`
+
+### Nice to Have
+
+- [ ] **DOI format validation.** Validate the DOI field before sending to the backend (a simple `10.\d{4,}/.+` regex on the client). Currently any string is sent and a 400 is returned with a CrossRef error message that is not user-friendly. `[usability]`
+- [ ] **Streaming elapsed-time counter.** Show elapsed seconds next to the status message during PDF extraction (e.g., "Extracting study metadata… 14 s"). Reduces perceived wait time and signals the page is not frozen. `[usability]`
+- [ ] **Paper import re-run without losing CSV session.** Clicking "Import Different Paper" on `PaperImportPage` clears `paperExtraction` but keeps the dataset loaded. Currently clearing extraction does not remove the persisted SQLite extraction, so the old one is restored on next page visit. Call `DELETE /api/paper/{id}/extraction` (new endpoint needed) when the user clears. `[usability]`
+- [ ] **"From paper" badges persist after Metadata Wizard save.** The `paperFilledFields` set lives in local React state and is lost on page reload. Store it in the Zustand `paperExtraction` slice or derive it by comparing saved metadata against extraction values on mount. `[usability]`
+- [ ] **LLM FAIR score auto-trigger.** If the rule-based score is below 50 and `ANTHROPIC_API_KEY` is configured, show the "Get AI Assessment" button as a primary CTA rather than a secondary option. `[usability]`
+- [ ] **Ontology term lookup for column vocabulary.** The URI field in Column Profile accepts free text. Integrate a lightweight OLS or BioPortal search (debounced autocomplete) so researchers can attach real ontology terms rather than lab-internal strings. Required for machine-readable interoperability at the field level. `[usability]`
+- [ ] **Diff view for FAIR score before/after metadata edit.** Show +/- point changes when the user returns to the score page after filling in the Metadata Wizard, so the impact of each field is visible. `[usability]`
+
+---
+
 ## Roadmap
 
 The goal is to make FAIR-VCG Mentor a credible scientific instrument that genuinely reduces animal numbers in pre-clinical research — not just a useful tool, but one that an ethics committee, a journal reviewer, or a regulatory authority can point to. Items are grouped by time horizon and tagged by primary benefit: **[animal reduction]**, **[credibility]**, or **[usability]**.
+
+### Paper import & LLM enrichment
+
+- [x] **Auto-apply paper extraction on CSV upload** — if a paper was imported before uploading the CSV, automatically pre-fill session metadata with no extra clicks. `[usability]`
+- [x] **Metadata Wizard: pre-fill from paper** — pre-populate form fields from extracted paper metadata with visible "from paper" badges so users review and confirm rather than re-type. `[usability]`
+- [x] **VCG Wizard: paper-hint column suggestions** — highlight outcome and covariate chips that match paper-hinted endpoint names; pre-fill control group label from paper. `[usability]`
+- [x] **Column Profile: paper match badges** — mark columns matching paper-hinted endpoint or covariate names with a visual indicator. `[usability]`
+- [x] **Persist paper extraction to SQLite** — store the extraction result in the session so it survives a page reload. `[usability]`
+- [x] **Structured output via Anthropic tool_use** — replace JSON-from-text parsing in paper_extractor with guaranteed structured output via the tools API, eliminating parse-error edge cases. `[credibility]`
+- [x] **Streaming extraction response** — SSE endpoint with live status ticks every 7 s; status messages cycle indefinitely for slow extractions. `[usability]`
+- [x] **CrossRef DOI lookup** — accept a DOI as an alternative to PDF upload; fetch bibliographic metadata from CrossRef (free, no LLM required) as a fast path for published papers. `[usability]`
+- [x] **LLM-powered FAIR scoring** — supplement the rule-based rubric with a Claude qualitative assessment that judges whether descriptions are genuinely informative, whether keywords are relevant, and whether ARRIVE fields are substantively complete rather than just present. `[credibility]`
 
 ### Short term
 

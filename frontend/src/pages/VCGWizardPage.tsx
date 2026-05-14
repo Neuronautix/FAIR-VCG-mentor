@@ -19,7 +19,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getVCGSuitability, getVCGWizardPrefill, saveVCGWizard, startVCGGeneration } from '../api/client'
 import { useStore } from '../store/useStore'
@@ -66,46 +66,28 @@ export default function VCGWizardPage() {
   const [saving, setSaving] = useState(false)
   const [suitability, setSuitability] = useState<{ suitable: boolean; blocking_issues: string[]; warnings: string[] } | null>(null)
 
+  const allColumnNames = useMemo(() => columns.map((c) => c.name), [columns])
+
   // Prefill on step 2 mount
   useEffect(() => {
-    if (activeStep === 1 && datasetId) {
-      getVCGWizardPrefill(datasetId)
-        .then((data: Partial<FormState>) => {
-          setForm((prev) => {
-            const next = { ...prev, ...data }
-            // Apply paper hints for fields still empty after API prefill
-            const hints = paperExtraction?.vcg_hints
-            if (hints) {
-              if (!next.treatment_col && hints.treatment_column_name && allColumnNames.includes(hints.treatment_column_name)) {
-                next.treatment_col = hints.treatment_column_name
-              }
-              if (!next.control_value && hints.control_group_label) {
-                next.control_value = hints.control_group_label
-              }
-            }
-            return next
-          })
-        })
-        .catch(() => {
-          // prefill unavailable — still apply paper hints
-          setForm((prev) => {
-            const next = { ...prev }
-            const hints = paperExtraction?.vcg_hints
-            if (hints) {
-              if (!next.treatment_col && hints.treatment_column_name && allColumnNames.includes(hints.treatment_column_name)) {
-                next.treatment_col = hints.treatment_column_name
-              }
-              if (!next.control_value && hints.control_group_label) {
-                next.control_value = hints.control_group_label
-              }
-            }
-            return next
-          })
-        })
-    }
-  }, [activeStep, datasetId])
+    if (activeStep !== 1 || !datasetId) return
 
-  const allColumnNames = columns.map((c) => c.name)
+    const applyPaperHints = (base: FormState, data?: Partial<FormState>): FormState => {
+      const next = { ...base, ...data }
+      const hints = paperExtraction?.vcg_hints
+      if (hints) {
+        if (!next.treatment_col && hints.treatment_column_name && allColumnNames.includes(hints.treatment_column_name))
+          next.treatment_col = hints.treatment_column_name
+        if (!next.control_value && hints.control_group_label)
+          next.control_value = hints.control_group_label
+      }
+      return next
+    }
+
+    getVCGWizardPrefill(datasetId)
+      .then((data: Partial<FormState>) => setForm((prev) => applyPaperHints(prev, data)))
+      .catch(() => setForm((prev) => applyPaperHints(prev)))
+  }, [activeStep, datasetId, allColumnNames])
   const numericColumns = columns.filter((c) =>
     ['integer', 'float', 'numeric', 'number'].includes((c.data_type ?? '').toLowerCase())
   )
@@ -249,12 +231,11 @@ export default function VCGWizardPage() {
             </Typography>
 
             {/* Paper hints banner */}
-            {paperExtraction?.vcg_hints && (
-              paperExtraction.vcg_hints.treatment_column_name != null ||
-              paperExtraction.vcg_hints.control_group_label != null ||
-              paperExtraction.vcg_hints.outcome_columns.length > 0 ||
-              paperExtraction.vcg_hints.covariate_columns.length > 0
-            ) && (
+            {paperExtraction?.vcg_hints &&
+              (paperExtraction.vcg_hints.treatment_column_name != null ||
+               paperExtraction.vcg_hints.control_group_label != null ||
+               paperExtraction.vcg_hints.outcome_columns.length > 0 ||
+               paperExtraction.vcg_hints.covariate_columns.length > 0) && (
               <Alert severity="info" icon={<ArticleIcon />} sx={{ mb: 2 }}>
                 Paper hints available from "{paperExtraction._filename}" — highlighted below.
               </Alert>

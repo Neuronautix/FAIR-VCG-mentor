@@ -15,6 +15,13 @@ _LICENSE_MAP = {
 
 _MISSING = {"value": None, "status": "missing"}
 
+_ARRIVE_KEYS = (
+    "study_design", "sample_size", "inclusion_exclusion_criteria",
+    "randomisation", "blinding", "outcome_measures", "statistical_methods",
+    "experimental_animals", "housing_husbandry", "ethics_statement",
+    "adverse_events", "interpretation",
+)
+
 
 def _strip_jats(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
@@ -31,7 +38,6 @@ def fetch_doi_metadata(doi: str) -> Dict[str, Any]:
     """Fetch bibliographic metadata from CrossRef for *doi* and return it in
     the same shape as ``extract_paper_metadata`` in ``paper_extractor.py``."""
 
-    # Strip common prefixes
     doi = doi.strip()
     for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
         if doi.lower().startswith(prefix):
@@ -64,17 +70,12 @@ def fetch_doi_metadata(doi: str) -> Dict[str, Any]:
 
     msg = data.get("message", {})
 
-    # ── dataset_metadata ────────────────────────────────────────────────────
-
-    # title
     titles = msg.get("title") or []
     title = titles[0] if titles else None
 
-    # description — strip JATS XML tags from abstract
     abstract = msg.get("abstract")
     description = _strip_jats(abstract) if abstract else None
 
-    # creator & institution — first author
     authors = msg.get("author") or []
     creator = None
     institution = None
@@ -91,17 +92,14 @@ def fetch_doi_metadata(doi: str) -> Dict[str, Any]:
         if affiliations:
             institution = affiliations[0].get("name")
 
-    # keywords — CrossRef `subject` field
     keywords = msg.get("subject") or []
 
-    # license
     licenses = msg.get("license") or []
     license_val = None
     if licenses:
         raw_url = licenses[0].get("URL", "")
         license_val = _map_license(raw_url) if raw_url else None
 
-    # funding_source — join first 3 funders as "name (award)"
     funders = msg.get("funder") or []
     funder_parts = []
     for funder in funders[:3]:
@@ -114,7 +112,6 @@ def fetch_doi_metadata(doi: str) -> Dict[str, Any]:
             funder_parts.append(name)
     funding_source = "; ".join(funder_parts) if funder_parts else None
 
-    # protocol_reference — always the canonical DOI URL
     protocol_reference = f"https://doi.org/{doi}"
 
     dataset_metadata = {
@@ -130,23 +127,8 @@ def fetch_doi_metadata(doi: str) -> Dict[str, Any]:
         "protocol_reference": protocol_reference,
     }
 
-    # ── ARRIVE checklist — all missing (no full text from CrossRef) ─────────
-    arrive = {
-        "study_design": dict(_MISSING),
-        "sample_size": dict(_MISSING),
-        "inclusion_exclusion_criteria": dict(_MISSING),
-        "randomisation": dict(_MISSING),
-        "blinding": dict(_MISSING),
-        "outcome_measures": dict(_MISSING),
-        "statistical_methods": dict(_MISSING),
-        "experimental_animals": dict(_MISSING),
-        "housing_husbandry": dict(_MISSING),
-        "ethics_statement": dict(_MISSING),
-        "adverse_events": dict(_MISSING),
-        "interpretation": dict(_MISSING),
-    }
+    arrive = {k: dict(_MISSING) for k in _ARRIVE_KEYS}
 
-    # ── VCG hints — all null / empty (no full text) ─────────────────────────
     vcg_hints = {
         "treatment_column_name": None,
         "control_group_label": None,

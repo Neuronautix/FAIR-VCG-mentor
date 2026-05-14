@@ -120,10 +120,11 @@ export const extractPaperMetadataStream = (
   onStatus: (msg: string) => void,
   onResult: (data: any) => void,
   onError: (msg: string) => void,
+  signal?: AbortSignal,
 ): Promise<void> => {
   const form = new FormData()
   form.append('file', file)
-  return fetch('/api/paper/extract/stream', { method: 'POST', body: form }).then(async (res) => {
+  return fetch('/api/paper/extract/stream', { method: 'POST', body: form, signal }).then(async (res) => {
     if (!res.ok) {
       const text = await res.text()
       throw new Error(text)
@@ -131,24 +132,45 @@ export const extractPaperMetadataStream = (
     const reader = res.body!.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const event = JSON.parse(line.slice(6))
-            if (event.type === 'status') onStatus(event.message)
-            else if (event.type === 'result') onResult(event.data)
-            else if (event.type === 'error') onError(event.message)
-          } catch {}
+    try {
+      while (true) {
+        if (signal?.aborted) break
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6))
+              if (event.type === 'status') onStatus(event.message)
+              else if (event.type === 'result') onResult(event.data)
+              else if (event.type === 'error') onError(event.message)
+            } catch {}
+          }
         }
       }
+    } finally {
+      reader.cancel()
     }
   })
+}
+
+export const buildMetadataPatch = (extraction: {
+  dataset_metadata: Record<string, any>
+  arrive: Record<string, any>
+}): Record<string, any> => {
+  const dm = extraction.dataset_metadata
+  const patch: Record<string, any> = {}
+  const scalar = ['title', 'description', 'creator', 'institution', 'species',
+                   'study_type', 'license', 'funding_source', 'protocol_reference']
+  for (const key of scalar) {
+    if (dm[key] != null) patch[key] = dm[key]
+  }
+  if (dm.keywords?.length) patch.keywords = dm.keywords
+  patch.arrive = extraction.arrive
+  return patch
 }
 
 export const fetchPaperByDOI = (doi: string): Promise<any> =>

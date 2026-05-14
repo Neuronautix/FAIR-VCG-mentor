@@ -25,6 +25,7 @@ import {
 } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import {
+  buildMetadataPatch,
   extractPaperMetadataStream,
   fetchPaperByDOI,
   getStoredPaperExtraction,
@@ -238,6 +239,9 @@ export default function PaperImportPage() {
   const [showArrive, setShowArrive] = useState(false)
   const [doi, setDoi] = useState('')
   const [doiLoading, setDoiLoading] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => { abortRef.current?.abort() }, [])
 
   // Restore persisted extraction when a dataset is loaded
   useEffect(() => {
@@ -249,6 +253,8 @@ export default function PaperImportPage() {
   }, [datasetId])
 
   const handleFile = async (file: File) => {
+    abortRef.current?.abort()
+    abortRef.current = new AbortController()
     setError(null)
     setApplySuccess(false)
     setLoading(true)
@@ -269,8 +275,10 @@ export default function PaperImportPage() {
           setError(msg)
           setLoading(false)
         },
+        abortRef.current.signal,
       )
     } catch (err: any) {
+      if (err?.name === 'AbortError') return
       const msg =
         err?.message ??
         'Extraction failed. Check that ANTHROPIC_API_KEY is configured on the server.'
@@ -305,22 +313,8 @@ export default function PaperImportPage() {
 
   const handleApply = async () => {
     if (!paperExtraction || !datasetId) return
-    const dm = paperExtraction.dataset_metadata
-    const patch: Record<string, any> = {}
-    if (dm.title) patch.title = dm.title
-    if (dm.description) patch.description = dm.description
-    if (dm.creator) patch.creator = dm.creator
-    if (dm.institution) patch.institution = dm.institution
-    if (dm.species) patch.species = dm.species
-    if (dm.study_type) patch.study_type = dm.study_type
-    if (dm.keywords?.length) patch.keywords = dm.keywords
-    if (dm.license) patch.license = dm.license
-    if (dm.funding_source) patch.funding_source = dm.funding_source
-    if (dm.protocol_reference) patch.protocol_reference = dm.protocol_reference
-    // Store ARRIVE data in metadata for ARRIVE export engine
-    patch.arrive = paperExtraction.arrive
     try {
-      const saved = await saveMetadata(datasetId, patch as any)
+      const saved = await saveMetadata(datasetId, buildMetadataPatch(paperExtraction) as any)
       setMetadata(saved.metadata)
       setApplySuccess(true)
     } catch {

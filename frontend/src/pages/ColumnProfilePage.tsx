@@ -108,7 +108,7 @@ function ColumnEditor({
           <InputLabel>Data type</InputLabel>
           <Select
             label="Data type"
-            value={col.user_type ? col.data_type : col.data_type}
+            value={col.data_type}
             onChange={(e) => onChange({ ...col, data_type: e.target.value })}
           >
             {DATA_TYPES.map((t) => (

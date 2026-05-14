@@ -472,27 +472,19 @@ async def stream_paper_extract(file: UploadFile = File(...)):
             "Inferring VCG column hints…",
             "Finalising extraction…",
         ]
-        for msg in status_messages:
+        idx = 0
+        while True:
             try:
                 result = await _asyncio.wait_for(_asyncio.shield(task), timeout=7.0)
                 yield f"data: {json.dumps({'type': 'result', 'data': result})}\n\n"
                 return
             except _asyncio.TimeoutError:
+                msg = status_messages[idx % len(status_messages)]
                 yield f"data: {json.dumps({'type': 'status', 'message': msg})}\n\n"
-            except RuntimeError as exc:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
-                return
+                idx += 1
             except Exception as exc:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
                 return
-
-        try:
-            result = await task
-            yield f"data: {json.dumps({'type': 'result', 'data': result})}\n\n"
-        except RuntimeError as exc:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
-        except Exception as exc:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
 
     from fastapi.responses import StreamingResponse
     return StreamingResponse(

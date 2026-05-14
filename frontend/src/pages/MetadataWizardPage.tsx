@@ -104,11 +104,7 @@ export default function MetadataWizardPage() {
                   const current = merged[formKey]
                   const isEmpty = !current || (Array.isArray(current) ? current.length === 0 : current === '')
                   if (isEmpty) {
-                    if (Array.isArray(paperValue)) {
-                      ;(merged as any)[formKey] = paperValue
-                    } else {
-                      ;(merged as any)[formKey] = paperValue
-                    }
+                    ;(merged as any)[formKey] = paperValue
                     filled.add(formKey)
                   }
                 }
@@ -122,14 +118,7 @@ export default function MetadataWizardPage() {
               tryFill('license', dm.license)
               tryFill('funding_source', dm.funding_source)
               tryFill('protocol_reference', dm.protocol_reference)
-              if (dm.keywords && dm.keywords.length > 0) {
-                const current = merged.keywords
-                const isEmpty = !current || current.length === 0
-                if (isEmpty) {
-                  merged.keywords = dm.keywords
-                  filled.add('keywords')
-                }
-              }
+              if (dm.keywords?.length) tryFill('keywords', dm.keywords)
 
               if (filled.size > 0) {
                 setPaperFilledFields(filled)
@@ -143,7 +132,7 @@ export default function MetadataWizardPage() {
         })
         .catch(() => setError('Failed to load existing metadata.'))
     }
-  }, [datasetId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [datasetId, paperExtraction]) // re-run when extraction arrives after page is already mounted
 
   if (!datasetId) {
     return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>

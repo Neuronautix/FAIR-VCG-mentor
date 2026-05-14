@@ -336,6 +336,106 @@ async def get_llm_fair_score(dataset_id: str):
     return result
 
 
+# ── HITL (human-in-the-loop) suggestion queue ───────────────────────────────
+
+@app.get("/api/llm/status")
+async def llm_status():
+    from llm_service import llm_enabled
+    return {"enabled": llm_enabled()}
+
+
+@app.get("/api/hitl/{dataset_id}/suggestions")
+async def list_hitl(dataset_id: str, status: Optional[str] = None, category: Optional[str] = None):
+    from hitl import list_suggestions
+    s = _require(dataset_id)
+    return {"suggestions": list_suggestions(s, status=status, category=category)}
+
+
+@app.post("/api/hitl/{dataset_id}/suggestions/{suggestion_id}/approve")
+async def approve_hitl(dataset_id: str, suggestion_id: str):
+    from hitl import approve_and_apply
+    s = _require(dataset_id)
+    try:
+        suggestion, result = approve_and_apply(s, suggestion_id)
+    except KeyError:
+        raise HTTPException(404, "Suggestion not found.")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    _save_session(dataset_id, s)
+    return {"suggestion": suggestion, "result": result}
+
+
+@app.post("/api/hitl/{dataset_id}/suggestions/{suggestion_id}/reject")
+async def reject_hitl(dataset_id: str, suggestion_id: str):
+    from hitl import update_status
+    s = _require(dataset_id)
+    try:
+        suggestion = update_status(s, suggestion_id, "rejected")
+    except KeyError:
+        raise HTTPException(404, "Suggestion not found.")
+    _save_session(dataset_id, s)
+    return {"suggestion": suggestion}
+
+
+@app.put("/api/hitl/{dataset_id}/suggestions/{suggestion_id}")
+async def edit_hitl(dataset_id: str, suggestion_id: str, body: Dict[str, Any]):
+    from hitl import edit_payload
+    s = _require(dataset_id)
+    payload = body.get("payload")
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "Body must include a 'payload' object.")
+    try:
+        suggestion = edit_payload(s, suggestion_id, payload)
+    except KeyError:
+        raise HTTPException(404, "Suggestion not found.")
+    _save_session(dataset_id, s)
+    return {"suggestion": suggestion}
+
+
+@app.post("/api/llm/{dataset_id}/suggest/columns")
+async def llm_suggest_columns(dataset_id: str, body: Optional[Dict[str, Any]] = None):
+    """Run Haiku on selected columns; results land in the HITL queue as pending."""
+    from llm_column_enricher import suggest_column_metadata, suggestion_to_hitl_payload
+    from llm_service import LLMUnavailable
+    from hitl import add_suggestions
+    s = _require(dataset_id)
+    body = body or {}
+    only_columns = body.get("columns")
+    try:
+        suggestions = suggest_column_metadata(
+            s["columns"], only_columns=only_columns, metadata=s.get("metadata", {})
+        )
+    except LLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    items = [suggestion_to_hitl_payload(x) for x in suggestions if x]
+    created = add_suggestions(s, items)
+    _save_session(dataset_id, s)
+    return {"created": created, "n_raw": len(suggestions)}
+
+
+@app.post("/api/llm/{dataset_id}/suggest/issue-fixes")
+async def llm_suggest_issue_fixes(dataset_id: str):
+    from llm_issue_fixer import suggest_issue_fixes, fix_to_hitl_payload
+    from llm_service import LLMUnavailable
+    from hitl import add_suggestions
+    s = _require(dataset_id)
+    issues = s.get("issues") or []
+    if not issues:
+        return {"created": [], "n_raw": 0}
+    try:
+        fixes = suggest_issue_fixes(issues, s.get("metadata", {}), s["columns"])
+    except LLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    by_id = {i["id"]: i for i in issues}
+    items = [
+        fix_to_hitl_payload(f, by_id[f["issue_id"]])
+        for f in fixes if f.get("issue_id") in by_id
+    ]
+    created = add_suggestions(s, items)
+    _save_session(dataset_id, s)
+    return {"created": created, "n_raw": len(fixes)}
+
+
 @app.get("/api/uris/{dataset_id}")
 async def get_uri_suggestions(dataset_id: str):
     s = _require(dataset_id)

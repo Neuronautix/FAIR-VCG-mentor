@@ -30,7 +30,14 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { saveTemplate, updateColumns } from '../api/client'
+import {
+  getProfile,
+  listHITLSuggestions,
+  requestLLMColumnSuggestions,
+  saveTemplate,
+  updateColumns,
+} from '../api/client'
+import HITLPanel from '../components/HITLPanel'
 import { useStore } from '../store/useStore'
 import type { ColumnProfile } from '../store/useStore'
 
@@ -161,7 +168,10 @@ export default function ColumnProfilePage() {
     setLowConfidenceColumns,
     setInferenceMetrics,
     paperExtraction,
+    llmEnabled,
+    setHITLSuggestions,
   } = useStore()
+  const [llmRequesting, setLlmRequesting] = useState(false)
   const [localCols, setLocalCols] = useState<ColumnProfile[]>(columns)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -194,6 +204,29 @@ export default function ColumnProfilePage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleRequestLLM = async () => {
+    if (!datasetId) return
+    setLlmRequesting(true)
+    try {
+      const targets = lowConfidenceColumns.length
+        ? lowConfidenceColumns.map((c) => c.name)
+        : undefined
+      await requestLLMColumnSuggestions(datasetId, targets)
+      const fresh = await listHITLSuggestions(datasetId)
+      setHITLSuggestions(fresh)
+    } finally {
+      setLlmRequesting(false)
+    }
+  }
+
+  const refreshColumns = async () => {
+    if (!datasetId) return
+    const fresh = await getProfile(datasetId)
+    setColumns(fresh.columns)
+    setLocalCols(fresh.columns)
+    setFairScore(null)
   }
 
   const handleSaveTemplate = async () => {
@@ -285,6 +318,26 @@ export default function ColumnProfilePage() {
         Review and correct the automatic column classification below. Descriptions and units are used
         to generate the data dictionary, CSVW, and JSON-LD exports.
       </Alert>
+
+      <HITLPanel
+        category="column_metadata"
+        title="AI column suggestions — Human review required"
+        emptyHint={
+          llmEnabled === false
+            ? 'Claude Haiku is disabled on the server. Set ANTHROPIC_API_KEY to enable.'
+            : 'Click "Ask Claude Haiku" to get metadata suggestions for low-confidence columns. Every suggestion is shown here for you to approve, edit, or reject.'
+        }
+        refreshAction={{
+          label: lowConfidenceColumns.length
+            ? `Ask Claude Haiku (${lowConfidenceColumns.length})`
+            : 'Ask Claude Haiku',
+          onClick: handleRequestLLM,
+          pending: llmRequesting,
+        }}
+        onApplied={() => {
+          refreshColumns()
+        }}
+      />
 
       {showPaperHintBanner && (
         <Alert

@@ -1,0 +1,155 @@
+"""
+Central wrapper around the Anthropic Claude Haiku API.
+
+All LLM calls in the app should funnel through `call_haiku` so we get
+consistent error handling, ephemeral system-prompt caching, and a
+single place to enforce anti-hallucination guards on tool outputs.
+
+Anti-hallucination strategy:
+- Tool inputs are constrained by JSON schema (forced via tool_choice).
+- After the call, `validate_against_columns` filters out any column
+  names the model invented that are not in the real dataset.
+- Risky outputs (column type changes, metadata writes, VCG configs)
+  are NEVER auto-applied — they are placed in the HITL queue for the
+  user to approve, edit, or reject.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import time
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+class LLMUnavailable(RuntimeError):
+    """Raised when the Anthropic API key is missing or the call fails."""
+
+
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+_RETRYABLE_STATUS = (408, 429, 500, 502, 503, 504)
+
+
+def llm_enabled() -> bool:
+    return bool(os.getenv("ANTHROPIC_API_KEY"))
+
+
+def _client():
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise LLMUnavailable(
+            "ANTHROPIC_API_KEY is not configured. Set this environment "
+            "variable to enable Haiku-powered features."
+        )
+    try:
+        import anthropic
+    except ImportError as exc:
+        raise LLMUnavailable(
+            "The 'anthropic' package is not installed."
+        ) from exc
+    return anthropic.Anthropic(api_key=api_key)
+
+
+def call_haiku(
+    *,
+    system_prompt: str,
+    tool: Dict[str, Any],
+    user_message: Any,
+    model_env: str = "HAIKU_MODEL",
+    max_tokens: int = 1024,
+    cache_system: bool = True,
+    max_retries: int = 2,
+) -> Dict[str, Any]:
+    """
+    Call Claude Haiku with a single forced tool, return the parsed tool input dict.
+
+    `user_message` may be a string or a list of content blocks (e.g. for PDF input).
+
+    Raises LLMUnavailable on auth/network failure after retries are exhausted.
+    """
+    client = _client()
+    model = os.getenv(model_env, DEFAULT_MODEL)
+
+    if isinstance(user_message, str):
+        user_content: Any = user_message
+    else:
+        user_content = user_message
+
+    system_block = [{"type": "text", "text": system_prompt}]
+    if cache_system:
+        system_block[0]["cache_control"] = {"type": "ephemeral"}
+
+    last_err: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=system_block,
+                tools=[tool],
+                tool_choice={"type": "tool", "name": tool["name"]},
+                messages=[{"role": "user", "content": user_content}],
+            )
+            for block in resp.content:
+                if getattr(block, "type", None) == "tool_use" and block.name == tool["name"]:
+                    return dict(block.input or {})
+            raise LLMUnavailable("Model returned no tool_use block.")
+        except LLMUnavailable:
+            raise
+        except Exception as exc:  # anthropic.APIError etc.
+            last_err = exc
+            status = getattr(exc, "status_code", None)
+            if attempt < max_retries and (status is None or status in _RETRYABLE_STATUS):
+                time.sleep(0.5 * (2 ** attempt))
+                continue
+            break
+
+    raise LLMUnavailable(f"Haiku call failed: {last_err}")
+
+
+# ── Anti-hallucination helpers ───────────────────────────────────────────────
+
+def validate_columns_exist(
+    suggested: List[str],
+    real_columns: List[str],
+) -> Dict[str, List[str]]:
+    """
+    Split a list of suggested column names into those that exist in the dataset
+    and those the model hallucinated.
+
+    Returns: {"valid": [...], "hallucinated": [...]}.
+    """
+    real_set = {c for c in real_columns}
+    valid = [c for c in suggested or [] if c in real_set]
+    bad = [c for c in suggested or [] if c not in real_set]
+    if bad:
+        logger.warning("LLM produced unknown column names: %s", bad)
+    return {"valid": valid, "hallucinated": bad}
+
+
+def value_exists_in_column(
+    df_value_set: List[str],
+    suggested: Any,
+) -> bool:
+    """True if `suggested` is one of the actual values seen in a column."""
+    if suggested is None:
+        return False
+    return str(suggested) in {str(v) for v in df_value_set}
+
+
+def fmt_columns_for_prompt(columns: List[Dict[str, Any]], limit: int = 50) -> str:
+    """Compact column summary suitable for LLM input. Keeps tokens low."""
+    lines = []
+    for c in columns[:limit]:
+        name = c.get("name")
+        itype = c.get("user_type") or c.get("inferred_type") or "?"
+        dtype = c.get("data_type") or "?"
+        samples = ", ".join(str(v) for v in (c.get("sample_values") or [])[:4])
+        unit = c.get("user_unit") or c.get("unit_guess") or ""
+        unit_s = f", unit={unit}" if unit else ""
+        lines.append(f"- {name} (type={itype}, dtype={dtype}{unit_s}) samples=[{samples}]")
+    if len(columns) > limit:
+        lines.append(f"... ({len(columns) - limit} more columns not shown)")
+    return "\n".join(lines)

@@ -1,0 +1,138 @@
+"""
+Use Claude Haiku to propose concrete, actionable fixes for FAIR issues
+detected by `fair_engine.detect_issues`.
+
+Each LLM suggestion is queued as a HITL "issue_fix" suggestion so the
+user can review the proposed remediation before any state changes occur.
+A suggestion may include an optional `metadata_patch` that, if approved,
+is applied to `session["metadata"]`.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from llm_service import call_haiku, fmt_columns_for_prompt
+
+
+SYSTEM_PROMPT = (
+    "You are a FAIR data assistant. Given a list of detected issues and the "
+    "dataset's current metadata, propose concrete, minimal fixes. Prefer "
+    "fixes that can be applied as a metadata patch (license, contact_email, "
+    "keywords, description, etc.). For issues that need user-side work "
+    "(rename a column, supply ethics statement) explain what the user "
+    "must do in one sentence. Be conservative: do not invent author names, "
+    "institutions, DOIs, license URIs, or other facts."
+)
+
+
+_TOOL = {
+    "name": "suggest_fair_fixes",
+    "description": "Produce one suggestion per input issue.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "suggestions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "issue_id": {
+                            "type": "string",
+                            "description": "Exact issue.id from the input.",
+                        },
+                        "recommendation": {
+                            "type": "string",
+                            "description": "1-2 sentence concrete remediation.",
+                        },
+                        "metadata_patch": {
+                            "type": "object",
+                            "description": (
+                                "Optional dict to merge into dataset metadata "
+                                "if approved. Use only well-known scalar keys like "
+                                "title, description, license, contact_email, "
+                                "creator, keywords. Leave empty if no patch is safe."
+                            ),
+                        },
+                        "confidence": {
+                            "type": "number",
+                            "description": "Self-rated 0-1 confidence.",
+                        },
+                    },
+                    "required": ["issue_id", "recommendation", "metadata_patch", "confidence"],
+                },
+            },
+        },
+        "required": ["suggestions"],
+    },
+}
+
+
+def suggest_issue_fixes(
+    issues: List[Dict[str, Any]],
+    metadata: Dict[str, Any],
+    columns: List[Dict[str, Any]],
+    max_issues: int = 12,
+) -> List[Dict[str, Any]]:
+    """Returns a list of LLM-proposed fixes, one per relevant issue."""
+    issues = [i for i in issues if i.get("id")]
+    if not issues:
+        return []
+
+    issues_block = "\n".join(
+        f"- id={i['id']} severity={i.get('severity')} column={i.get('column') or '-'} "
+        f"problem={i.get('problem')}"
+        for i in issues[:max_issues]
+    )
+
+    md_block = "\n".join(
+        f"- {k}: {v}" for k, v in (metadata or {}).items() if v not in (None, "", [], {})
+    ) or "(empty)"
+
+    user_msg = (
+        "## Current metadata\n" + md_block
+        + "\n\n## Detected issues (limit "
+        + str(max_issues) + ")\n" + issues_block
+        + "\n\n## Column overview (for context)\n"
+        + fmt_columns_for_prompt(columns, limit=20)
+    )
+
+    raw = call_haiku(
+        system_prompt=SYSTEM_PROMPT,
+        tool=_TOOL,
+        user_message=user_msg,
+        model_env="ISSUE_FIXER_MODEL",
+        max_tokens=2048,
+    )
+
+    issue_ids = {i["id"] for i in issues}
+    valid: List[Dict[str, Any]] = []
+    for s in raw.get("suggestions", []) or []:
+        if s.get("issue_id") in issue_ids and s.get("recommendation"):
+            patch = s.get("metadata_patch") or {}
+            # Restrict patch keys to a known safe set.
+            safe_keys = {
+                "title", "description", "license", "contact_email", "creator",
+                "institution", "keywords", "study_type", "species",
+                "protocol_reference", "funding_source", "version", "date_created",
+                "row_represents",
+            }
+            patch = {k: v for k, v in patch.items() if k in safe_keys}
+            s["metadata_patch"] = patch
+            valid.append(s)
+    return valid
+
+
+def fix_to_hitl_payload(fix: Dict[str, Any], issue: Dict[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"recommendation": fix["recommendation"]}
+    if fix.get("metadata_patch"):
+        payload["metadata_patch"] = fix["metadata_patch"]
+    return {
+        "category": "issue_fix",
+        "target": fix["issue_id"],
+        "source": "llm:claude-haiku-4-5",
+        "title": f"Fix: {issue.get('problem', fix['issue_id'])[:120]}",
+        "rationale": fix["recommendation"],
+        "payload": payload,
+        "confidence": float(fix.get("confidence") or 0.0),
+    }

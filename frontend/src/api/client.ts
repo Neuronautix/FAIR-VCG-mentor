@@ -181,3 +181,64 @@ export const storePaperExtraction = (id: string, extraction: any): Promise<void>
 
 export const getStoredPaperExtraction = (id: string): Promise<any> =>
   api.get(`/paper/${id}/extraction`).then((r) => r.data)
+
+// ── HITL (human-in-the-loop) ─────────────────────────────────────────────
+
+export interface HITLSuggestion {
+  id: string
+  category: 'column_metadata' | 'dataset_metadata' | 'vcg_config' | 'fair_recommendation' | 'issue_fix'
+  target: string
+  source: string
+  confidence: number
+  title: string
+  rationale: string
+  payload: Record<string, any>
+  status: 'pending' | 'approved' | 'rejected' | 'edited' | 'applied' | 'invalid'
+  validation: { ok: boolean; errors: string[] }
+  created_at: number
+  applied_at: number | null
+}
+
+export const getLLMStatus = (): Promise<{ enabled: boolean }> =>
+  api.get('/llm/status').then((r) => r.data)
+
+export const listHITLSuggestions = (
+  id: string,
+  filters?: { status?: string; category?: string },
+) =>
+  api
+    .get<{ suggestions: HITLSuggestion[] }>(`/hitl/${id}/suggestions`, { params: filters })
+    .then((r) => r.data.suggestions)
+
+export const approveHITLSuggestion = (id: string, sid: string) =>
+  api
+    .post<{ suggestion: HITLSuggestion; result: any }>(`/hitl/${id}/suggestions/${sid}/approve`)
+    .then((r) => r.data)
+
+export const rejectHITLSuggestion = (id: string, sid: string) =>
+  api
+    .post<{ suggestion: HITLSuggestion }>(`/hitl/${id}/suggestions/${sid}/reject`)
+    .then((r) => r.data)
+
+export const editHITLSuggestion = (id: string, sid: string, payload: Record<string, any>) =>
+  api
+    .put<{ suggestion: HITLSuggestion }>(`/hitl/${id}/suggestions/${sid}`, { payload })
+    .then((r) => r.data)
+
+export const requestLLMColumnSuggestions = (id: string, columns?: string[]) =>
+  api
+    .post<{ created: HITLSuggestion[]; n_raw: number }>(
+      `/llm/${id}/suggest/columns`,
+      columns ? { columns } : {},
+    )
+    .then((r) => r.data)
+
+export const requestLLMIssueFixes = (id: string) =>
+  api
+    .post<{ created: HITLSuggestion[]; n_raw: number }>(`/llm/${id}/suggest/issue-fixes`)
+    .then((r) => r.data)
+
+export const requestVCGLLMSuggest = (id: string) =>
+  api
+    .post<{ agent_msg: any; suggestion: HITLSuggestion | null }>(`/vcg/${id}/llm-suggest`)
+    .then((r) => r.data)

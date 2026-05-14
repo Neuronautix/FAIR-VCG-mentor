@@ -10,9 +10,11 @@ A web application that assesses CSV datasets against the FAIR data principles an
 
 The [FAIR data principles](https://www.go-fair.org/fair-principles/) — Findable, Accessible, Interoperable, and Reusable — define a framework for publishing research data in a way that maximises its long-term value. In practice, most CSV files produced during research fall short of FAIR compliance: column names are ambiguous, units are undocumented, there is no machine-readable license, and the file ships with no accompanying metadata. Fixing these problems manually is tedious and requires familiarity with multiple standards.
 
-FAIR-VCG Mentor automates the diagnostic step and provides a structured path to improvement. Upload a CSV and the tool immediately profiles every column — detecting encoding, delimiter, data types, semantic roles, and unit patterns — then scores the dataset against a 100-point FAIR rubric that maps each deduction to a specific, actionable issue. The scoring is fully transparent: every point lost corresponds to a named missing field or detectable structural problem.
+FAIR-VCG Mentor automates the diagnostic step and provides a structured path to improvement. Upload a CSV and the tool immediately profiles every column — detecting encoding, delimiter, data types, semantic roles, and unit patterns — then scores the dataset against a 105-point FAIR rubric that maps each deduction to a specific, actionable issue. The scoring is fully transparent: every point lost corresponds to a named missing field or detectable structural problem.
 
 The tool is particularly well-suited to life-sciences CSV datasets. Its semantic type inference covers patterns common in biology and clinical research: identifiers, measurements, biological descriptors, experimental conditions, time variables, and more.
+
+A **template layer** lets users match their dataset against community reporting standards (ARRIVE 2.0, MNMS for DVC cages, NAMO for new approach methodologies) or against any LinkML-based ontology schema. Templates auto-assign on upload at ≥ 90% confidence, drive VCG wizard prefill and predefined analyses (ARRIVE completeness, cage-effect ICC), and contribute up to 5 points under the FAIR R dimension.
 
 ### Virtual Control Group (VCG) Generation
 
@@ -50,13 +52,23 @@ Interactive API documentation (OpenAPI / Swagger) is at [http://localhost:8000/d
 
 **FAIR assessment**
 - Automated CSV profiling: encoding (chardet), delimiter, per-column data types, semantic types, units, missing-value counts, and sample values.
-- 100-point FAIR rubric across four dimensions (F=25, A=20, I=30, R=25). Every deduction is tied to a specific, named issue.
+- 105-point FAIR rubric across four dimensions (F=25, A=20, I=30, R=30). Every deduction is tied to a specific, named issue.
 - Issue detection with severity levels (high / medium / low) and actionable recommendations.
 - Table-shape inference: one-row-per-entity, repeated measures, long-format, wide-format.
 - Guided metadata enrichment wizard for dataset-level fields (title, description, license, creator, keywords, provenance).
 - Editable column profiles: label, description, data type, units, vocabulary URI, semantic type.
 - Linked-data URI suggestions for dataset, entities, observations, and columns.
 - Seven standards-compliant export formats (see table below).
+
+**Template / reporting-standard layer**
+- Built-in templates for ARRIVE 2.0 (reporting standard, dataset-level metadata), MNMS for DVC cages (CSV column schema conforming to ARRIVE), and NAMO NAM assays (dose-response / functional-assay schema for organoid / organ-on-chip data).
+- Hierarchical conformance: child templates declare `conforms_to:` and inherit parent requirements. Column-level matches automatically satisfy reporting-standard sections.
+- Auto-assignment on upload at score ≥ 0.9 (0.7 × column match + 0.3 × metadata match). Below that, ranked suggestions are surfaced.
+- Conformance report cross-walks present columns against required reporting-standard sections; missing fields degrade the FAIR R score (0/1/3/5 pts) without blocking VCG generation.
+- Template-locked VCG wizard inputs: when a template declares `vcg_defaults`, treatment/outcome/covariate fields are pre-set and visibly locked, with a Reset button to restore them.
+- Predefined analyses run alongside VCG generation: ARRIVE completeness report, cage-effect ICC for clustered data.
+- LinkML schema importer: paste any LinkML YAML (NAMO, MIACA, CFDE, …) and the tool converts classes/slots into a starter template with `class_iri_map` linkage.
+- Custom user templates: upload YAML/JSON, validated against the meta-schema, stored alongside the built-ins.
 
 **VCG generation**
 - Rule-based AI chat assistant that guides configuration through a natural conversation — no LLM API key required.
@@ -80,15 +92,16 @@ Interactive API documentation (OpenAPI / Swagger) is at [http://localhost:8000/d
 1. **Upload.** Drag and drop a CSV or Excel file. The file is profiled immediately on the server.
 2. **Overview.** Review summary statistics, the inferred table shape, and detected issues grouped by severity.
 3. **Column Profile.** Inspect and edit every column's inferred metadata: label, description, data type, semantic type, units, and linked-data URI.
-4. **FAIR Score.** See the overall score (0–100) broken down by Findable, Accessible, Interoperable, and Reusable dimensions, with per-criterion explanations and recommendations.
-5. **Metadata Wizard.** Fill in dataset-level metadata. The FAIR score updates on the next visit to the score page.
-6. **Export.** Download the enriched dataset in one or more supported formats.
+4. **FAIR Score.** See the overall score (0–105) broken down by Findable, Accessible, Interoperable, and Reusable dimensions, with per-criterion explanations and recommendations.
+5. **Metadata Wizard.** Fill in dataset-level metadata. Fields required by an assigned template are flagged. The FAIR score updates on the next visit to the score page.
+6. **Templates.** Review auto-assigned or suggested community templates (ARRIVE, MNMS, NAMO), inspect the conformance report, or import a LinkML schema as a starter template.
+7. **Export.** Download the enriched dataset in one or more supported formats.
 
-### VCG Generation (steps 7–9)
+### VCG Generation (steps 8–10)
 
-7. **VCG Chat or Wizard.** Configure the VCG through the chat assistant (recommended for first-time users) or the four-step wizard (recommended when settings are already known). Both paths accept: treatment column, control group label, outcome columns, covariate columns, generation method, and sample size.
-8. **Generation.** The four-agent pipeline runs asynchronously. A status bar cycles through agent names while work proceeds.
-9. **Results & Export.** Review the reliability score, balance diagnostics, and per-endpoint statistics. Download the synthetic CSV or the full Markdown statistical report.
+8. **VCG Chat or Wizard.** Configure the VCG through the chat assistant (recommended for first-time users) or the four-step wizard (recommended when settings are already known). Both paths accept: treatment column, control group label, outcome columns, covariate columns, generation method, and sample size. When a template is assigned, wizard fields driven by `vcg_defaults` are pre-filled and locked.
+9. **Generation.** The four-agent pipeline runs asynchronously. A status bar cycles through agent names while work proceeds. Template-declared predefined analyses (ARRIVE completeness, cage-effect ICC) run alongside the main pipeline.
+10. **Results & Export.** Review the reliability score, balance diagnostics, and per-endpoint statistics. Download the synthetic CSV or the full Markdown statistical report.
 
 ---
 
@@ -145,9 +158,11 @@ The Vite dev server proxies `/api` requests to the backend. When running outside
 
 ## Architecture
 
-The backend is a **FastAPI** application (Python). On upload, three modules run in sequence: `csv_profiler.py` handles encoding and type detection, `entity_detector.py` infers table shape, and `fair_engine.py` detects issues. Session state is persisted to SQLite (keyed by UUID) and also held in memory for the lifetime of the process. Export responses are streamed directly to the client.
+The backend is a **FastAPI** application (Python). On upload, three modules run in sequence: `csv_profiler.py` handles encoding and type detection, `entity_detector.py` infers table shape, and `fair_engine.py` detects issues. The `template_engine.py` then ranks community templates against the profiled CSV and auto-assigns the top candidate when its score crosses 0.9. Session state is persisted to SQLite (keyed by UUID) and also held in memory for the lifetime of the process. Export responses are streamed directly to the client.
 
-The VCG pipeline lives in the `vcg/` package. The `vcg_router.py` FastAPI router exposes chat, wizard, generation, status, and export endpoints under `/api/vcg/{dataset_id}/`. The `orchestrator.py` implements a finite-state rule-based conversation engine (no LLM required). `vcg_engine.py` runs the four agents synchronously inside `asyncio.to_thread`, updating the session on completion.
+The template layer is mounted under `/api/templates` (registry) and `/api/{dataset_id}/template/*` (assignment, validation, suggestions). `template_router.py` shares the same dependency-injection pattern as the VCG router. `linkml_import.py` converts LinkML schemas (NAMO, MIACA, …) into FAIR-VCG starter templates.
+
+The VCG pipeline lives in the `vcg/` package. The `vcg_router.py` FastAPI router exposes chat, wizard, generation, status, and export endpoints under `/api/vcg/{dataset_id}/`. The `orchestrator.py` implements a finite-state rule-based conversation engine (no LLM required). `vcg_engine.py` runs the four agents synchronously inside `asyncio.to_thread`, updating the session on completion. When a template is assigned, the wizard-prefill response overlays the template's `vcg_defaults` and the engine runs the template's predefined analyses.
 
 The frontend is a **React/TypeScript** single-page application built with Vite. Global state is managed by Zustand. An Axios client in `api/client.ts` maps one-to-one onto backend endpoints.
 
@@ -161,10 +176,14 @@ FAIR-vcg-mentor/
 ├── backend/
 │   ├── main.py               # FastAPI app, all REST endpoints
 │   ├── csv_profiler.py       # Encoding/delimiter detection, column type & semantic inference
-│   ├── fair_engine.py        # FAIR scoring (100-pt rubric) & issue detection
+│   ├── fair_engine.py        # FAIR scoring (105-pt rubric) & issue detection
 │   ├── entity_detector.py    # Table-shape inference
 │   ├── uri_suggester.py      # Linked-data URI generation
 │   ├── export_engine.py      # Multi-format export
+│   ├── template_engine.py    # Template loader, matcher, validator, conformance reporting
+│   ├── template_router.py    # FastAPI router — /api/templates/* endpoints
+│   ├── linkml_import.py      # LinkML schema → starter template converter
+│   ├── templates/            # arrive-v2, mnms-v1, namo-nam-assay-v1, plus user/
 │   └── vcg/
 │       ├── vcg_router.py     # FastAPI router — all /api/vcg/* endpoints
 │       ├── orchestrator.py   # Rule-based chat engine (finite-state machine)
@@ -196,7 +215,8 @@ FAIR-vcg-mentor/
             ├── ExportPage.tsx
             ├── VCGPage.tsx         # Chat interface + generation status polling
             ├── VCGWizardPage.tsx   # Four-step configuration wizard
-            └── VCGResultsPage.tsx  # Results, diagnostics, export
+            ├── VCGResultsPage.tsx  # Results, diagnostics, export
+            └── TemplateSelectorPage.tsx  # Template registry, suggestions, conformance, LinkML import
 ```
 
 ---

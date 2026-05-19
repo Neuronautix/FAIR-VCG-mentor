@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArticleIcon from '@mui/icons-material/Article'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import DownloadIcon from '@mui/icons-material/Download'
 import ErrorIcon from '@mui/icons-material/Error'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import SchemaIcon from '@mui/icons-material/Schema'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import {
   Alert,
@@ -15,19 +19,28 @@ import {
   Collapse,
   Divider,
   Grid,
+  LinearProgress,
   List,
   ListItem,
   ListItemText,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import {
+  applyTemplateFromPaper,
   buildMetadataPatch,
   extractPaperMetadataStream,
   fetchPaperByDOI,
+  generateStarterYaml,
+  getPaperTemplateSuggestions,
   getStoredPaperExtraction,
   saveMetadata,
   storePaperExtraction,
@@ -223,6 +236,306 @@ function VCGHintsCard({ hints }: { hints: PaperExtraction['vcg_hints'] }) {
           These are suggestions based on the paper text. The VCG wizard lets you confirm or
           override each column assignment when you have your CSV loaded.
         </Alert>
+      </CardContent>
+    </Card>
+  )
+}
+
+interface FieldMapping {
+  field_id: string
+  label: string
+  arrive_section: string
+  value: string | null
+  source: string | null
+  status: 'filled' | 'missing'
+  severity: string
+  is_column: boolean
+}
+
+interface TemplateCandidate {
+  id: string
+  name: string
+  version: string
+  description: string
+  score: number
+  reasons: string[]
+  field_mapping: FieldMapping[]
+}
+
+function ScoreBar({ score }: { score: number }) {
+  const pct = Math.round(score * 100)
+  const color = pct >= 70 ? 'success' : pct >= 40 ? 'warning' : 'error'
+  return (
+    <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 160 }}>
+      <LinearProgress
+        variant="determinate"
+        value={pct}
+        color={color}
+        sx={{ flex: 1, height: 8, borderRadius: 4 }}
+      />
+      <Typography variant="caption" fontWeight={600} sx={{ minWidth: 32 }}>
+        {pct}%
+      </Typography>
+    </Stack>
+  )
+}
+
+function FieldMappingTable({ mapping }: { mapping: FieldMapping[] }) {
+  const metaFields = mapping.filter((f) => !f.is_column)
+  const colFields = mapping.filter((f) => f.is_column)
+
+  const renderRows = (rows: FieldMapping[]) =>
+    rows.map((f) => (
+      <TableRow key={f.field_id} sx={{ '&:last-child td': { border: 0 } }}>
+        <TableCell sx={{ py: 0.75, fontSize: 12 }}>
+          <Box>
+            <Typography variant="caption" fontWeight={500}>{f.label}</Typography>
+            {f.arrive_section && (
+              <Typography variant="caption" color="text.secondary" display="block">
+                {f.arrive_section}
+              </Typography>
+            )}
+          </Box>
+        </TableCell>
+        <TableCell sx={{ py: 0.75, fontSize: 12, maxWidth: 260 }}>
+          {f.value ? (
+            <Typography variant="caption" sx={{ wordBreak: 'break-word' }}>
+              {f.value.length > 120 ? f.value.slice(0, 120) + '…' : f.value}
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="text.disabled" fontStyle="italic">
+              Not found in paper
+            </Typography>
+          )}
+        </TableCell>
+        <TableCell sx={{ py: 0.75 }}>
+          <Chip
+            size="small"
+            label={f.status === 'filled' ? 'Filled' : 'Missing'}
+            color={f.status === 'filled' ? 'success' : f.severity === 'high' ? 'error' : 'default'}
+            sx={{ fontSize: 10, height: 20 }}
+          />
+        </TableCell>
+      </TableRow>
+    ))
+
+  return (
+    <Box sx={{ mt: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+      {metaFields.length > 0 && (
+        <>
+          <Typography variant="caption" fontWeight={600} sx={{ px: 1.5, py: 0.75, bgcolor: 'grey.50', display: 'block', borderBottom: '1px solid', borderColor: 'divider' }}>
+            Metadata fields
+          </Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell sx={{ fontSize: 11, py: 0.5 }}>Template field</TableCell>
+                <TableCell sx={{ fontSize: 11, py: 0.5 }}>Extracted value</TableCell>
+                <TableCell sx={{ fontSize: 11, py: 0.5 }}>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>{renderRows(metaFields)}</TableBody>
+          </Table>
+        </>
+      )}
+      {colFields.length > 0 && (
+        <>
+          <Typography variant="caption" fontWeight={600} sx={{ px: 1.5, py: 0.75, bgcolor: 'grey.50', display: 'block', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider' }}>
+            Required columns
+          </Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell sx={{ fontSize: 11, py: 0.5 }}>Column field</TableCell>
+                <TableCell sx={{ fontSize: 11, py: 0.5 }}>Matched from paper hints</TableCell>
+                <TableCell sx={{ fontSize: 11, py: 0.5 }}>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>{renderRows(colFields)}</TableBody>
+          </Table>
+        </>
+      )}
+    </Box>
+  )
+}
+
+function TemplateSuggestionsCard({
+  extraction,
+  datasetId,
+}: {
+  extraction: object
+  datasetId: string | null
+}) {
+  const [candidates, setCandidates] = useState<TemplateCandidate[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [appliedId, setAppliedId] = useState<string | null>(null)
+  const [applyingId, setApplyingId] = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    getPaperTemplateSuggestions(extraction)
+      .then((data) => {
+        if (!cancelled) setCandidates(data.candidates ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not score templates against paper.')
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [extraction])
+
+  const handleApply = async (tid: string) => {
+    if (!datasetId) return
+    setApplyingId(tid)
+    try {
+      await applyTemplateFromPaper(datasetId, tid)
+      setAppliedId(tid)
+    } catch {
+      setError(`Failed to assign template '${tid}'.`)
+    } finally {
+      setApplyingId(null)
+    }
+  }
+
+  const handleDownloadYaml = async (tid: string) => {
+    setDownloadingId(tid)
+    try {
+      const data = await generateStarterYaml(tid, extraction)
+      const blob = new Blob([data.starter_yaml], { type: 'text/yaml' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${tid}-starter.yaml`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError('Failed to generate starter YAML.')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
+          <SchemaIcon color="primary" sx={{ fontSize: 20 }} />
+          <Typography variant="subtitle1" fontWeight={600}>
+            Suggested Reporting Templates
+          </Typography>
+          <Tooltip title="Templates are scored against study type, species, ARRIVE field coverage, and keywords extracted from the paper.">
+            <HelpOutlineIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+          </Tooltip>
+        </Stack>
+
+        {loading && <CircularProgress size={22} />}
+        {error && <Alert severity="warning" sx={{ fontSize: 12 }}>{error}</Alert>}
+
+        {!loading && candidates.length === 0 && !error && (
+          <Typography variant="body2" color="text.secondary" fontStyle="italic">
+            No templates matched the paper content above the minimum threshold.
+          </Typography>
+        )}
+
+        <Stack spacing={1.5}>
+          {candidates.map((c) => {
+            const isExpanded = expandedId === c.id
+            const filled = c.field_mapping.filter((f) => f.status === 'filled').length
+            const total = c.field_mapping.length
+
+            return (
+              <Box
+                key={c.id}
+                sx={{
+                  border: '1px solid',
+                  borderColor: appliedId === c.id ? 'success.main' : 'divider',
+                  borderRadius: 2,
+                  p: 1.5,
+                  bgcolor: appliedId === c.id ? 'success.50' : 'background.paper',
+                }}
+              >
+                <Stack direction="row" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={1}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
+                      <Typography variant="body2" fontWeight={600}>{c.name}</Typography>
+                      <Chip size="small" label={`v${c.version}`} variant="outlined" sx={{ fontSize: 10, height: 18 }} />
+                      {appliedId === c.id && (
+                        <Chip size="small" label="Applied" color="success" icon={<CheckCircleIcon sx={{ fontSize: 12 }} />} sx={{ fontSize: 10, height: 20 }} />
+                      )}
+                    </Stack>
+                    <ScoreBar score={c.score} />
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap" mt={0.5}>
+                      {c.reasons.map((r, i) => (
+                        <Typography key={i} variant="caption" color="text.secondary">
+                          · {r}
+                        </Typography>
+                      ))}
+                    </Stack>
+                    {total > 0 && (
+                      <Typography variant="caption" color={filled === total ? 'success.main' : 'text.secondary'} sx={{ mt: 0.25, display: 'block' }}>
+                        {filled}/{total} fields can be pre-filled from paper
+                      </Typography>
+                    )}
+                  </Box>
+
+                  <Stack direction="row" spacing={0.75} alignItems="center" flexShrink={0}>
+                    <Tooltip title={!datasetId ? 'Upload a CSV first to assign a template to a dataset' : ''}>
+                      <span>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          disabled={!datasetId || applyingId === c.id || appliedId === c.id}
+                          onClick={() => handleApply(c.id)}
+                          sx={{ fontSize: 12, whiteSpace: 'nowrap' }}
+                        >
+                          {applyingId === c.id ? <CircularProgress size={14} /> : appliedId === c.id ? 'Applied' : 'Use template'}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Download a starter YAML template pre-filled with paper hints — reusable for future CSV imports">
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={downloadingId === c.id}
+                        onClick={() => handleDownloadYaml(c.id)}
+                        startIcon={downloadingId === c.id ? <CircularProgress size={12} /> : <DownloadIcon sx={{ fontSize: 14 }} />}
+                        sx={{ fontSize: 12, whiteSpace: 'nowrap' }}
+                      >
+                        Starter YAML
+                      </Button>
+                    </Tooltip>
+                    {c.field_mapping.length > 0 && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                        endIcon={isExpanded ? <ExpandLessIcon sx={{ fontSize: 14 }} /> : <ExpandMoreIcon sx={{ fontSize: 14 }} />}
+                        sx={{ fontSize: 12 }}
+                      >
+                        Mapping
+                      </Button>
+                    )}
+                  </Stack>
+                </Stack>
+
+                <Collapse in={isExpanded}>
+                  <FieldMappingTable mapping={c.field_mapping} />
+                </Collapse>
+              </Box>
+            )
+          })}
+        </Stack>
+
+        {appliedId && datasetId && (
+          <Alert severity="success" sx={{ mt: 1.5, fontSize: 12 }}>
+            Template assigned. Head to the <strong>Templates</strong> page to review the full conformance report, or continue with your CSV workflow.
+          </Alert>
+        )}
       </CardContent>
     </Card>
   )
@@ -495,6 +808,11 @@ export default function PaperImportPage() {
               <VCGHintsCard hints={paperExtraction.vcg_hints} />
             </Grid>
           </Grid>
+
+          {/* Template suggestions */}
+          <Box sx={{ mb: 2 }}>
+            <TemplateSuggestionsCard extraction={paperExtraction} datasetId={datasetId} />
+          </Box>
 
           {/* ARRIVE checklist — collapsible */}
           <Box>

@@ -557,6 +557,299 @@ def conformance_to_issues(
     return issues
 
 
+# ── Paper-based template suggestion ──────────────────────────────────────────
+
+# Keys present in the paper extraction arrive dict
+_PAPER_ARRIVE_KEYS = {
+    "study_design", "sample_size", "inclusion_exclusion_criteria",
+    "randomisation", "blinding", "outcome_measures", "statistical_methods",
+    "experimental_animals", "housing_husbandry", "ethics_statement",
+    "adverse_events", "interpretation",
+}
+
+# template field_id → (arrive_key | None, metadata_key | None)
+# First match wins. arrive_key: look in extraction["arrive"][key].value
+# metadata_key: look in extraction["dataset_metadata"][key]
+_FIELD_LOOKUP: List[Tuple[str, Optional[str], Optional[str]]] = [
+    ("study_title",                   None,                        "title"),
+    ("primary_contact",               None,                        "creator"),
+    ("species",                       None,                        "species"),
+    ("grant_code",                    None,                        "funding_source"),
+    ("protocol_numbers",              None,                        "protocol_reference"),
+    ("study_context_of_use",          None,                        "description"),
+    ("biological_context",            None,                        "species"),
+    ("title",                         None,                        "title"),
+    ("description",                   None,                        "description"),
+    ("license",                       None,                        "license"),
+    ("keywords",                      None,                        "keywords"),
+    ("study_design",                  "study_design",              None),
+    ("randomisation",                 "randomisation",             None),
+    ("blinding",                      "blinding",                  None),
+    ("outcome_measures",              "outcome_measures",          None),
+    ("statistical_methods",           "statistical_methods",       None),
+    ("adverse_events",                "adverse_events",            None),
+    ("ethics_statement",              "ethics_statement",          None),
+    ("interpretation",                "interpretation",            None),
+    ("total_n",                       "sample_size",               None),
+    ("housing_density",               "housing_husbandry",         None),
+    ("procedures_description",        "study_design",              None),
+    ("surgical_procedures",           "study_design",              None),
+    ("experimental_animals",          "experimental_animals",      None),
+    ("strain",                        "experimental_animals",      None),
+    ("sex",                           "experimental_animals",      None),
+    ("age",                           "experimental_animals",      None),
+    ("weight",                        "experimental_animals",      None),
+    ("anaesthesia",                   "experimental_animals",      None),
+    ("supplier",                      "experimental_animals",      None),
+    ("inclusion_exclusion_criteria",  "inclusion_exclusion_criteria", None),
+    ("endpoints",                     "outcome_measures",          None),
+    ("perturbations",                 None,                        "study_type"),
+]
+_FIELD_LOOKUP_MAP: Dict[str, Tuple[Optional[str], Optional[str]]] = {
+    fid: (ak, mk) for fid, ak, mk in _FIELD_LOOKUP
+}
+
+
+def _lookup_paper_value(
+    field_id: str,
+    arrive: Dict[str, Any],
+    meta: Dict[str, Any],
+) -> Tuple[Optional[str], Optional[str], str]:
+    """Return (value, source_path, status) for a template field_id."""
+    # Check direct arrive key match first
+    if field_id in _PAPER_ARRIVE_KEYS:
+        f = arrive.get(field_id, {})
+        val = f.get("value") if isinstance(f, dict) else None
+        status = f.get("status", "missing") if isinstance(f, dict) else "missing"
+        if isinstance(val, list):
+            val = ", ".join(str(v) for v in val) if val else None
+        return val, f"arrive.{field_id}", status
+
+    lookup = _FIELD_LOOKUP_MAP.get(field_id)
+    if lookup:
+        arrive_key, meta_key = lookup
+        if arrive_key:
+            f = arrive.get(arrive_key, {})
+            val = f.get("value") if isinstance(f, dict) else None
+            status = f.get("status", "missing") if isinstance(f, dict) else "missing"
+            if isinstance(val, list):
+                val = ", ".join(str(v) for v in val) if val else None
+            return val, f"arrive.{arrive_key}", status
+        if meta_key:
+            val = meta.get(meta_key)
+            if isinstance(val, list):
+                val = ", ".join(str(v) for v in val) if val else None
+            return val, f"dataset_metadata.{meta_key}", "found" if val else "missing"
+
+    return None, None, "missing"
+
+
+def _build_field_mapping(tpl: Template, extraction: Dict[str, Any]) -> List[Dict[str, Any]]:
+    arrive = extraction.get("arrive", {})
+    meta = extraction.get("dataset_metadata", {})
+    vcg_hints = extraction.get("vcg_hints", {})
+    outcome_cols = list(vcg_hints.get("outcome_columns") or [])
+    covariate_cols = list(vcg_hints.get("covariate_columns") or [])
+
+    mapping: List[Dict[str, Any]] = []
+
+    for req in tpl.required_metadata:
+        val, source, status = _lookup_paper_value(req.id, arrive, meta)
+        mapping.append({
+            "field_id": req.id,
+            "label": req.id.replace("_", " ").title(),
+            "arrive_section": req.arrive_section or "",
+            "value": val,
+            "source": source,
+            "status": "filled" if val else "missing",
+            "severity": req.severity,
+            "is_column": False,
+        })
+
+    for req in tpl.required_columns[:12]:
+        val = None
+        source = None
+        for col in outcome_cols + covariate_cols:
+            for pat in req.name_patterns:
+                if _pattern_matches(pat, col):
+                    val = col
+                    source = "vcg_hints.outcome_columns"
+                    break
+            if val:
+                break
+        mapping.append({
+            "field_id": req.id,
+            "label": req.id.replace("_", " ").title(),
+            "arrive_section": req.arrive_section or "",
+            "value": val,
+            "source": source,
+            "status": "filled" if val else "missing",
+            "severity": req.severity,
+            "is_column": True,
+        })
+
+    return mapping
+
+
+def _score_template_from_paper(
+    tpl: Template,
+    arrive: Dict[str, Any],
+    meta: Dict[str, Any],
+    vcg_hints: Dict[str, Any],
+) -> Tuple[float, List[str]]:
+    score = 0.0
+    reasons: List[str] = []
+
+    tid_lower = tpl.id.lower()
+    keywords = [k.lower() for k in (meta.get("keywords") or [])]
+    species = (meta.get("species") or "").lower()
+    study_type = (meta.get("study_type") or "").lower()
+    is_in_vivo = any(kw in species for kw in [
+        "mus", "rat", "mouse", "rattus", "rabbit", "canis", "primate", "macaca",
+    ])
+
+    arrive_vals = [v for v in arrive.values() if isinstance(v, dict)]
+    n_found = sum(1 for f in arrive_vals if f.get("status") in ("found", "inferred"))
+    n_total = len(arrive_vals)
+
+    if "arrive" in tid_lower:
+        if n_total > 0:
+            ratio = n_found / n_total
+            score += ratio * 0.6
+            if n_found > 0:
+                reasons.append(f"{n_found}/{n_total} ARRIVE 2.0 fields extracted")
+        if is_in_vivo:
+            score += 0.25
+            reasons.append(f"in vivo species: {meta.get('species', '')}")
+    elif "mnms" in tid_lower:
+        cage_kws = ["cage", "dvc", "homecage", "home cage", "group hous"]
+        matched = [k for k in keywords if any(ck in k for ck in cage_kws)]
+        if matched:
+            score += 0.55
+            reasons.append(f"cage/DVC keywords: {', '.join(matched[:2])}")
+        if is_in_vivo:
+            score += 0.1
+    elif "namo" in tid_lower:
+        nam_kws = ["nam", "in vitro", "assay", "dose-response", "dose response",
+                   "ic50", "cell line", "organoid", "microphysiological"]
+        matched = [k for k in keywords if any(nk in k for nk in nam_kws)]
+        if matched:
+            score += 0.55
+            reasons.append(f"NAM/in vitro keywords: {', '.join(matched[:2])}")
+        if not is_in_vivo and ("vitro" in study_type or "vitro" in " ".join(keywords)):
+            score += 0.2
+            reasons.append("non-in-vivo study type")
+
+    # Metadata field coverage boost
+    if tpl.required_metadata:
+        filled = sum(
+            1 for req in tpl.required_metadata
+            if _lookup_paper_value(req.id, arrive, meta)[0] is not None
+        )
+        meta_ratio = filled / len(tpl.required_metadata)
+        score = min(1.0, score + meta_ratio * 0.15)
+        if filled > 0:
+            reasons.append(f"{filled}/{len(tpl.required_metadata)} metadata fields available")
+
+    return min(1.0, round(score, 4)), reasons
+
+
+def suggest_from_paper_extraction(
+    extraction: Dict[str, Any],
+    all_templates: Dict[str, "Template"],
+    threshold: float = 0.05,
+) -> List[Dict[str, Any]]:
+    """Rank templates by match score against paper extraction signals."""
+    arrive = extraction.get("arrive", {})
+    meta = extraction.get("dataset_metadata", {})
+    vcg_hints = extraction.get("vcg_hints", {})
+
+    candidates: List[Dict[str, Any]] = []
+    for tid, tpl in all_templates.items():
+        score, reasons = _score_template_from_paper(tpl, arrive, meta, vcg_hints)
+        if score >= threshold:
+            candidates.append({
+                "id": tid,
+                "name": tpl.name,
+                "version": tpl.version,
+                "description": tpl.description,
+                "score": score,
+                "reasons": reasons,
+                "field_mapping": _build_field_mapping(tpl, extraction),
+            })
+
+    candidates.sort(key=lambda x: x["score"], reverse=True)
+    return candidates
+
+
+def generate_starter_yaml(tpl: "Template", extraction: Dict[str, Any]) -> str:
+    """Generate a starter YAML for a new user template pre-filled with paper hints."""
+    meta = extraction.get("dataset_metadata", {})
+    vcg_hints = extraction.get("vcg_hints", {})
+
+    title = meta.get("title") or ""
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-") or "custom"
+    new_id = f"{tpl.id}-{slug}"
+
+    data: Dict[str, Any] = {
+        "id": new_id,
+        "name": f"{tpl.name} — {title[:60]}" if title else tpl.name,
+        "version": "1.0",
+        "description": (
+            f"Starter template derived from '{tpl.name}'. "
+            f"Based on paper: {title}. "
+            "Customise required_columns and required_metadata before reuse."
+        ),
+        "conforms_to": [tpl.id],
+    }
+
+    if tpl.required_columns:
+        data["required_columns"] = [
+            {k: v for k, v in {
+                "id": c.id,
+                "name_patterns": c.name_patterns,
+                "semantic_type": c.semantic_type,
+                "role": c.role,
+                "required": c.required,
+                "severity": c.severity,
+            }.items() if v is not None}
+            for c in tpl.required_columns
+        ]
+
+    if tpl.required_metadata:
+        data["required_metadata"] = [
+            {k: v for k, v in {
+                "id": m.id,
+                "arrive_section": m.arrive_section,
+                "severity": m.severity,
+            }.items() if v is not None}
+            for m in tpl.required_metadata
+        ]
+
+    vcg_data: Dict[str, Any] = {}
+    base_vcg = tpl.vcg_defaults
+    if base_vcg:
+        vcg_data["method"] = base_vcg.method
+        vcg_data["control_value"] = vcg_hints.get("control_group_label") or base_vcg.control_value
+        vcg_data["treatment_value"] = vcg_hints.get("treatment_group_label") or base_vcg.treatment_value
+        if vcg_hints.get("treatment_column_name"):
+            vcg_data["treatment_col"] = vcg_hints["treatment_column_name"]
+        if vcg_hints.get("outcome_columns"):
+            vcg_data["outcome_cols_from"] = vcg_hints["outcome_columns"]
+    elif vcg_hints.get("treatment_column_name"):
+        vcg_data = {
+            "method": "auto",
+            "treatment_col": vcg_hints["treatment_column_name"],
+            "control_value": vcg_hints.get("control_group_label"),
+            "treatment_value": vcg_hints.get("treatment_group_label"),
+            "outcome_cols_from": vcg_hints.get("outcome_columns") or [],
+        }
+    if vcg_data:
+        data["vcg_defaults"] = {k: v for k, v in vcg_data.items() if v is not None}
+
+    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+
+
 # ── User template upload ───────────────────────────────────────────────────
 
 def save_user_template(content: str, source_format: str) -> Template:

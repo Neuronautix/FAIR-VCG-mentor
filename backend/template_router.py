@@ -9,9 +9,11 @@ from fastapi import APIRouter, HTTPException, Request
 
 from template_engine import (
     conformance_to_issues,
+    generate_starter_yaml,
     get_template,
     load_templates,
     save_user_template,
+    suggest_from_paper_extraction,
     suggest_templates,
     template_summary,
     validate_against_template,
@@ -98,6 +100,32 @@ async def upload_template(request: Request):
     return template_summary(tpl)
 
 
+@template_router.post("/api/templates/paper-suggestions")
+async def paper_template_suggestions(request: Request):
+    """Score all templates against a paper extraction payload (no dataset required)."""
+    body = await request.json()
+    extraction = body.get("extraction")
+    if not extraction or not isinstance(extraction, dict):
+        raise HTTPException(400, "Field 'extraction' (object) is required.")
+    templates = load_templates()
+    candidates = suggest_from_paper_extraction(extraction, templates)
+    return {"candidates": candidates}
+
+
+@template_router.post("/api/templates/generate-starter-yaml")
+async def generate_starter_yaml_endpoint(request: Request):
+    """Generate a downloadable starter YAML from a template + paper extraction (no dataset required)."""
+    body = await request.json()
+    tid = body.get("template_id")
+    extraction = body.get("extraction") or {}
+    if not tid:
+        raise HTTPException(400, "Field 'template_id' is required.")
+    tpl = get_template(tid)
+    if not tpl:
+        raise HTTPException(404, f"Template '{tid}' not found.")
+    return {"starter_yaml": generate_starter_yaml(tpl, extraction)}
+
+
 @template_router.post("/api/templates/import-linkml")
 async def import_linkml(request: Request):
     body = await request.json()
@@ -150,6 +178,26 @@ async def template_suggestions(dataset_id: str):
         s["template_candidates"] = candidates
         _persist(dataset_id, s)
     return {"candidates": candidates, "auto_assigned": auto_assigned}
+
+
+@template_router.post("/api/{dataset_id}/template/apply-from-paper")
+async def apply_template_from_paper(dataset_id: str, request: Request):
+    """Assign a template chosen from paper suggestions; returns conformance report."""
+    body = await request.json()
+    tid = body.get("template_id")
+    if not tid:
+        raise HTTPException(400, "Field 'template_id' is required.")
+    s = _require(dataset_id)
+    tpl = get_template(tid)
+    if not tpl:
+        raise HTTPException(404, f"Template '{tid}' not found.")
+    report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
+    _strip_template_issues(s)
+    s["template_id"] = tid
+    s["template_validation"] = report
+    s["issues"].extend(conformance_to_issues(report, tid))
+    _persist(dataset_id, s)
+    return {"template_id": tid, "conformance_report": report}
 
 
 @template_router.post("/api/{dataset_id}/template/{tid}")

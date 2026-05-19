@@ -332,3 +332,14 @@ export const importLinkmlTemplate = (
   api
     .post('/templates/import-linkml', { linkml_yaml, target_class, save_as_user_template })
     .then((r) => r.data)
+
+export const getPaperTemplateSuggestions = (extraction: object) =>
+  api.post('/templates/paper-suggestions', { extraction }).then((r) => r.data)
+
+export const applyTemplateFromPaper = (id: string, templateId: string) =>
+  api.post(`/${id}/template/apply-from-paper`, { template_id: templateId }).then((r) => r.data)
+
+export const generateStarterYaml = (templateId: string, extraction: object) =>
+  api
+    .post('/templates/generate-starter-yaml', { template_id: templateId, extraction })
+    .then((r) => r.data)

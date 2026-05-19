@@ -68,7 +68,7 @@ const ARRIVE_LABELS: Record<string, string> = {
   adverse_events: 'Adverse Events',
   interpretation: 'Interpretation / Findings',
 }
-const MAX_ADDITIONAL_TERMS = 20
+const DEFAULT_MAX_ADDITIONAL_TERMS = 20
 
 function StatusChip({ status }: { status: 'found' | 'inferred' | 'missing' }) {
   const map = {
@@ -400,6 +400,7 @@ function TemplateSuggestionsCard({
   const [suggestingTerms, setSuggestingTerms] = useState(false)
   const [csvPickerCandidate, setCsvPickerCandidate] = useState<TemplateCandidate | null>(null)
   const [selectedCsvFieldIds, setSelectedCsvFieldIds] = useState<string[]>([])
+  const [maxAdditionalTerms, setMaxAdditionalTerms] = useState(DEFAULT_MAX_ADDITIONAL_TERMS)
 
   useEffect(() => {
     let cancelled = false
@@ -407,7 +408,13 @@ function TemplateSuggestionsCard({
     setError(null)
     getPaperTemplateSuggestions(extraction, additionalTerms)
       .then((data) => {
-        if (!cancelled) setCandidates(data.candidates ?? [])
+        if (!cancelled) {
+          setCandidates(data.candidates ?? [])
+          const apiLimit = Number(data.max_additional_terms)
+          if (Number.isFinite(apiLimit) && apiLimit > 0) {
+            setMaxAdditionalTerms(Math.floor(apiLimit))
+          }
+        }
       })
       .catch((err: any) => {
         const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error'
@@ -423,7 +430,7 @@ function TemplateSuggestionsCard({
       .map((x) => x.trim().toLowerCase())
       .filter(Boolean)
     if (!parsed.length) return
-    setAdditionalTerms((prev) => Array.from(new Set([...prev, ...parsed])).slice(0, MAX_ADDITIONAL_TERMS))
+    setAdditionalTerms((prev) => Array.from(new Set([...prev, ...parsed])).slice(0, maxAdditionalTerms))
     setAdditionalTermInput('')
   }
 
@@ -432,7 +439,11 @@ function TemplateSuggestionsCard({
     setError(null)
     try {
       const data = await suggestPaperSearchTerms(extraction, additionalTerms)
-      setAdditionalTerms((prev) => Array.from(new Set([...prev, ...(data.terms ?? [])])).slice(0, MAX_ADDITIONAL_TERMS))
+      const apiLimit = Number(data?.max_additional_terms)
+      const effectiveLimit =
+        Number.isFinite(apiLimit) && apiLimit > 0 ? Math.floor(apiLimit) : maxAdditionalTerms
+      setMaxAdditionalTerms(effectiveLimit)
+      setAdditionalTerms((prev) => Array.from(new Set([...prev, ...(data.terms ?? [])])).slice(0, effectiveLimit))
     } catch (err: any) {
       const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error'
       setError(`LLM term suggestion failed: ${detail}`)
@@ -699,6 +710,11 @@ function TemplateSuggestionsCard({
         >
           <DialogTitle>Select template fields for CSV schema</DialogTitle>
           <DialogContent dividers>
+            {error && (
+              <Alert severity="warning" sx={{ mb: 1.5, fontSize: 12 }}>
+                {error}
+              </Alert>
+            )}
             {csvPickerCandidate && (
               <Stack spacing={1}>
                 <Typography variant="body2" color="text.secondary">

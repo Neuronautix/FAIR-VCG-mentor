@@ -28,6 +28,26 @@ _save_fn: Optional[Callable] = None
 _load_fn: Optional[Callable] = None
 
 
+def _sanitize_term_list(value: Any, field_name: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise HTTPException(400, f"Field '{field_name}' must be an array of strings when provided.")
+    terms: list[str] = []
+    seen: set[str] = set()
+    for raw in value:
+        if not isinstance(raw, str):
+            continue
+        term = raw.strip().lower()
+        if not term or term in seen:
+            continue
+        seen.add(term)
+        terms.append(term)
+        if len(terms) >= MAX_ADDITIONAL_TERMS:
+            break
+    return terms
+
+
 def init_template_router(sessions: dict, save_fn: Callable, load_fn: Callable) -> None:
     global _sessions, _save_fn, _load_fn
     _sessions = sessions
@@ -107,14 +127,12 @@ async def paper_template_suggestions(request: Request):
     """Score all templates against a paper extraction payload (no dataset required)."""
     body = await request.json()
     extraction = body.get("extraction")
-    additional_terms = body.get("additional_terms") or []
+    additional_terms = _sanitize_term_list(body.get("additional_terms"), "additional_terms")
     if not extraction or not isinstance(extraction, dict):
         raise HTTPException(400, "Field 'extraction' (object) is required.")
-    if not isinstance(additional_terms, list):
-        raise HTTPException(400, "Field 'additional_terms' must be an array of strings when provided.")
     templates = load_templates()
     candidates = suggest_from_paper_extraction(extraction, templates, additional_terms=additional_terms)
-    return {"candidates": candidates}
+    return {"candidates": candidates, "max_additional_terms": MAX_ADDITIONAL_TERMS}
 
 
 @template_router.post("/api/templates/paper/generate-csv")
@@ -146,11 +164,9 @@ async def suggest_terms_for_paper(request: Request):
     """Ask LLM for additional search terms to refine paper-template matching."""
     body = await request.json()
     extraction = body.get("extraction")
-    current_terms = body.get("current_terms") or []
+    current_terms = _sanitize_term_list(body.get("current_terms"), "current_terms")
     if not extraction or not isinstance(extraction, dict):
         raise HTTPException(400, "Field 'extraction' (object) is required.")
-    if not isinstance(current_terms, list):
-        raise HTTPException(400, "Field 'current_terms' must be an array of strings when provided.")
 
     from llm_service import LLMUnavailable, call_haiku
 
@@ -162,7 +178,7 @@ async def suggest_terms_for_paper(request: Request):
         "species": dataset_meta.get("species"),
         "keywords": dataset_meta.get("keywords") or [],
         "summary": str(paper_summary)[:3000],
-        "current_terms": [str(t).strip() for t in current_terms if str(t).strip()][:MAX_ADDITIONAL_TERMS],
+        "current_terms": current_terms,
     }
     tool = {
         "name": "suggest_additional_terms",
@@ -198,7 +214,11 @@ async def suggest_terms_for_paper(request: Request):
             continue
         seen.add(term)
         terms.append(term)
-    return {"terms": terms[:12], "rationale": llm_result.get("rationale") or ""}
+    return {
+        "terms": terms[:MAX_ADDITIONAL_TERMS],
+        "rationale": llm_result.get("rationale") or "",
+        "max_additional_terms": MAX_ADDITIONAL_TERMS,
+    }
 
 
 @template_router.post("/api/templates/paper/generate-yaml")

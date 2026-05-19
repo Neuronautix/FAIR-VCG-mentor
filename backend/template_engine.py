@@ -738,13 +738,14 @@ def _score_template_from_paper(
     arrive: Dict[str, Any],
     meta: Dict[str, Any],
     vcg_hints: Dict[str, Any],
-    normalized_terms: Optional[List[str]] = None,
+    sanitized_terms: Optional[List[str]] = None,
 ) -> Tuple[float, List[str]]:
+    """Score a template using extracted paper signals and pre-sanitized additional terms."""
     score = 0.0
     reasons: List[str] = []
 
     tid_lower = tpl.id.lower()
-    extra_terms = normalized_terms or []
+    extra_terms = sanitized_terms or []
     keywords = [k.lower() for k in (meta.get("keywords") or [])] + extra_terms
     species = (meta.get("species") or "").lower()
     study_type = (meta.get("study_type") or "").lower()

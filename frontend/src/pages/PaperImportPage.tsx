@@ -68,7 +68,7 @@ const ARRIVE_LABELS: Record<string, string> = {
   adverse_events: 'Adverse Events',
   interpretation: 'Interpretation / Findings',
 }
-const DEFAULT_MAX_ADDITIONAL_TERMS = 20
+const FALLBACK_MAX_ADDITIONAL_TERMS = 20
 
 function StatusChip({ status }: { status: 'found' | 'inferred' | 'missing' }) {
   const map = {
@@ -100,6 +100,14 @@ function MetaRow({ label, value }: { label: string; value: string | string[] | n
       </Typography>
     </Box>
   )
+}
+
+function parseApiLimit(value: unknown, fallback: number): number {
+  const limit = Number(value)
+  if (Number.isFinite(limit) && limit > 0) {
+    return Math.floor(limit)
+  }
+  return fallback
 }
 
 function DropZone({ onFile }: { onFile: (f: File) => void }) {
@@ -400,7 +408,7 @@ function TemplateSuggestionsCard({
   const [suggestingTerms, setSuggestingTerms] = useState(false)
   const [csvPickerCandidate, setCsvPickerCandidate] = useState<TemplateCandidate | null>(null)
   const [selectedCsvFieldIds, setSelectedCsvFieldIds] = useState<string[]>([])
-  const [maxAdditionalTerms, setMaxAdditionalTerms] = useState(DEFAULT_MAX_ADDITIONAL_TERMS)
+  const [maxAdditionalTerms, setMaxAdditionalTerms] = useState(FALLBACK_MAX_ADDITIONAL_TERMS)
 
   useEffect(() => {
     let cancelled = false
@@ -410,10 +418,7 @@ function TemplateSuggestionsCard({
       .then((data) => {
         if (!cancelled) {
           setCandidates(data.candidates ?? [])
-          const apiLimit = Number(data.max_additional_terms)
-          if (Number.isFinite(apiLimit) && apiLimit > 0) {
-            setMaxAdditionalTerms(Math.floor(apiLimit))
-          }
+          setMaxAdditionalTerms((prev) => parseApiLimit(data.max_additional_terms, prev))
         }
       })
       .catch((err: any) => {
@@ -439,9 +444,7 @@ function TemplateSuggestionsCard({
     setError(null)
     try {
       const data = await suggestPaperSearchTerms(extraction, additionalTerms)
-      const apiLimit = Number(data?.max_additional_terms)
-      const effectiveLimit =
-        Number.isFinite(apiLimit) && apiLimit > 0 ? Math.floor(apiLimit) : maxAdditionalTerms
+      const effectiveLimit = parseApiLimit(data?.max_additional_terms, maxAdditionalTerms)
       setMaxAdditionalTerms(effectiveLimit)
       setAdditionalTerms((prev) => Array.from(new Set([...prev, ...(data.terms ?? [])])).slice(0, effectiveLimit))
     } catch (err: any) {

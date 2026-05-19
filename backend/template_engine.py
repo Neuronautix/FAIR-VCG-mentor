@@ -10,6 +10,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from jsonschema import Draft202012Validator, ValidationError
+from template_constants import (
+    ADDITIONAL_TERM_SCORE_CAP,
+    ADDITIONAL_TERM_SCORE_MULTIPLIER,
+    MAX_ADDITIONAL_TERMS,
+    MAX_MATCH_REASON_TERMS,
+)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 USER_TEMPLATES_DIR = TEMPLATES_DIR / "user"
@@ -700,7 +706,7 @@ def _normalize_additional_terms(additional_terms: Optional[List[str]]) -> List[s
             continue
         seen.add(term)
         out.append(term)
-    return out[:20]
+    return out[:MAX_ADDITIONAL_TERMS]
 
 
 def _column_header_for_template_field(col: RequiredColumn) -> str:
@@ -799,8 +805,15 @@ def _score_template_from_paper(
         ])
         matched_terms = [t for t in extra_terms if t in template_text]
         if matched_terms:
-            score = min(1.0, score + min(0.2, 0.06 * len(matched_terms)))
-            reasons.append(f"additional terms matched: {', '.join(matched_terms[:4])}")
+            # Keep term boosts bounded so they refine ranking without dominating
+            # core extraction signals (ARRIVE coverage, species/study matches).
+            score = min(
+                1.0,
+                score + min(ADDITIONAL_TERM_SCORE_CAP, ADDITIONAL_TERM_SCORE_MULTIPLIER * len(matched_terms)),
+            )
+            shown = ", ".join(matched_terms[:MAX_MATCH_REASON_TERMS])
+            suffix = "…" if len(matched_terms) > MAX_MATCH_REASON_TERMS else ""
+            reasons.append(f"additional terms matched: {shown}{suffix}")
 
     return min(1.0, round(score, 4)), reasons
 
@@ -850,7 +863,7 @@ def generate_experiment_csv(
 
     all_cols = list(tpl.required_columns) + list(tpl.optional_columns)
     if include_field_ids is not None:
-        wanted = {str(fid) for fid in include_field_ids if fid}
+        wanted = {fid for fid in include_field_ids if isinstance(fid, str) and fid}
         all_cols = [c for c in all_cols if c.id in wanted]
 
     if all_cols:

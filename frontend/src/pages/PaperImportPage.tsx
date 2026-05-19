@@ -68,6 +68,7 @@ const ARRIVE_LABELS: Record<string, string> = {
   adverse_events: 'Adverse Events',
   interpretation: 'Interpretation / Findings',
 }
+const MAX_ADDITIONAL_TERMS = 20
 
 function StatusChip({ status }: { status: 'found' | 'inferred' | 'missing' }) {
   const map = {
@@ -422,7 +423,7 @@ function TemplateSuggestionsCard({
       .map((x) => x.trim().toLowerCase())
       .filter(Boolean)
     if (!parsed.length) return
-    setAdditionalTerms((prev) => Array.from(new Set([...prev, ...parsed])).slice(0, 20))
+    setAdditionalTerms((prev) => Array.from(new Set([...prev, ...parsed])).slice(0, MAX_ADDITIONAL_TERMS))
     setAdditionalTermInput('')
   }
 
@@ -431,7 +432,7 @@ function TemplateSuggestionsCard({
     setError(null)
     try {
       const data = await suggestPaperSearchTerms(extraction, additionalTerms)
-      setAdditionalTerms((prev) => Array.from(new Set([...prev, ...(data.terms ?? [])])).slice(0, 20))
+      setAdditionalTerms((prev) => Array.from(new Set([...prev, ...(data.terms ?? [])])).slice(0, MAX_ADDITIONAL_TERMS))
     } catch (err: any) {
       const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error'
       setError(`LLM term suggestion failed: ${detail}`)
@@ -498,6 +499,11 @@ function TemplateSuggestionsCard({
       setDownloadingCsvId(null)
     }
   }
+
+  const canExportCsv =
+    !!csvPickerCandidate &&
+    downloadingCsvId !== csvPickerCandidate.id &&
+    selectedCsvFieldIds.length > 0
 
   return (
     <Card variant="outlined">
@@ -609,12 +615,16 @@ function TemplateSuggestionsCard({
                         size="small"
                         color={metadataMissing.length === 0 ? 'success' : 'default'}
                         label={`Metadata gaps: ${metadataMissing.length}`}
+                        icon={metadataMissing.length === 0 ? <CheckCircleIcon sx={{ fontSize: 12 }} /> : <ErrorIcon sx={{ fontSize: 12 }} />}
+                        aria-label={`Metadata gaps ${metadataMissing.length}`}
                         sx={{ height: 20, fontSize: 10 }}
                       />
                       <Chip
                         size="small"
                         color={highPriorityMissing.length > 0 ? 'warning' : 'success'}
                         label={`High-priority missing: ${highPriorityMissing.length}`}
+                        icon={highPriorityMissing.length > 0 ? <HelpOutlineIcon sx={{ fontSize: 12 }} /> : <CheckCircleIcon sx={{ fontSize: 12 }} />}
+                        aria-label={`High priority missing fields ${highPriorityMissing.length}`}
                         sx={{ height: 20, fontSize: 10 }}
                       />
                     </Stack>
@@ -708,17 +718,19 @@ function TemplateSuggestionsCard({
                         {field.matched_hint ? ` · matched hint: ${field.matched_hint}` : ''}
                       </Typography>
                     </Box>
-                    <Chip
+                    <Button
                       size="small"
-                      label={selectedCsvFieldIds.includes(field.id) ? 'Included' : 'Excluded'}
-                      color={selectedCsvFieldIds.includes(field.id) ? 'success' : 'default'}
+                      variant={selectedCsvFieldIds.includes(field.id) ? 'contained' : 'outlined'}
+                      color={selectedCsvFieldIds.includes(field.id) ? 'success' : 'inherit'}
+                      aria-pressed={selectedCsvFieldIds.includes(field.id)}
                       onClick={() =>
                         setSelectedCsvFieldIds((prev) =>
                           prev.includes(field.id) ? prev.filter((id) => id !== field.id) : [...prev, field.id],
                         )
                       }
-                      sx={{ cursor: 'pointer' }}
-                    />
+                    >
+                      {selectedCsvFieldIds.includes(field.id) ? 'Included' : 'Excluded'}
+                    </Button>
                   </Box>
                 ))}
               </Stack>
@@ -729,7 +741,7 @@ function TemplateSuggestionsCard({
             <Button
               variant="contained"
               color="success"
-              disabled={!csvPickerCandidate || downloadingCsvId === csvPickerCandidate.id || selectedCsvFieldIds.length === 0}
+              disabled={!canExportCsv}
               onClick={() => csvPickerCandidate && handleDownloadCsv(csvPickerCandidate)}
               startIcon={
                 csvPickerCandidate && downloadingCsvId === csvPickerCandidate.id

@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Optional
 
 import yaml
 from fastapi import APIRouter, HTTPException, Request
+from template_constants import MAX_ADDITIONAL_TERMS
 
 from template_engine import (
     conformance_to_issues,
@@ -161,7 +162,7 @@ async def suggest_terms_for_paper(request: Request):
         "species": dataset_meta.get("species"),
         "keywords": dataset_meta.get("keywords") or [],
         "summary": str(paper_summary)[:3000],
-        "current_terms": [str(t).strip() for t in current_terms if str(t).strip()][:20],
+        "current_terms": [str(t).strip() for t in current_terms if str(t).strip()][:MAX_ADDITIONAL_TERMS],
     }
     tool = {
         "name": "suggest_additional_terms",

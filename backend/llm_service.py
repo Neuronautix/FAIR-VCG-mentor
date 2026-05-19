@@ -29,7 +29,7 @@ class LLMUnavailable(RuntimeError):
 
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-_RETRYABLE_STATUS = (408, 429, 500, 502, 503, 504)
+_RETRYABLE_STATUS = (408, 429, 500, 502, 503, 504, 529)
 
 
 def llm_enabled() -> bool:
@@ -113,7 +113,8 @@ def call_haiku(
             last_err = exc
             status = getattr(exc, "status_code", None)
             if attempt < max_retries and (status is None or status in _RETRYABLE_STATUS):
-                time.sleep(0.5 * (2 ** attempt))
+                delay = 5 * (2 ** attempt) if status == 529 else 0.5 * (2 ** attempt)
+                time.sleep(delay)
                 continue
             break
 

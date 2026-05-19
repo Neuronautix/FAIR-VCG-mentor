@@ -39,6 +39,7 @@ import {
   buildMetadataPatch,
   extractPaperMetadataStream,
   fetchPaperByDOI,
+  generateExperimentCsv,
   generateStarterYaml,
   getPaperTemplateSuggestions,
   getStoredPaperExtraction,
@@ -373,6 +374,7 @@ function TemplateSuggestionsCard({
   const [appliedId, setAppliedId] = useState<string | null>(null)
   const [applyingId, setApplyingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [downloadingCsvId, setDownloadingCsvId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -382,8 +384,9 @@ function TemplateSuggestionsCard({
       .then((data) => {
         if (!cancelled) setCandidates(data.candidates ?? [])
       })
-      .catch(() => {
-        if (!cancelled) setError('Could not score templates against paper.')
+      .catch((err: any) => {
+        const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error'
+        if (!cancelled) setError(`Template scoring failed: ${detail}`)
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -417,6 +420,24 @@ function TemplateSuggestionsCard({
       setError('Failed to generate starter YAML.')
     } finally {
       setDownloadingId(null)
+    }
+  }
+
+  const handleDownloadCsv = async (tid: string) => {
+    setDownloadingCsvId(tid)
+    try {
+      const data = await generateExperimentCsv(tid, extraction)
+      const blob = new Blob([data.csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = data.filename ?? `${tid}-experiment-template.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError('Failed to generate CSV template.')
+    } finally {
+      setDownloadingCsvId(null)
     }
   }
 
@@ -497,7 +518,20 @@ function TemplateSuggestionsCard({
                         </Button>
                       </span>
                     </Tooltip>
-                    <Tooltip title="Download a starter YAML template pre-filled with paper hints — reusable for future CSV imports">
+                    <Tooltip title="Download a blank CSV with the right column headers — fill it in with your experimental results and import it directly">
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        disabled={downloadingCsvId === c.id}
+                        onClick={() => handleDownloadCsv(c.id)}
+                        startIcon={downloadingCsvId === c.id ? <CircularProgress size={12} /> : <DownloadIcon sx={{ fontSize: 14 }} />}
+                        sx={{ fontSize: 12, whiteSpace: 'nowrap' }}
+                      >
+                        CSV Template
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Download a starter YAML schema — upload to Templates to reuse this configuration for future experiments">
                       <Button
                         size="small"
                         variant="outlined"
@@ -506,7 +540,7 @@ function TemplateSuggestionsCard({
                         startIcon={downloadingId === c.id ? <CircularProgress size={12} /> : <DownloadIcon sx={{ fontSize: 14 }} />}
                         sx={{ fontSize: 12, whiteSpace: 'nowrap' }}
                       >
-                        Starter YAML
+                        YAML Schema
                       </Button>
                     </Tooltip>
                     {c.field_mapping.length > 0 && (

@@ -245,7 +245,7 @@ function SuggestionCard({
     >
       <CardContent sx={{ pb: '12px !important' }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-          <Box sx={{ flexGrow: 1 }}>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Stack direction="row" spacing={0.75} sx={{ mb: 0.5, flexWrap: 'wrap' }}>
               <Chip
                 label={CATEGORY_LABELS[s.category]}
@@ -355,29 +355,46 @@ function SuggestionCard({
           </Box>
 
           {isActionable && !editing && (
-            <Stack direction="column" spacing={0.5}>
-              <Tooltip title="Approve and apply">
-                <span>
-                  <IconButton
+            <Stack direction="column" spacing={0.75} sx={{ flexShrink: 0, minWidth: 96 }}>
+              <Tooltip title={!s.validation.ok ? s.validation.errors.join(' · ') : 'Apply this suggestion'}>
+                <span style={{ width: '100%' }}>
+                  <Button
                     size="small"
+                    variant="contained"
                     color="success"
+                    fullWidth
                     disabled={busy || !s.validation.ok}
                     onClick={() => onApprove(s)}
+                    startIcon={busy ? <CircularProgress size={13} /> : <CheckIcon sx={{ fontSize: 14 }} />}
+                    sx={{ fontSize: 12, textTransform: 'none' }}
                   >
-                    {busy ? <CircularProgress size={16} /> : <CheckIcon fontSize="small" />}
-                  </IconButton>
+                    Approve
+                  </Button>
                 </span>
               </Tooltip>
-              <Tooltip title="Edit before approving">
-                <IconButton size="small" disabled={busy} onClick={() => setEditing(true)}>
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Reject">
-                <IconButton size="small" color="error" disabled={busy} onClick={() => onReject(s)}>
-                  <CloseIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
+              <Button
+                size="small"
+                variant="outlined"
+                fullWidth
+                disabled={busy}
+                onClick={() => setEditing(true)}
+                startIcon={<EditIcon sx={{ fontSize: 14 }} />}
+                sx={{ fontSize: 12, textTransform: 'none' }}
+              >
+                Edit
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                fullWidth
+                disabled={busy}
+                onClick={() => onReject(s)}
+                startIcon={<CloseIcon sx={{ fontSize: 14 }} />}
+                sx={{ fontSize: 12, textTransform: 'none' }}
+              >
+                Reject
+              </Button>
             </Stack>
           )}
         </Box>

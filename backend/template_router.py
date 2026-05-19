@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from template_engine import (
     conformance_to_issues,
+    generate_experiment_csv,
     generate_starter_yaml,
     get_template,
     load_templates,
@@ -100,7 +101,7 @@ async def upload_template(request: Request):
     return template_summary(tpl)
 
 
-@template_router.post("/api/templates/paper-suggestions")
+@template_router.post("/api/templates/paper/suggestions")
 async def paper_template_suggestions(request: Request):
     """Score all templates against a paper extraction payload (no dataset required)."""
     body = await request.json()
@@ -112,7 +113,22 @@ async def paper_template_suggestions(request: Request):
     return {"candidates": candidates}
 
 
-@template_router.post("/api/templates/generate-starter-yaml")
+@template_router.post("/api/templates/paper/generate-csv")
+async def generate_experiment_csv_endpoint(request: Request):
+    """Generate a blank experiment CSV pre-populated with template columns + paper hints."""
+    body = await request.json()
+    tid = body.get("template_id")
+    extraction = body.get("extraction") or {}
+    if not tid:
+        raise HTTPException(400, "Field 'template_id' is required.")
+    tpl = get_template(tid)
+    if not tpl:
+        raise HTTPException(404, f"Template '{tid}' not found.")
+    csv_content = generate_experiment_csv(tpl, extraction)
+    return {"csv": csv_content, "filename": f"{tid}-experiment-template.csv"}
+
+
+@template_router.post("/api/templates/paper/generate-yaml")
 async def generate_starter_yaml_endpoint(request: Request):
     """Generate a downloadable starter YAML from a template + paper extraction (no dataset required)."""
     body = await request.json()

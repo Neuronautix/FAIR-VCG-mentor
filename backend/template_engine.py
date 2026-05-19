@@ -782,6 +782,90 @@ def suggest_from_paper_extraction(
     return candidates
 
 
+def generate_experiment_csv(tpl: "Template", extraction: Dict[str, Any]) -> str:
+    """Generate a blank experiment CSV whose headers match the template columns + paper hints."""
+    import csv as _csv
+    import io as _io
+
+    meta = extraction.get("dataset_metadata", {})
+    vcg_hints = extraction.get("vcg_hints", {})
+
+    all_cols = list(tpl.required_columns) + list(tpl.optional_columns)
+
+    if all_cols:
+        col_names = [
+            (c.name_patterns[0] if c.name_patterns else c.id)
+            for c in all_cols
+        ]
+    else:
+        # No template columns — build from vcg_hints
+        col_names = []
+        if vcg_hints.get("treatment_column_name"):
+            col_names.append(vcg_hints["treatment_column_name"])
+        col_names += [c for c in (vcg_hints.get("outcome_columns") or []) if c not in col_names]
+        col_names += [c for c in (vcg_hints.get("covariate_columns") or []) if c not in col_names]
+        if not col_names:
+            col_names = ["subject_id", "group", "outcome"]
+
+    # Locate treatment column by name hint or role
+    treatment_col_hint = vcg_hints.get("treatment_column_name") or ""
+    treatment_idx: Optional[int] = None
+    for i, name in enumerate(col_names):
+        if treatment_col_hint and treatment_col_hint.lower() in name.lower():
+            treatment_idx = i
+            break
+    if treatment_idx is None and all_cols:
+        for i, c in enumerate(all_cols):
+            if c.role == "treatment":
+                treatment_idx = i
+                break
+
+    # Locate subject_id column
+    subject_idx: Optional[int] = None
+    for i, name in enumerate(col_names):
+        if any(k in name.lower() for k in ("subject", "animal", "_id")):
+            subject_idx = i
+            break
+    if subject_idx is None and all_cols:
+        for i, c in enumerate(all_cols):
+            if c.role == "subject_id":
+                subject_idx = i
+                break
+
+    # Locate species column
+    species_val = meta.get("species") or ""
+    species_idx: Optional[int] = None
+    for i, name in enumerate(col_names):
+        if "species" in name.lower():
+            species_idx = i
+            break
+
+    control_label = vcg_hints.get("control_group_label") or "Control"
+    treatment_label = vcg_hints.get("treatment_group_label") or "Treatment"
+    n_control = min(int(vcg_hints.get("n_control") or 3), 10)
+    n_treatment = min(int(vcg_hints.get("n_treatment") or 3), 10)
+
+    rows = []
+    counter = 1
+    for label, n in [(control_label, n_control), (treatment_label, n_treatment)]:
+        for _ in range(n):
+            row = [""] * len(col_names)
+            if subject_idx is not None:
+                row[subject_idx] = str(counter)
+            if treatment_idx is not None:
+                row[treatment_idx] = label
+            if species_idx is not None and species_val:
+                row[species_idx] = species_val
+            rows.append(row)
+            counter += 1
+
+    buf = _io.StringIO()
+    writer = _csv.writer(buf)
+    writer.writerow(col_names)
+    writer.writerows(rows)
+    return buf.getvalue()
+
+
 def generate_starter_yaml(tpl: "Template", extraction: Dict[str, Any]) -> str:
     """Generate a starter YAML for a new user template pre-filled with paper hints."""
     meta = extraction.get("dataset_metadata", {})

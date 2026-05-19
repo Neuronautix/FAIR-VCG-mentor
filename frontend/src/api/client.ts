@@ -334,12 +334,17 @@ export const importLinkmlTemplate = (
     .then((r) => r.data)
 
 export const getPaperTemplateSuggestions = (extraction: object) =>
-  api.post('/templates/paper-suggestions', { extraction }).then((r) => r.data)
+  api.post('/templates/paper/suggestions', { extraction }).then((r) => r.data)
 
 export const applyTemplateFromPaper = (id: string, templateId: string) =>
   api.post(`/${id}/template/apply-from-paper`, { template_id: templateId }).then((r) => r.data)
 
 export const generateStarterYaml = (templateId: string, extraction: object) =>
   api
-    .post('/templates/generate-starter-yaml', { template_id: templateId, extraction })
+    .post('/templates/paper/generate-yaml', { template_id: templateId, extraction })
+    .then((r) => r.data)
+
+export const generateExperimentCsv = (templateId: string, extraction: object) =>
+  api
+    .post('/templates/paper/generate-csv', { template_id: templateId, extraction })
     .then((r) => r.data)

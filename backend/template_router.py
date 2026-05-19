@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Optional
 
 import yaml
 from fastapi import APIRouter, HTTPException, Request
+from template_constants import MAX_ADDITIONAL_TERMS
 
 from template_engine import (
     conformance_to_issues,
@@ -25,6 +26,26 @@ template_router = APIRouter(tags=["templates"])
 _sessions: Dict[str, Any] = {}
 _save_fn: Optional[Callable] = None
 _load_fn: Optional[Callable] = None
+
+
+def _sanitize_term_list(value: Any, field_name: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise HTTPException(400, f"Field '{field_name}' must be an array of strings when provided.")
+    terms: list[str] = []
+    seen: set[str] = set()
+    for raw in value:
+        if not isinstance(raw, str):
+            continue
+        term = raw.strip().lower()
+        if not term or term in seen:
+            continue
+        seen.add(term)
+        terms.append(term)
+        if len(terms) >= MAX_ADDITIONAL_TERMS:
+            break
+    return terms
 
 
 def init_template_router(sessions: dict, save_fn: Callable, load_fn: Callable) -> None:
@@ -106,11 +127,12 @@ async def paper_template_suggestions(request: Request):
     """Score all templates against a paper extraction payload (no dataset required)."""
     body = await request.json()
     extraction = body.get("extraction")
+    additional_terms = _sanitize_term_list(body.get("additional_terms"), "additional_terms")
     if not extraction or not isinstance(extraction, dict):
         raise HTTPException(400, "Field 'extraction' (object) is required.")
     templates = load_templates()
-    candidates = suggest_from_paper_extraction(extraction, templates)
-    return {"candidates": candidates}
+    candidates = suggest_from_paper_extraction(extraction, templates, additional_terms=additional_terms)
+    return {"candidates": candidates, "max_additional_terms": MAX_ADDITIONAL_TERMS}
 
 
 @template_router.post("/api/templates/paper/generate-csv")
@@ -119,13 +141,84 @@ async def generate_experiment_csv_endpoint(request: Request):
     body = await request.json()
     tid = body.get("template_id")
     extraction = body.get("extraction") or {}
+    include_field_ids = body.get("include_field_ids")
     if not tid:
         raise HTTPException(400, "Field 'template_id' is required.")
     tpl = get_template(tid)
     if not tpl:
         raise HTTPException(404, f"Template '{tid}' not found.")
-    csv_content = generate_experiment_csv(tpl, extraction)
+    if include_field_ids is not None:
+        if not isinstance(include_field_ids, list):
+            raise HTTPException(400, "Field 'include_field_ids' must be an array of template field IDs.")
+        valid_field_ids = {c.id for c in list(tpl.required_columns) + list(tpl.optional_columns)}
+        selected = [str(fid) for fid in include_field_ids if str(fid) in valid_field_ids]
+        if not selected:
+            raise HTTPException(400, "No valid template fields selected for CSV export.")
+        include_field_ids = selected
+    csv_content = generate_experiment_csv(tpl, extraction, include_field_ids=include_field_ids)
     return {"csv": csv_content, "filename": f"{tid}-experiment-template.csv"}
+
+
+@template_router.post("/api/templates/paper/suggest-terms")
+async def suggest_terms_for_paper(request: Request):
+    """Ask LLM for additional search terms to refine paper-template matching."""
+    body = await request.json()
+    extraction = body.get("extraction")
+    current_terms = _sanitize_term_list(body.get("current_terms"), "current_terms")
+    if not extraction or not isinstance(extraction, dict):
+        raise HTTPException(400, "Field 'extraction' (object) is required.")
+
+    from llm_service import LLMUnavailable, call_haiku
+
+    dataset_meta = extraction.get("dataset_metadata") or {}
+    paper_summary = extraction.get("summary") or ""
+    prompt_payload = {
+        "title": dataset_meta.get("title"),
+        "study_type": dataset_meta.get("study_type"),
+        "species": dataset_meta.get("species"),
+        "keywords": dataset_meta.get("keywords") or [],
+        "summary": str(paper_summary)[:3000],
+        "current_terms": current_terms,
+    }
+    tool = {
+        "name": "suggest_additional_terms",
+        "description": "Suggest concise additional search terms for template matching.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "terms": {"type": "array", "items": {"type": "string"}},
+                "rationale": {"type": "string"},
+            },
+            "required": ["terms", "rationale"],
+            "additionalProperties": False,
+        },
+    }
+    try:
+        llm_result = call_haiku(
+            system_prompt=(
+                "You help users find metadata/reporting templates for a study. "
+                "Propose short domain terms (2-4 words each) that are likely to improve template retrieval."
+            ),
+            tool=tool,
+            user_message=json.dumps(prompt_payload),
+            max_tokens=512,
+        )
+    except LLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+
+    terms = []
+    seen = set()
+    for raw in llm_result.get("terms") or []:
+        term = str(raw or "").strip().lower()
+        if not term or term in seen:
+            continue
+        seen.add(term)
+        terms.append(term)
+    return {
+        "terms": terms[:MAX_ADDITIONAL_TERMS],
+        "rationale": llm_result.get("rationale") or "",
+        "max_additional_terms": MAX_ADDITIONAL_TERMS,
+    }
 
 
 @template_router.post("/api/templates/paper/generate-yaml")

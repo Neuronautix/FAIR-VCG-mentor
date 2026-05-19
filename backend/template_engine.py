@@ -10,6 +10,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from jsonschema import Draft202012Validator, ValidationError
+from template_constants import (
+    ADDITIONAL_TERM_SCORE_CAP,
+    ADDITIONAL_TERM_SCORE_MULTIPLIER,
+    MAX_ADDITIONAL_TERMS,
+    MAX_MATCH_REASON_TERMS,
+)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 USER_TEMPLATES_DIR = TEMPLATES_DIR / "user"
@@ -691,17 +697,56 @@ def _build_field_mapping(tpl: Template, extraction: Dict[str, Any]) -> List[Dict
     return mapping
 
 
+def _normalize_additional_terms(additional_terms: Optional[List[str]]) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for raw in additional_terms or []:
+        term = str(raw or "").strip().lower()
+        if not term or term in seen:
+            continue
+        seen.add(term)
+        out.append(term)
+    return out[:MAX_ADDITIONAL_TERMS]
+
+
+def _column_header_for_template_field(col: RequiredColumn) -> str:
+    return col.name_patterns[0] if col.name_patterns else col.id
+
+
+def build_csv_field_options(tpl: "Template", extraction: Dict[str, Any]) -> List[Dict[str, Any]]:
+    vcg_hints = extraction.get("vcg_hints", {})
+    hint_cols = list(vcg_hints.get("outcome_columns") or []) + list(vcg_hints.get("covariate_columns") or [])
+    out: List[Dict[str, Any]] = []
+    for col in list(tpl.required_columns) + list(tpl.optional_columns):
+        matched_hint = None
+        for hint in hint_cols:
+            if any(_pattern_matches(pat, hint) for pat in col.name_patterns):
+                matched_hint = hint
+                break
+        out.append({
+            "id": col.id,
+            "label": col.id.replace("_", " ").title(),
+            "header": _column_header_for_template_field(col),
+            "required": bool(col.required),
+            "matched_hint": matched_hint,
+        })
+    return out
+
+
 def _score_template_from_paper(
     tpl: Template,
     arrive: Dict[str, Any],
     meta: Dict[str, Any],
     vcg_hints: Dict[str, Any],
+    sanitized_terms: Optional[List[str]] = None,
 ) -> Tuple[float, List[str]]:
+    """Score a template using extracted paper signals and pre-sanitized additional terms."""
     score = 0.0
     reasons: List[str] = []
 
     tid_lower = tpl.id.lower()
-    keywords = [k.lower() for k in (meta.get("keywords") or [])]
+    extra_terms = sanitized_terms or []
+    keywords = [k.lower() for k in (meta.get("keywords") or [])] + extra_terms
     species = (meta.get("species") or "").lower()
     study_type = (meta.get("study_type") or "").lower()
     is_in_vivo = any(kw in species for kw in [
@@ -751,6 +796,26 @@ def _score_template_from_paper(
         if filled > 0:
             reasons.append(f"{filled}/{len(tpl.required_metadata)} metadata fields available")
 
+    if extra_terms:
+        template_text = " ".join([
+            tpl.id.lower(),
+            tpl.name.lower(),
+            (tpl.description or "").lower(),
+            " ".join(c.id.lower() for c in tpl.required_columns),
+            " ".join(m.id.lower() for m in tpl.required_metadata),
+        ])
+        matched_terms = [t for t in extra_terms if t in template_text]
+        if matched_terms:
+            # Keep term boosts bounded so they refine ranking without dominating
+            # core extraction signals (ARRIVE coverage, species/study matches).
+            score = min(
+                1.0,
+                score + min(ADDITIONAL_TERM_SCORE_CAP, ADDITIONAL_TERM_SCORE_MULTIPLIER * len(matched_terms)),
+            )
+            shown = ", ".join(matched_terms[:MAX_MATCH_REASON_TERMS])
+            suffix = "…" if len(matched_terms) > MAX_MATCH_REASON_TERMS else ""
+            reasons.append(f"additional terms matched: {shown}{suffix}")
+
     return min(1.0, round(score, 4)), reasons
 
 
@@ -758,15 +823,17 @@ def suggest_from_paper_extraction(
     extraction: Dict[str, Any],
     all_templates: Dict[str, "Template"],
     threshold: float = 0.05,
+    additional_terms: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Rank templates by match score against paper extraction signals."""
     arrive = extraction.get("arrive", {})
     meta = extraction.get("dataset_metadata", {})
     vcg_hints = extraction.get("vcg_hints", {})
+    extra_terms = _normalize_additional_terms(additional_terms)
 
     candidates: List[Dict[str, Any]] = []
     for tid, tpl in all_templates.items():
-        score, reasons = _score_template_from_paper(tpl, arrive, meta, vcg_hints)
+        score, reasons = _score_template_from_paper(tpl, arrive, meta, vcg_hints, extra_terms)
         if score >= threshold:
             candidates.append({
                 "id": tid,
@@ -776,13 +843,18 @@ def suggest_from_paper_extraction(
                 "score": score,
                 "reasons": reasons,
                 "field_mapping": _build_field_mapping(tpl, extraction),
+                "csv_fields": build_csv_field_options(tpl, extraction),
             })
 
     candidates.sort(key=lambda x: x["score"], reverse=True)
     return candidates
 
 
-def generate_experiment_csv(tpl: "Template", extraction: Dict[str, Any]) -> str:
+def generate_experiment_csv(
+    tpl: "Template",
+    extraction: Dict[str, Any],
+    include_field_ids: Optional[List[str]] = None,
+) -> str:
     """Generate a blank experiment CSV whose headers match the template columns + paper hints."""
     import csv as _csv
     import io as _io
@@ -791,10 +863,13 @@ def generate_experiment_csv(tpl: "Template", extraction: Dict[str, Any]) -> str:
     vcg_hints = extraction.get("vcg_hints", {})
 
     all_cols = list(tpl.required_columns) + list(tpl.optional_columns)
+    if include_field_ids is not None:
+        wanted = {fid for fid in include_field_ids if isinstance(fid, str) and fid}
+        all_cols = [c for c in all_cols if c.id in wanted]
 
     if all_cols:
         col_names = [
-            (c.name_patterns[0] if c.name_patterns else c.id)
+            _column_header_for_template_field(c)
             for c in all_cols
         ]
     else:

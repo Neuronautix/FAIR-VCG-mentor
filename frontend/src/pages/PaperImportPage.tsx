@@ -18,6 +18,10 @@ import {
   CircularProgress,
   Collapse,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
   LinearProgress,
   List,
@@ -44,6 +48,7 @@ import {
   getPaperTemplateSuggestions,
   getStoredPaperExtraction,
   saveMetadata,
+  suggestPaperSearchTerms,
   storePaperExtraction,
 } from '../api/client'
 import type { PaperExtraction } from '../store/useStore'
@@ -63,6 +68,7 @@ const ARRIVE_LABELS: Record<string, string> = {
   adverse_events: 'Adverse Events',
   interpretation: 'Interpretation / Findings',
 }
+const FALLBACK_MAX_ADDITIONAL_TERMS = 20
 
 function StatusChip({ status }: { status: 'found' | 'inferred' | 'missing' }) {
   const map = {
@@ -94,6 +100,14 @@ function MetaRow({ label, value }: { label: string; value: string | string[] | n
       </Typography>
     </Box>
   )
+}
+
+function parseApiLimit(value: unknown, fallback: number): number {
+  const limit = Number(value)
+  if (Number.isFinite(limit) && limit > 0) {
+    return Math.floor(limit)
+  }
+  return fallback
 }
 
 function DropZone({ onFile }: { onFile: (f: File) => void }) {
@@ -261,6 +275,13 @@ interface TemplateCandidate {
   score: number
   reasons: string[]
   field_mapping: FieldMapping[]
+  csv_fields: Array<{
+    id: string
+    label: string
+    header: string
+    required: boolean
+    matched_hint: string | null
+  }>
 }
 
 function ScoreBar({ score }: { score: number }) {
@@ -309,6 +330,11 @@ function FieldMappingTable({ mapping }: { mapping: FieldMapping[] }) {
             </Typography>
           )}
         </TableCell>
+        <TableCell sx={{ py: 0.75, fontSize: 11 }}>
+          <Typography variant="caption" color="text.secondary">
+            {f.source || '—'}
+          </Typography>
+        </TableCell>
         <TableCell sx={{ py: 0.75 }}>
           <Chip
             size="small"
@@ -332,6 +358,7 @@ function FieldMappingTable({ mapping }: { mapping: FieldMapping[] }) {
               <TableRow sx={{ bgcolor: 'grey.50' }}>
                 <TableCell sx={{ fontSize: 11, py: 0.5 }}>Template field</TableCell>
                 <TableCell sx={{ fontSize: 11, py: 0.5 }}>Extracted value</TableCell>
+                <TableCell sx={{ fontSize: 11, py: 0.5 }}>Source</TableCell>
                 <TableCell sx={{ fontSize: 11, py: 0.5 }}>Status</TableCell>
               </TableRow>
             </TableHead>
@@ -349,6 +376,7 @@ function FieldMappingTable({ mapping }: { mapping: FieldMapping[] }) {
               <TableRow sx={{ bgcolor: 'grey.50' }}>
                 <TableCell sx={{ fontSize: 11, py: 0.5 }}>Column field</TableCell>
                 <TableCell sx={{ fontSize: 11, py: 0.5 }}>Matched from paper hints</TableCell>
+                <TableCell sx={{ fontSize: 11, py: 0.5 }}>Source</TableCell>
                 <TableCell sx={{ fontSize: 11, py: 0.5 }}>Status</TableCell>
               </TableRow>
             </TableHead>
@@ -375,14 +403,23 @@ function TemplateSuggestionsCard({
   const [applyingId, setApplyingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [downloadingCsvId, setDownloadingCsvId] = useState<string | null>(null)
+  const [additionalTermInput, setAdditionalTermInput] = useState('')
+  const [additionalTerms, setAdditionalTerms] = useState<string[]>([])
+  const [suggestingTerms, setSuggestingTerms] = useState(false)
+  const [csvPickerCandidate, setCsvPickerCandidate] = useState<TemplateCandidate | null>(null)
+  const [selectedCsvFieldIds, setSelectedCsvFieldIds] = useState<string[]>([])
+  const [maxAdditionalTerms, setMaxAdditionalTerms] = useState(FALLBACK_MAX_ADDITIONAL_TERMS)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
-    getPaperTemplateSuggestions(extraction)
+    getPaperTemplateSuggestions(extraction, additionalTerms)
       .then((data) => {
-        if (!cancelled) setCandidates(data.candidates ?? [])
+        if (!cancelled) {
+          setCandidates(data.candidates ?? [])
+          setMaxAdditionalTerms((prev) => parseApiLimit(data.max_additional_terms, prev))
+        }
       })
       .catch((err: any) => {
         const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error'
@@ -390,7 +427,33 @@ function TemplateSuggestionsCard({
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [extraction])
+  }, [extraction, additionalTerms])
+
+  const addAdditionalTerms = (raw: string) => {
+    const parsed = raw
+      .split(',')
+      .map((x) => x.trim().toLowerCase())
+      .filter(Boolean)
+    if (!parsed.length) return
+    setAdditionalTerms((prev) => Array.from(new Set([...prev, ...parsed])).slice(0, maxAdditionalTerms))
+    setAdditionalTermInput('')
+  }
+
+  const handleSuggestTerms = async () => {
+    setSuggestingTerms(true)
+    setError(null)
+    try {
+      const data = await suggestPaperSearchTerms(extraction, additionalTerms)
+      const effectiveLimit = parseApiLimit(data?.max_additional_terms, maxAdditionalTerms)
+      setMaxAdditionalTerms(effectiveLimit)
+      setAdditionalTerms((prev) => Array.from(new Set([...prev, ...(data.terms ?? [])])).slice(0, effectiveLimit))
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error'
+      setError(`LLM term suggestion failed: ${detail}`)
+    } finally {
+      setSuggestingTerms(false)
+    }
+  }
 
   const handleApply = async (tid: string) => {
     if (!datasetId) return
@@ -423,23 +486,38 @@ function TemplateSuggestionsCard({
     }
   }
 
-  const handleDownloadCsv = async (tid: string) => {
-    setDownloadingCsvId(tid)
+  const openCsvPicker = (candidate: TemplateCandidate) => {
+    const defaults = candidate.csv_fields
+      .filter((f) => f.required || !!f.matched_hint)
+      .map((f) => f.id)
+    setSelectedCsvFieldIds(defaults.length ? defaults : candidate.csv_fields.map((f) => f.id))
+    setCsvPickerCandidate(candidate)
+  }
+
+  const handleDownloadCsv = async (candidate: TemplateCandidate) => {
+    const selected = selectedCsvFieldIds.length ? selectedCsvFieldIds : candidate.csv_fields.map((f) => f.id)
+    setDownloadingCsvId(candidate.id)
     try {
-      const data = await generateExperimentCsv(tid, extraction)
+      const data = await generateExperimentCsv(candidate.id, extraction, selected)
       const blob = new Blob([data.csv], { type: 'text/csv' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = data.filename ?? `${tid}-experiment-template.csv`
+      a.download = data.filename ?? `${candidate.id}-experiment-template.csv`
       a.click()
       URL.revokeObjectURL(url)
+      setCsvPickerCandidate(null)
     } catch {
       setError('Failed to generate CSV template.')
     } finally {
       setDownloadingCsvId(null)
     }
   }
+
+  const canExportCsv =
+    !!csvPickerCandidate &&
+    downloadingCsvId !== csvPickerCandidate.id &&
+    selectedCsvFieldIds.length > 0
 
   return (
     <Card variant="outlined">
@@ -457,6 +535,47 @@ function TemplateSuggestionsCard({
         {loading && <CircularProgress size={22} />}
         {error && <Alert severity="warning" sx={{ fontSize: 12 }}>{error}</Alert>}
 
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 1.5 }}>
+          <TextField
+            size="small"
+            fullWidth
+            label="Additional search terms"
+            placeholder="e.g. cage telemetry, dose response"
+            value={additionalTermInput}
+            onChange={(e) => setAdditionalTermInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addAdditionalTerms(additionalTermInput)
+              }
+            }}
+            helperText="Add terms to refine template matching."
+          />
+          <Button variant="outlined" onClick={() => addAdditionalTerms(additionalTermInput)}>
+            Add Terms
+          </Button>
+          <Button
+            variant="contained"
+            disabled={suggestingTerms}
+            onClick={handleSuggestTerms}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            {suggestingTerms ? <CircularProgress size={16} color="inherit" /> : 'Suggest via LLM'}
+          </Button>
+        </Stack>
+        {additionalTerms.length > 0 && (
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mb: 1.5 }}>
+            {additionalTerms.map((term) => (
+              <Chip
+                key={term}
+                size="small"
+                label={term}
+                onDelete={() => setAdditionalTerms((prev) => prev.filter((t) => t !== term))}
+              />
+            ))}
+          </Stack>
+        )}
+
         {!loading && candidates.length === 0 && !error && (
           <Typography variant="body2" color="text.secondary" fontStyle="italic">
             No templates matched the paper content above the minimum threshold.
@@ -468,6 +587,9 @@ function TemplateSuggestionsCard({
             const isExpanded = expandedId === c.id
             const filled = c.field_mapping.filter((f) => f.status === 'filled').length
             const total = c.field_mapping.length
+            const metadataFields = c.field_mapping.filter((f) => !f.is_column)
+            const metadataMissing = metadataFields.filter((f) => f.status !== 'filled')
+            const highPriorityMissing = metadataMissing.filter((f) => f.severity === 'high')
 
             return (
               <Box
@@ -502,6 +624,24 @@ function TemplateSuggestionsCard({
                         {filled}/{total} fields can be pre-filled from paper
                       </Typography>
                     )}
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" mt={0.5}>
+                      <Chip
+                        size="small"
+                        color={metadataMissing.length === 0 ? 'success' : 'default'}
+                        label={`Metadata gaps: ${metadataMissing.length}`}
+                        icon={metadataMissing.length === 0 ? <CheckCircleIcon sx={{ fontSize: 12 }} /> : <ErrorIcon sx={{ fontSize: 12 }} />}
+                        aria-label={`Metadata gaps ${metadataMissing.length}`}
+                        sx={{ height: 20, fontSize: 10 }}
+                      />
+                      <Chip
+                        size="small"
+                        color={highPriorityMissing.length > 0 ? 'warning' : 'success'}
+                        label={`High-priority missing: ${highPriorityMissing.length}`}
+                        icon={highPriorityMissing.length > 0 ? <HelpOutlineIcon sx={{ fontSize: 12 }} /> : <CheckCircleIcon sx={{ fontSize: 12 }} />}
+                        aria-label={`High priority missing fields ${highPriorityMissing.length}`}
+                        sx={{ height: 20, fontSize: 10 }}
+                      />
+                    </Stack>
                   </Box>
 
                   <Stack direction="row" spacing={0.75} alignItems="center" flexShrink={0}>
@@ -524,11 +664,11 @@ function TemplateSuggestionsCard({
                         variant="contained"
                         color="success"
                         disabled={downloadingCsvId === c.id}
-                        onClick={() => handleDownloadCsv(c.id)}
+                        onClick={() => openCsvPicker(c)}
                         startIcon={downloadingCsvId === c.id ? <CircularProgress size={12} /> : <DownloadIcon sx={{ fontSize: 14 }} />}
                         sx={{ fontSize: 12, whiteSpace: 'nowrap' }}
                       >
-                        CSV Template
+                        CSV Fields…
                       </Button>
                     </Tooltip>
                     <Tooltip title="Download a starter YAML schema — upload to Templates to reuse this configuration for future experiments">
@@ -564,6 +704,74 @@ function TemplateSuggestionsCard({
             )
           })}
         </Stack>
+
+        <Dialog
+          open={!!csvPickerCandidate}
+          onClose={() => setCsvPickerCandidate(null)}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Select template fields for CSV schema</DialogTitle>
+          <DialogContent dividers>
+            {error && (
+              <Alert severity="warning" sx={{ mb: 1.5, fontSize: 12 }}>
+                {error}
+              </Alert>
+            )}
+            {csvPickerCandidate && (
+              <Stack spacing={1}>
+                <Typography variant="body2" color="text.secondary">
+                  Choose the template fields to include as CSV columns.
+                </Typography>
+                {csvPickerCandidate.csv_fields.map((field) => (
+                  <Box
+                    key={field.id}
+                    sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1, py: 0.75 }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={500}>
+                        {field.label}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        header: {field.header}
+                        {field.matched_hint ? ` · matched hint: ${field.matched_hint}` : ''}
+                      </Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant={selectedCsvFieldIds.includes(field.id) ? 'contained' : 'outlined'}
+                      color={selectedCsvFieldIds.includes(field.id) ? 'success' : 'inherit'}
+                      aria-pressed={selectedCsvFieldIds.includes(field.id)}
+                      onClick={() =>
+                        setSelectedCsvFieldIds((prev) =>
+                          prev.includes(field.id) ? prev.filter((id) => id !== field.id) : [...prev, field.id],
+                        )
+                      }
+                    >
+                      {selectedCsvFieldIds.includes(field.id) ? 'Included' : 'Excluded'}
+                    </Button>
+                  </Box>
+                ))}
+              </Stack>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCsvPickerCandidate(null)}>Cancel</Button>
+            <Button
+              variant="contained"
+              color="success"
+              disabled={!canExportCsv}
+              onClick={() => csvPickerCandidate && handleDownloadCsv(csvPickerCandidate)}
+              startIcon={
+                csvPickerCandidate && downloadingCsvId === csvPickerCandidate.id
+                  ? <CircularProgress size={14} color="inherit" />
+                  : <DownloadIcon sx={{ fontSize: 14 }} />
+              }
+            >
+              Export CSV
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {appliedId && datasetId && (
           <Alert severity="success" sx={{ mt: 1.5, fontSize: 12 }}>

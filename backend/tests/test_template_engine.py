@@ -9,11 +9,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import template_engine
 from template_engine import (
+    _normalize_additional_terms,
     conformance_to_issues,
+    generate_experiment_csv,
     get_template,
     load_templates,
     match_template,
     save_user_template,
+    suggest_from_paper_extraction,
     suggest_templates,
     validate_against_template,
 )
@@ -180,3 +183,40 @@ version: 0.0.1
 """
     with pytest.raises(ValueError):
         save_user_template(yaml_body, source_format="yaml")
+
+
+def test_generate_experiment_csv_can_filter_selected_fields():
+    tpl = load_templates(force=True)["mnms-v1"]
+    extraction = {
+        "dataset_metadata": {"species": "Mus musculus"},
+        "vcg_hints": {
+            "control_group_label": "Control",
+            "treatment_group_label": "Treatment",
+            "n_control": 2,
+            "n_treatment": 2,
+        },
+    }
+    csv_text = generate_experiment_csv(
+        tpl,
+        extraction,
+        include_field_ids=["subject_id", "xp_group", "outcome"],
+    )
+    first_line = csv_text.splitlines()[0]
+    assert first_line == "unique_animal_identifier,xp_group,outcome_measure"
+
+
+def test_suggest_from_paper_extraction_uses_additional_terms():
+    templates = load_templates(force=True)
+    extraction = {
+        "dataset_metadata": {"keywords": [], "study_type": None, "species": None},
+        "arrive": {},
+        "vcg_hints": {},
+    }
+    candidates = suggest_from_paper_extraction(extraction, templates, additional_terms=["arrive"])
+    arrive_candidate = next(c for c in candidates if c["id"] == "arrive-v2")
+    assert any("additional terms matched" in r for r in arrive_candidate["reasons"])
+
+
+def test_normalize_additional_terms_deduplicates_and_trims():
+    terms = _normalize_additional_terms(["  ARRIVE ", "arrive", "", "  in vivo "])
+    assert terms == ["arrive", "in vivo"]

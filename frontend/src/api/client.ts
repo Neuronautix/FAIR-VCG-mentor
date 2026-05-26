@@ -8,6 +8,7 @@ import type {
   Issue,
   LowConfidenceColumn,
   TableStructure,
+  VCGColumnRoles,
 } from '../store/useStore'
 
 const api = axios.create({ baseURL: '/api' })
@@ -417,10 +418,52 @@ export interface StudyCorpus {
   version: number
   papers: StudyCorpusPaper[]
   article_schema_candidates: ArticleSchemaCandidate[]
-  consensus_schema: { schema: Record<string, any>; source: string; updated_at: number } | null
+  consensus_schema: {
+    schema: ProjectSchema
+    source: string
+    validation?: { ok: boolean; errors: string[]; warnings: string[] }
+    updated_at: number
+  } | null
   conflicts: SchemaConflict[]
   expert_decisions: ExpertDecision[]
   schema_versions: Array<Record<string, any>>
+}
+
+export interface ProjectSchemaColumn {
+  name: string
+  label: string
+  description: string | null
+  semantic_type: string
+  data_type: string
+  unit: string | null
+  required: boolean
+  role: string
+  controlled_values: string[]
+  ontology: Record<string, any>
+  evidence: string[]
+  confidence: number
+  review_status: SchemaConfidence | 'approved'
+}
+
+export interface ProjectSchema {
+  schema_version: number
+  name: string
+  status: 'draft' | 'needs_review' | 'approved' | 'superseded'
+  metadata_fields: Record<string, Record<string, any>>
+  columns: ProjectSchemaColumn[]
+  vcg_roles: VCGColumnRoles
+  units: Record<string, Record<string, any>>
+  controlled_values: Record<string, Record<string, any>>
+  ontology_mappings: Record<string, Record<string, any>>
+  vcg_readiness: {
+    ready: boolean
+    blocking: string[]
+    warnings: string[]
+    score: number | null
+    consequences?: string[]
+  }
+  evidence: Array<Record<string, any>>
+  expert_decisions: Array<Record<string, any>>
 }
 
 export interface LLMStatus {
@@ -481,6 +524,12 @@ export const updateConsensusSchema = (
     })
     .then(async () => ({ corpus: await getStudyCorpus(id) }))
 
+export const validateProjectSchema = (
+  id: string,
+  schema: Record<string, any>,
+): Promise<{ ok: boolean; errors: string[]; warnings: string[]; schema: ProjectSchema | null }> =>
+  api.post(`/${id}/study-corpus/project-schema/validate`, { schema }).then((r) => r.data)
+
 export const addExpertDecision = (
   id: string,
   body: {
@@ -511,3 +560,8 @@ export const requestCorpusSchemaReview = (id: string) =>
       loop_state: Record<string, any>
     }>(`/${id}/study-corpus/schema-review`)
     .then((r) => r.data)
+
+export const getCorpusVCGReadiness = (
+  id: string,
+): Promise<ProjectSchema['vcg_readiness']> =>
+  api.get(`/${id}/study-corpus/vcg-readiness`).then((r) => r.data)

@@ -98,7 +98,8 @@ def test_corpus_lifecycle_and_json_serialization():
     corpus = ensure_study_corpus(session)
     assert len(corpus["papers"]) == 1
     assert len(corpus["article_schema_candidates"]) == 1
-    assert corpus["consensus_schema"]["schema"]["fields"][0]["name"] == "animal_id"
+    assert corpus["consensus_schema"]["schema"]["columns"][0]["name"] == "animal_id"
+    assert corpus["consensus_schema"]["schema"]["schema_version"] == 1
     assert corpus["conflicts"][0]["id"] == conflict["id"]
     assert corpus["expert_decisions"][0]["id"] == decision["id"]
     assert corpus["schema_versions"][0]["version"] == version["version"] == 1
@@ -206,3 +207,32 @@ def test_schema_review_route_queues_vcg_questions():
     categories = {item["category"] for item in body["created"]}
     assert "vcg_assumption" in categories
     assert body["loop_state"]["reason"] in {"needs_questions", "iteration_cap"}
+
+
+def test_project_schema_validation_route_normalizes_legacy_fields():
+    sessions = {"ds1": {"dataset_id": "ds1"}}
+
+    app = FastAPI()
+    app.include_router(create_corpus_router(sessions))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/ds1/study-corpus/project-schema/validate",
+        json={
+            "fields": [
+                {"name": "animal_id", "role": "identifier"},
+                {"name": "group", "role": "treatment"},
+                {"name": "body_weight", "role": "outcome", "unit": "g"},
+            ],
+            "vcg_roles": {"control_value": "vehicle"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    schema = body["schema"]
+    assert schema["columns"][0]["name"] == "animal_id"
+    assert schema["vcg_roles"]["subject_id"] == "animal_id"
+    assert schema["vcg_roles"]["treatment_col"] == "group"
+    assert schema["vcg_roles"]["outcome_cols"] == ["body_weight"]

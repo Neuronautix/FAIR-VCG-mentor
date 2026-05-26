@@ -16,6 +16,7 @@ from study_corpus import (
     set_consensus_schema,
     update_paper_source,
 )
+from project_schema import validate_project_schema
 
 
 _sessions: Dict[str, Any] = {}
@@ -159,6 +160,24 @@ def _register_routes(
             raise HTTPException(400, str(exc))
         persist_fn(dataset_id, s)
         return consensus
+
+    @router.post("/api/{dataset_id}/study-corpus/project-schema/validate")
+    async def validate_project_schema_payload(dataset_id: str, body: Dict[str, Any]):
+        require_fn(dataset_id)
+        result = validate_project_schema(body.get("schema") or body)
+        if result.get("schema") is not None:
+            from vcg_readiness import assess_vcg_readiness
+            result["schema"]["vcg_readiness"] = assess_vcg_readiness(result["schema"])
+        return result
+
+    @router.get("/api/{dataset_id}/study-corpus/vcg-readiness")
+    async def read_vcg_readiness(dataset_id: str):
+        s = require_fn(dataset_id)
+        schema = ((ensure_study_corpus(s).get("consensus_schema") or {}).get("schema") or {})
+        if not schema:
+            raise HTTPException(404, "No consensus schema is available for VCG readiness.")
+        from vcg_readiness import assess_vcg_readiness
+        return assess_vcg_readiness(schema)
 
     @router.post("/api/{dataset_id}/study-corpus/conflicts")
     async def create_conflict(dataset_id: str, body: Dict[str, Any]):
@@ -335,6 +354,11 @@ def _question_title(category: str, target: str, decision: str) -> str:
 def _schema_has_field(schema: Dict[str, Any], field: str) -> bool:
     if field in schema:
         return True
+    columns = schema.get("columns")
+    if isinstance(columns, list):
+        for column in columns:
+            if isinstance(column, dict) and column.get("name") == field:
+                return True
     slots = schema.get("slots")
     if isinstance(slots, dict) and field in slots:
         return True

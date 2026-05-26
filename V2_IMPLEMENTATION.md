@@ -13,7 +13,7 @@ Branch: `v2-local-llm-hitl-planning`
   - [x] Explorer D: frontend integration map
 - [x] Integrate worker changes
 - [x] Run backend tests
-- [ ] Run frontend type-check (`npm` is not available in this shell; `frontend/node_modules/.bin` is also missing)
+- [x] Run frontend type-check
 
 ## LLM Provider Layer
 
@@ -28,10 +28,14 @@ Branch: `v2-local-llm-hitl-planning`
 ## Multi-Paper Corpus
 
 - [x] Add `StudyCorpus` session model
+- [x] Add formal `ProjectSchema` contract for consensus schemas
+- [x] Normalize legacy/simple field drafts into project-schema shape
+- [x] Validate VCG role references against declared columns
 - [x] Add paper source lifecycle
 - [x] Add article-schema candidate storage with evidence spans
 - [x] Add consensus schema, conflicts, expert decisions, and schema versions
 - [x] Add corpus API routes
+- [x] Add project-schema validation API route
 - [x] Persist corpus in existing SQLite session JSON
 - [x] Add corpus tests
 
@@ -51,26 +55,30 @@ Branch: `v2-local-llm-hitl-planning`
 - [x] Add route and nav entry
 - [x] Add evidence-backed schema review surface
 - [x] Add model/provider status surface
-- [ ] Add schema approval workflow
+- [x] Add schema approval workflow
 
 ## VCG Readiness
 
 - [ ] Connect consensus schema to column profiling
 - [ ] Connect consensus schema to template suggestions
-- [ ] Connect consensus schema to VCG wizard defaults
-- [ ] Add FAIR-to-VCG readiness consequences
+- [x] Define normalized VCG role contract for downstream wizard defaults
+- [x] Connect consensus schema to VCG wizard defaults
+- [x] Add FAIR-to-VCG readiness consequences
+- [x] Add deterministic VCG readiness API/helper
 - [ ] Add reviewer/ethics committee report export
 
 ## Validation
 
 - [x] Add provider contract tests
-- [ ] Add multi-paper synthesis fixtures
-- [ ] Add hallucinated-column and invalid-unit regression tests
+- [x] Add project-schema contract tests
+- [x] Add multi-paper/project-schema fixtures
+- [x] Add hallucinated role-reference regression tests
+- [ ] Add invalid-unit conflict diagnostics
 - [ ] Add local-model benchmark plan/fixture
 - [ ] Compare Qwen3-14B, Qwen3-8B, Llama 3.1 8B, and opt-in cloud models
 
 ## Verification Log
 
-- [x] `python -m py_compile backend\llm_providers.py backend\llm_service.py backend\study_corpus.py backend\corpus_router.py backend\schema_agent_loop.py backend\hitl.py backend\llm_fair_scorer.py backend\paper_extractor.py backend\vcg\llm_orchestrator.py`
-- [x] Focused backend tests: `21 passed`
-- [ ] Frontend type-check blocked: `npm` is not available in the shell and `frontend/node_modules/.bin` is missing
+- [x] `python -m py_compile backend\llm_providers.py backend\llm_service.py backend\study_corpus.py backend\corpus_router.py backend\schema_agent_loop.py backend\hitl.py backend\llm_fair_scorer.py backend\paper_extractor.py backend\project_schema.py backend\vcg\llm_orchestrator.py`
+- [x] Focused backend tests: `37 passed`
+- [x] Frontend type-check: `npm run type-check` passed

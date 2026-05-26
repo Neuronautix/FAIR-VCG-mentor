@@ -113,6 +113,48 @@ def _apply_template_defaults(
     return roles_dict
 
 
+def _apply_project_schema_defaults(
+    roles_dict: Dict[str, Any],
+    session: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Fill wizard roles from the approved/validated corpus consensus schema.
+
+    This intentionally runs before template defaults, so template-locked
+    reporting-standard values still override schema suggestions.
+    """
+    consensus = ((session.get("study_corpus") or {}).get("consensus_schema") or {})
+    schema = consensus.get("schema") if isinstance(consensus, dict) else None
+    if not isinstance(schema, dict):
+        return roles_dict
+
+    try:
+        from project_schema import project_schema_vcg_roles
+        schema_roles = project_schema_vcg_roles(schema)
+    except Exception:
+        return roles_dict
+
+    column_roles = roles_dict.setdefault("column_roles", {})
+    applied: List[str] = []
+    for key, value in schema_roles.items():
+        if value in (None, "", []):
+            continue
+        if key in {"outcome_cols", "covariate_cols", "exclude_cols"}:
+            if not column_roles.get(key):
+                column_roles[key] = list(value)
+                applied.append(key)
+        elif not column_roles.get(key):
+            column_roles[key] = value
+            applied.append(key)
+
+    if applied:
+        roles_dict["project_schema_applied"] = applied
+        roles_dict["project_schema_source"] = consensus.get("source") or "study_corpus"
+        roles_dict.setdefault("warnings", []).append(
+            "VCG fields were pre-filled from the study corpus consensus schema."
+        )
+    return roles_dict
+
+
 def _use_llm_orchestrator() -> bool:
     """LLM orchestrator on by default when an API key is available."""
     from llm_service import llm_enabled
@@ -165,6 +207,7 @@ async def wizard_prefill(dataset_id: str):
     s = _require(dataset_id)
     from vcg.vcg_wizard import infer_column_roles
     prefill = infer_column_roles(s["columns"], s["table_structure"], s["metadata"])
+    _apply_project_schema_defaults(prefill, s)
     template_id = s.get("template_id")
     if template_id:
         try:

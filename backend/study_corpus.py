@@ -11,6 +11,8 @@ import uuid
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Optional
 
+from project_schema import validate_project_schema
+
 
 STUDY_CORPUS_KEY = "study_corpus"
 SOURCE_TYPES = {"pdf", "doi", "text"}
@@ -190,13 +192,22 @@ def set_consensus_schema(
     based_on_candidate_ids: Optional[List[str]] = None,
     notes: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if not isinstance(schema, dict):
-        raise ValueError("schema must be an object.")
+    result = validate_project_schema(schema)
+    if not result["ok"]:
+        raise ValueError("; ".join(result["errors"]))
+    from vcg_readiness import assess_vcg_readiness
+    readiness = assess_vcg_readiness(result["schema"])
+    result["schema"]["vcg_readiness"] = readiness
     consensus = {
-        "schema": _json_safe(schema),
+        "schema": _json_safe(result["schema"]),
         "source": source,
         "based_on_candidate_ids": list(based_on_candidate_ids or []),
         "notes": notes,
+        "validation": {
+            "ok": result["ok"],
+            "errors": result["errors"],
+            "warnings": result["warnings"],
+        },
         "updated_at": time.time(),
     }
     ensure_study_corpus(session)["consensus_schema"] = consensus
@@ -267,16 +278,25 @@ def add_schema_version(
     based_on_candidate_ids: Optional[List[str]] = None,
     version_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if not isinstance(schema, dict):
-        raise ValueError("schema must be an object.")
+    result = validate_project_schema(schema)
+    if not result["ok"]:
+        raise ValueError("; ".join(result["errors"]))
+    from vcg_readiness import assess_vcg_readiness
+    readiness = assess_vcg_readiness(result["schema"])
+    result["schema"]["vcg_readiness"] = readiness
     corpus = ensure_study_corpus(session)
     version = {
         "id": version_id or _new_id("schema_version"),
         "version": len(corpus["schema_versions"]) + 1,
-        "schema": _json_safe(schema),
+        "schema": _json_safe(result["schema"]),
         "reason": reason,
         "source": source,
         "based_on_candidate_ids": list(based_on_candidate_ids or []),
+        "validation": {
+            "ok": result["ok"],
+            "errors": result["errors"],
+            "warnings": result["warnings"],
+        },
         "created_at": time.time(),
     }
     corpus["schema_versions"].append(version)

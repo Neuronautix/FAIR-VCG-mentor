@@ -193,6 +193,12 @@ export type HITLCategory =
   | 'fair_recommendation'
   | 'issue_fix'
   | 'schema_extension'
+  | 'schema_field'
+  | 'schema_conflict'
+  | 'ontology_mapping'
+  | 'unit_normalization'
+  | 'vcg_assumption'
+  | 'corpus_schema_approval'
 
 export type HITLStatus =
   | 'pending'
@@ -347,4 +353,161 @@ export const generateStarterYaml = (templateId: string, extraction: object) =>
 export const generateExperimentCsv = (templateId: string, extraction: object) =>
   api
     .post('/templates/paper/generate-csv', { template_id: templateId, extraction })
+    .then((r) => r.data)
+
+// ── V2 study corpus / schema synthesis ───────────────────────────────────
+
+export type StudyCorpusSourceType = 'pdf' | 'doi' | 'text'
+export type SchemaConfidence = 'auto_accept' | 'needs_review' | 'must_ask' | 'reject'
+
+export interface EvidenceSpan {
+  paper_id: string
+  section?: string | null
+  quote?: string | null
+  page?: number | null
+  confidence?: number | null
+}
+
+export interface StudyCorpusPaper {
+  id: string
+  source_type: StudyCorpusSourceType
+  source_ref: string
+  title?: string | null
+  status: string
+  text?: string | null
+  metadata?: Record<string, any>
+  created_at: number
+  updated_at: number
+}
+
+export interface ArticleSchemaCandidate {
+  id: string
+  paper_id: string
+  schema: Record<string, any>
+  evidence_spans: EvidenceSpan[]
+  confidence: number | null
+  source: string
+  status: string
+  created_at: number
+  updated_at: number
+}
+
+export interface SchemaConflict {
+  id: string
+  schema_path: string
+  issue: string
+  options: Array<Record<string, any>>
+  confidence: SchemaConfidence
+  impact: 'low' | 'medium' | 'high' | 'vcg_blocking'
+  evidence: EvidenceSpan[]
+  status: string
+}
+
+export interface ExpertDecision {
+  id: string
+  target_type: string
+  target_id: string
+  decision: string
+  rationale?: string | null
+  payload: Record<string, any>
+  created_at: number
+}
+
+export interface StudyCorpus {
+  version: number
+  papers: StudyCorpusPaper[]
+  article_schema_candidates: ArticleSchemaCandidate[]
+  consensus_schema: { schema: Record<string, any>; source: string; updated_at: number } | null
+  conflicts: SchemaConflict[]
+  expert_decisions: ExpertDecision[]
+  schema_versions: Array<Record<string, any>>
+}
+
+export interface LLMStatus {
+  enabled: boolean
+  provider?: string
+  model?: string | null
+  local?: boolean
+  healthy?: boolean
+  reason?: string | null
+}
+
+export const getLLMProviderStatus = (): Promise<LLMStatus> =>
+  api.get('/llm/status').then((r) => r.data)
+
+export const getStudyCorpus = (id: string): Promise<StudyCorpus> =>
+  api.get<StudyCorpus>(`/${id}/study-corpus`).then((r) => r.data)
+
+export const addStudyCorpusPaper = (
+  id: string,
+  body: {
+    source_type: StudyCorpusSourceType
+    source_ref: string
+    title?: string | null
+    text?: string | null
+  },
+): Promise<{ corpus: StudyCorpus; paper: StudyCorpusPaper }> =>
+  api.post(`/${id}/study-corpus/papers`, body).then(async (r) => ({
+    paper: r.data,
+    corpus: await getStudyCorpus(id),
+  }))
+
+export const addArticleSchemaCandidate = (
+  id: string,
+  body: {
+    paper_id: string
+    schema: Record<string, any>
+    evidence?: EvidenceSpan[]
+    confidence?: number
+  },
+): Promise<{ corpus: StudyCorpus; candidate: ArticleSchemaCandidate }> =>
+  api
+    .post(`/${id}/study-corpus/schema-candidates`, {
+      paper_id: body.paper_id,
+      schema: body.schema,
+      evidence_spans: body.evidence,
+      confidence: body.confidence,
+    })
+    .then(async (r) => ({ candidate: r.data, corpus: await getStudyCorpus(id) }))
+
+export const updateConsensusSchema = (
+  id: string,
+  body: { consensus_schema: Record<string, any>; reason?: string },
+): Promise<{ corpus: StudyCorpus }> =>
+  api
+    .put(`/${id}/study-corpus/consensus-schema`, {
+      schema: body.consensus_schema,
+      notes: body.reason,
+    })
+    .then(async () => ({ corpus: await getStudyCorpus(id) }))
+
+export const addExpertDecision = (
+  id: string,
+  body: {
+    question: string
+    answer: string
+    rationale?: string | null
+    schema_paths?: string[]
+  },
+): Promise<{ corpus: StudyCorpus; decision: ExpertDecision }> =>
+  api
+    .post(`/${id}/study-corpus/expert-decisions`, {
+      target_type: 'schema_question',
+      target_id: body.schema_paths?.[0] || 'consensus_schema',
+      decision: 'accepted',
+      rationale: body.rationale,
+      payload: {
+        question: body.question,
+        answer: body.answer,
+        schema_paths: body.schema_paths || [],
+      },
+    })
+    .then(async (r) => ({ decision: r.data, corpus: await getStudyCorpus(id) }))
+
+export const requestCorpusSchemaReview = (id: string) =>
+  api
+    .post<{
+      created: HITLSuggestion[]
+      loop_state: Record<string, any>
+    }>(`/${id}/study-corpus/schema-review`)
     .then((r) => r.data)

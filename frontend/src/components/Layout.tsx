@@ -6,6 +6,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoIcon from '@mui/icons-material/Info'
 import ScienceIcon from '@mui/icons-material/Science'
+import SchemaIcon from '@mui/icons-material/Schema'
 import RuleIcon from '@mui/icons-material/Rule'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import TuneIcon from '@mui/icons-material/Tune'
@@ -24,9 +25,9 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { getLLMStatus } from '../api/client'
+import { getLLMProviderStatus } from '../api/client'
 import { useStore } from '../store/useStore'
 
 const DRAWER_WIDTH = 220
@@ -42,6 +43,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Upload CSV', path: '/' },
   { label: 'Paper Import', path: '/paper-import', alwaysEnabled: true },
+  { label: 'Study Corpus', path: '/study-corpus' },
   { label: 'Overview', path: '/overview' },
   { label: 'Column Profile', path: '/columns' },
   { label: 'FAIR Score', path: '/fair-score' },
@@ -53,8 +55,9 @@ const navItems: NavItem[] = [
 ].map((item, i) => ({
   ...item,
   icon: [
-    <CloudUploadIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
-    <TuneIcon />, <RuleIcon />, <ScienceIcon />, <DownloadIcon />, <BarChartIcon />,
+    <CloudUploadIcon />, <ArticleIcon />, <SchemaIcon />, <InfoIcon />, <TableChartIcon />,
+    <AssessmentIcon />, <TuneIcon />, <RuleIcon />, <ScienceIcon />, <DownloadIcon />,
+    <BarChartIcon />,
   ][i],
 }))
 
@@ -63,12 +66,19 @@ export default function Layout() {
   const navigate = useNavigate()
   const theme = useTheme()
   const { datasetId, importInfo, vcgStatus, llmEnabled, setLLMEnabled } = useStore()
+  const [llmLabel, setLLMLabel] = useState('LLM')
 
   useEffect(() => {
     if (llmEnabled !== null) return
-    getLLMStatus()
-      .then((r) => setLLMEnabled(r.enabled))
-      .catch(() => setLLMEnabled(false))
+    getLLMProviderStatus()
+      .then((r) => {
+        setLLMEnabled(r.enabled)
+        setLLMLabel(r.provider && r.model ? `${r.provider} · ${r.model}` : 'LLM')
+      })
+      .catch(() => {
+        setLLMEnabled(false)
+        setLLMLabel('LLM')
+      })
   }, [llmEnabled, setLLMEnabled])
 
   return (
@@ -92,7 +102,7 @@ export default function Layout() {
           )}
           {llmEnabled !== null && (
             <Chip
-              label={llmEnabled ? 'Claude Haiku · on' : 'Claude Haiku · off'}
+              label={llmEnabled ? `${llmLabel} · on` : `${llmLabel} · off`}
               size="small"
               sx={{
                 color: 'white',

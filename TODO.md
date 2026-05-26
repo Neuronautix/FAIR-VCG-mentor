@@ -2,6 +2,178 @@
 
 Generated from code review on 2026-05-02.
 
+## V2 Plan — Local LLM, Multi-Paper Schema Builder, and Scientific HITL
+
+Goal: make FAIR-VCG Mentor local-first and scientist-led. The LLM should help extract, compare, and explain schemas across several papers, but every scientific decision remains reviewable and approved by the expert user before it mutates the dataset, vocabulary, metadata, or VCG configuration.
+
+### V2 branch
+- [x] Create planning branch: `v2-local-llm-hitl-planning`
+- [ ] Keep `main` clean until the v2 plan is reviewed and split into implementation PRs
+
+### 1. Local LLM + external LLM API strategy
+
+Recommended architecture: add a provider-neutral LLM gateway instead of coding directly against Claude/Anthropic in feature modules.
+
+- [ ] Replace the Anthropic-specific `llm_service.py` surface with an `LLMProvider` interface:
+	- `generate_structured(system, messages, schema, tools=None, options=None)`
+	- `stream_structured(...)`
+	- `healthcheck()`
+	- provider metadata: model name, context window, local/cloud, supports tools, supports JSON schema, supports vision/PDF input
+- [ ] Keep existing `call_haiku` behavior as an Anthropic adapter during migration so current paper extraction, FAIR scoring, vocabulary discovery, and VCG chat continue to work.
+- [ ] Add an OpenAI-compatible adapter:
+	- Supports OpenAI, Ollama, LM Studio, llama.cpp server, vLLM, and many hosted gateway APIs through `base_url`, `api_key`, and `model`.
+	- Use this as the primary compatibility layer for local LLMs and for users who bring their own OpenAI-compatible endpoint.
+- [ ] Add optional native adapters only where needed:
+	- Anthropic adapter for Claude tool use and prompt caching.
+	- Gemini adapter if multimodal PDF processing is materially better for a deployment.
+	- Codex/OpenAI adapter through the same OpenAI-compatible path unless a feature needs an OpenAI-specific API.
+- [ ] Add provider config to environment and UI:
+	- `LLM_PROVIDER=none|ollama|openai_compatible|anthropic|gemini`
+	- `LLM_BASE_URL=http://localhost:11434/v1`
+	- `LLM_MODEL=qwen3:14b`
+	- `LLM_API_KEY`, optional for local runtimes
+	- per-task overrides: `LLM_MODEL_INGESTION`, `LLM_MODEL_SCHEMA_SYNTHESIS`, `LLM_MODEL_CHAT`
+- [ ] Add capability-aware routing:
+	- Use deterministic CSV profiling and templates first.
+	- Use local LLM by default for text extraction, column role suggestions, schema synthesis, and HITL question generation.
+	- Allow cloud LLM fallback only when enabled by the user and only for tasks marked as eligible.
+	- Never send uploaded papers or unpublished lab data to cloud providers without explicit per-session consent.
+- [ ] Enforce one structured-output contract across providers:
+	- JSON Schema validation after every model call.
+	- Ground all column names, values, units, and ontology terms against session data or approved vocabularies.
+	- Queue all risky outputs as HITL suggestions; do not auto-apply.
+	- Store provider, model, prompt version, schema version, confidence, and validation errors in the audit trail.
+- [ ] Add local runtime documentation:
+	- `ollama pull qwen3:14b`
+	- configure `LLM_PROVIDER=ollama`
+	- configure `LLM_BASE_URL=http://localhost:11434/v1`
+	- expose hardware guidance and fallback models in the UI.
+
+Recommended first local model:
+
+- [ ] Start with **Qwen3-14B via Ollama** for v2 development.
+	- Rationale: Apache-2.0 license, strong instruction/tool-following profile, 14.8B parameters, 32k native context and documented long-context extension, broad local runtime support.
+	- Use a quantized build for ordinary lab workstations.
+	- Treat it as the default "scientific assistant" for schema synthesis and HITL question drafting.
+- [ ] Provide smaller fallback profiles:
+	- `qwen3:8b` or similar 8B-class model for laptops with limited RAM/VRAM.
+	- `llama3.1:8b` for deployments that prefer the Llama ecosystem and need a well-known 128k-context option.
+	- Cloud Claude/Gemini/OpenAI only as opt-in escalation for difficult papers or long synthesis jobs.
+- [ ] Add a model benchmark gate before declaring the local default stable:
+	- 20-30 representative methods/result paragraphs from target domains.
+	- Tasks: metadata extraction, column-role mapping, unit normalization, ontology suggestion, uncertainty detection, and question generation.
+	- Metrics: schema validity, hallucinated column rate, ontology precision, useful-question rate, and expert correction burden.
+
+### 2. Scientist-facing v2 feature backlog
+
+The product story should not be "please do FAIR." It should be "upload your papers and data, get a scientifically defensible schema that can become VCG-ready and exportable."
+
+- [ ] **Multi-paper study import**: upload 5-10 PDFs/DOIs/methods texts for one lab, project, or therapeutic area.
+- [ ] **Evidence map**: show which paper supports each proposed metadata field, column role, unit, endpoint, covariate, and controlled value.
+- [ ] **Schema consensus builder**: merge article-level schemas into one lab/project schema with conflict detection:
+	- same concept, different names
+	- same column name, different scientific meaning
+	- same endpoint, different units
+	- inconsistent control/treatment labels
+	- missing covariates required for VCG validity
+- [ ] **Scientist question queue**: ask the expert only when the system has material uncertainty or a scientific conflict, not for every extracted field.
+- [ ] **FAIR-to-VCG readiness score**: translate FAIR improvements into concrete VCG consequences:
+	- "This missing unit prevents endpoint harmonization."
+	- "This missing control label prevents historical control pooling."
+	- "This missing strain/sex/age field weakens covariate balance."
+- [ ] **VCG-ready schema export**: export the approved schema as LinkML/YAML, CSVW, RO-Crate profile, and reusable FAIR-VCG template.
+- [ ] **Methods-section generator**: generate auditable text describing schema construction, HITL review, VCG assumptions, and exclusions.
+- [ ] **Reviewer/ethics committee pack**: produce a compact report with schema provenance, expert decisions, model uncertainty, VCG suitability, and FAIR deltas.
+- [ ] **Ontology-assisted schema terms**: prefer canonical IRIs from OLS/BioPortal/UO/EFO/NCIT/CHEBI over free-text terms.
+- [ ] **Lab schema memory**: reuse approved lab/project schemas for future datasets, with explicit versioning and diff review.
+- [ ] **FAIR delta view**: show how each expert decision changes FAIR score, export quality, and VCG readiness.
+- [ ] **Historical control pool readiness**: flag whether the schema captures enough fields to support future multi-study VCG generation.
+
+### 3. Improved LLM ingestion with internal HITL and agent loop
+
+Core design: article-level extraction agents produce evidence-backed candidate schemas; a synthesis agent compares them; a critic agent identifies uncertainty and conflicts; the expert resolves only meaningful scientific questions; the system then emits an approved project schema.
+
+- [ ] Add a `StudyCorpus` model:
+	- papers: DOI/PDF/text source, extracted text chunks, bibliographic metadata
+	- article schemas: per-paper candidate schema with evidence spans
+	- consensus schema: merged project-level schema
+	- conflicts: unresolved differences across article schemas
+	- expert decisions: question, answer, rationale, affected schema paths
+- [ ] Add ingestion pipeline stages:
+	1. Parse each paper into sections: title, abstract, methods, animals/materials, interventions, endpoints, statistics, supplementary tables.
+	2. Extract per-paper metadata and schema candidates with evidence spans.
+	3. Normalize units, endpoint names, groups, timepoints, and covariates.
+	4. Align each paper schema to existing templates and ontologies.
+	5. Synthesize a consensus schema across papers.
+	6. Run critic checks for missing evidence, contradictions, weak confidence, ontology gaps, and VCG blockers.
+	7. Generate a ranked HITL question queue for the scientist.
+	8. Apply expert answers, re-run synthesis, and produce a versioned approved schema.
+- [ ] Add internal agent roles:
+	- `PaperExtractorAgent`: extracts structured claims from each paper with evidence spans.
+	- `SchemaNormalizerAgent`: standardizes names, units, controlled values, and ontology candidates.
+	- `SchemaSynthesisAgent`: merges article schemas into a consensus schema.
+	- `ScientificCriticAgent`: finds contradictions, missing assumptions, and weak evidence.
+	- `QuestionPlannerAgent`: converts uncertainty into minimal, high-value expert questions.
+	- `ExpertDecisionAgent`: applies approved answers and records provenance.
+- [ ] Add confidence semantics that drive HITL:
+	- `auto_accept`: deterministic or high-confidence facts with direct evidence and no conflict.
+	- `needs_review`: plausible but low-confidence extraction, weak ontology match, or high downstream impact.
+	- `must_ask`: conflicting article evidence, VCG-critical missing field, ambiguous unit, or unclear scientific meaning.
+	- `reject`: unsupported or hallucinated claims.
+- [ ] Extend HITL categories:
+	- `schema_field`
+	- `schema_conflict`
+	- `ontology_mapping`
+	- `unit_normalization`
+	- `vcg_assumption`
+	- `corpus_schema_approval`
+- [ ] Update HITL UI:
+	- Group questions by scientific impact, not by model call.
+	- Show evidence snippets and paper/source for each proposed field.
+	- Let the expert approve, edit, reject, or answer a targeted question.
+	- Keep a visible audit trail of expert decisions and model uncertainty.
+- [ ] Add stopping rules for the agent loop:
+	- Stop when no `must_ask` items remain and all VCG-critical fields are resolved.
+	- Cap model iterations per corpus to avoid runaway loops.
+	- Require explicit expert approval before marking a schema as project-approved.
+- [ ] Add tests and evaluation:
+	- Provider-contract tests with mocked local/cloud responses.
+	- JSON-schema validation and grounding tests.
+	- Multi-paper synthesis fixtures with known conflicts.
+	- HITL transition tests for pending -> edited/rejected/applied/stale.
+	- Regression benchmark for hallucinated columns, invalid units, and unnecessary questions.
+
+### V2 implementation phases
+
+- [ ] **Phase 0 - Baseline and risk control**
+	- Freeze current v1 behavior with tests around existing LLM/HITL paths.
+	- Document privacy rules for local vs cloud LLM use.
+	- Add feature flags for all v2 ingestion routes.
+- [ ] **Phase 1 - Provider abstraction**
+	- Introduce `LLMProvider` and adapters.
+	- Port current Anthropic calls behind the interface.
+	- Add Ollama/OpenAI-compatible local path.
+	- Add provider health endpoint and admin/debug UI.
+- [ ] **Phase 2 - Corpus ingestion foundation**
+	- Add `StudyCorpus` persistence.
+	- Support multiple PDFs/DOIs/text blocks per corpus.
+	- Store per-paper extraction results with evidence spans.
+- [ ] **Phase 3 - Schema synthesis**
+	- Implement per-paper schema extraction, normalization, conflict detection, and consensus schema generation.
+	- Export consensus schema as a draft template.
+- [ ] **Phase 4 - Scientist HITL loop**
+	- Add new HITL categories and evidence-backed review UI.
+	- Add question ranking and schema approval workflow.
+	- Persist expert decisions and schema versions.
+- [ ] **Phase 5 - VCG readiness integration**
+	- Connect consensus schema to column profiling, templates, and VCG wizard defaults.
+	- Show FAIR-to-VCG readiness consequences.
+	- Generate reviewer/ethics committee pack.
+- [ ] **Phase 6 - Validation**
+	- Run local model benchmark.
+	- Compare Qwen3-14B, Qwen3-8B, Llama 3.1 8B, and opt-in cloud models on the same corpus fixtures.
+	- Pick the documented default based on correction burden, not leaderboard scores.
+
 ## Roadmap — Column Understanding (Small + Fast)
 
 Goal: improve automatic column/data understanding while keeping latency and complexity low.

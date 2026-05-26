@@ -1,5 +1,5 @@
 """
-Central wrapper around the Anthropic Claude Haiku API.
+Compatibility wrapper for LLM-powered HITL calls.
 
 All LLM calls in the app should funnel through `call_haiku` so we get
 consistent error handling, ephemeral system-prompt caching, and a
@@ -17,39 +17,29 @@ Anti-hallucination strategy:
 from __future__ import annotations
 
 import logging
-import os
-import time
 from typing import Any, Dict, List, Optional
+
+from llm_providers import (
+    DEFAULT_ANTHROPIC_MODEL,
+    LLMOptions,
+    LLMRequest,
+    LLMUnavailable,
+    create_provider,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class LLMUnavailable(RuntimeError):
-    """Raised when the Anthropic API key is missing or the call fails."""
-
-
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-_RETRYABLE_STATUS = (408, 429, 500, 502, 503, 504, 529)
+DEFAULT_MODEL = DEFAULT_ANTHROPIC_MODEL
 
 
 def llm_enabled() -> bool:
-    return bool(os.getenv("ANTHROPIC_API_KEY"))
+    return create_provider().healthcheck().available
 
 
-def _client():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise LLMUnavailable(
-            "ANTHROPIC_API_KEY is not configured. Set this environment "
-            "variable to enable Haiku-powered features."
-        )
-    try:
-        import anthropic
-    except ImportError as exc:
-        raise LLMUnavailable(
-            "The 'anthropic' package is not installed."
-        ) from exc
-    return anthropic.Anthropic(api_key=api_key)
+def llm_source_label(model_env: Optional[str] = None) -> str:
+    meta = create_provider(model_env=model_env).metadata
+    return f"llm:{meta.name}:{meta.model}"
 
 
 def call_haiku(
@@ -73,52 +63,22 @@ def call_haiku(
 
     Raises LLMUnavailable on auth/network failure after retries are exhausted.
     """
-    client = _client()
-    model = os.getenv(model_env, DEFAULT_MODEL)
-
-    if isinstance(user_message, str):
-        user_content: Any = user_message
-    else:
-        user_content = user_message
-
-    system_block: List[Dict[str, Any]] = [{"type": "text", "text": system_prompt}]
-    if cache_system:
-        system_block[0]["cache_control"] = {"type": "ephemeral"}
-    for extra in extra_system_blocks or []:
-        block = {"type": "text", "text": extra["text"]} if isinstance(extra, dict) and "text" in extra else None
-        if block is None:
-            continue
-        if cache_system:
-            block["cache_control"] = {"type": "ephemeral"}
-        system_block.append(block)
-
-    last_err: Optional[Exception] = None
-    for attempt in range(max_retries + 1):
-        try:
-            resp = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                system=system_block,
-                tools=[tool],
-                tool_choice={"type": "tool", "name": tool["name"]},
-                messages=[{"role": "user", "content": user_content}],
-            )
-            for block in resp.content:
-                if getattr(block, "type", None) == "tool_use" and block.name == tool["name"]:
-                    return dict(block.input or {})
-            raise LLMUnavailable("Model returned no tool_use block.")
-        except LLMUnavailable:
-            raise
-        except Exception as exc:  # anthropic.APIError etc.
-            last_err = exc
-            status = getattr(exc, "status_code", None)
-            if attempt < max_retries and (status is None or status in _RETRYABLE_STATUS):
-                delay = 5 * (2 ** attempt) if status == 529 else 0.5 * (2 ** attempt)
-                time.sleep(delay)
-                continue
-            break
-
-    raise LLMUnavailable(f"Haiku call failed: {last_err}")
+    provider = create_provider(model_env=model_env)
+    resp = provider.complete(
+        LLMRequest(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            tool=tool,
+            model_env=model_env,
+            extra_system_blocks=extra_system_blocks or [],
+        ),
+        LLMOptions(
+            max_tokens=max_tokens,
+            cache_system=cache_system,
+            max_retries=max_retries,
+        ),
+    )
+    return dict(resp.tool_input or {})
 
 
 # ── Anti-hallucination helpers ───────────────────────────────────────────────

@@ -1,7 +1,11 @@
 import base64
+from io import BytesIO
 import logging
 import os
 from typing import Any, Dict
+
+from llm_providers import create_provider
+from llm_service import LLMUnavailable, call_haiku
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +240,40 @@ _EXTRACT_TOOL = {
 
 
 def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
+    provider = create_provider(model_env="PAPER_EXTRACTION_MODEL")
+    if provider.metadata.name == "anthropic":
+        return _extract_paper_metadata_native_pdf(pdf_bytes, filename)
+
+    text = _extract_pdf_text(pdf_bytes)
+    if not text.strip():
+        raise RuntimeError(
+            "Could not extract text from this PDF for local LLM processing. "
+            "Try a text-based PDF, paste methods text into the study corpus, or use the Anthropic native PDF provider."
+        )
+
+    try:
+        result = call_haiku(
+            system_prompt=_SYSTEM_PROMPT,
+            tool=_EXTRACT_TOOL,
+            user_message=(
+                "Extract metadata from this scientific paper text. Preserve uncertainty; "
+                "mark fields as missing when the text does not support them.\n\n"
+                f"FILENAME: {filename}\n\n"
+                f"TEXT:\n{text[:120000]}"
+            ),
+            model_env="PAPER_EXTRACTION_MODEL",
+            max_tokens=4096,
+        )
+    except LLMUnavailable as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    result["_filename"] = filename
+    result["_file_size_kb"] = round(len(pdf_bytes) / 1024)
+    result["_method"] = f"text_pdf:{provider.metadata.name}:{provider.metadata.model}"
+    return result
+
+
+def _extract_paper_metadata_native_pdf(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
     if len(pdf_bytes) > _PDF_MAX_BYTES:
         raise RuntimeError(
             f"PDF is {len(pdf_bytes) // (1024*1024):.1f} MB — "
@@ -300,3 +338,18 @@ def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
     result["_file_size_kb"] = round(len(pdf_bytes) / 1024)
     result["_method"] = "native_pdf"
     return result
+
+
+def _extract_pdf_text(pdf_bytes: bytes) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise RuntimeError(
+            "The 'pypdf' package is required for local LLM PDF text extraction."
+        ) from exc
+
+    reader = PdfReader(BytesIO(pdf_bytes))
+    pages = []
+    for page in reader.pages[:80]:
+        pages.append(page.extract_text() or "")
+    return "\n\n".join(pages)

@@ -11,6 +11,7 @@ import VCGPage from './pages/VCGPage'
 import VCGWizardPage from './pages/VCGWizardPage'
 import VCGResultsPage from './pages/VCGResultsPage'
 import PaperImportPage from './pages/PaperImportPage'
+import StudyCorpusPage from './pages/StudyCorpusPage'
 import TemplateSelectorPage from './pages/TemplateSelectorPage'
 
 const theme = createTheme({
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="vcg/wizard" element={<VCGWizardPage />} />
             <Route path="vcg/results" element={<VCGResultsPage />} />
             <Route path="paper-import" element={<PaperImportPage />} />
+            <Route path="study-corpus" element={<StudyCorpusPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -196,7 +196,7 @@ export default function VCGPage() {
           <Typography variant="h5">Virtual Control Group — AI Assistant</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {llmEnabled
-              ? 'Chat with Claude Haiku to configure the VCG. The proposed configuration is queued for your approval below before any generation runs.'
+              ? 'Chat with the configured LLM to configure the VCG. The proposed configuration is queued for your approval below before any generation runs.'
               : 'Answer the agent\'s questions to configure and generate a synthetic control group for your dataset.'}
           </Typography>
         </Box>
@@ -223,7 +223,7 @@ export default function VCGPage() {
         title="Proposed VCG configurations — Human approval required"
         emptyHint={
           llmEnabled
-            ? 'Claude Haiku will queue a configuration here once it has enough information from the chat. You may also click "One-shot LLM proposal" above.'
+            ? 'The configured LLM will queue a configuration here once it has enough information from the chat. You may also click "One-shot LLM proposal" above.'
             : 'No AI proposals yet. Use the wizard or chat to configure the VCG manually.'
         }
         onApplied={handleVCGApproved}

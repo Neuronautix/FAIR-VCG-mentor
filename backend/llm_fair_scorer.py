@@ -1,6 +1,7 @@
 import logging
-import os
 from typing import Any, Dict, List, Optional
+
+from llm_service import LLMUnavailable, call_haiku
 
 logger = logging.getLogger(__name__)
 
@@ -132,30 +133,13 @@ def run_llm_fair_score(
     arrive_data: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """
-    Use Claude to provide qualitative FAIR commentary that goes beyond the rule-based
+    Use the configured LLM to provide qualitative FAIR commentary that goes beyond the rule-based
     rubric in fair_engine.py (which checks if fields are present, but not whether
     they're meaningful).
 
     Returns a dict with findable/accessible/interoperable/reusable verdicts +
     commentary, an overall_assessment, and a top_priority action.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not configured. "
-            "Set this environment variable to enable LLM-powered FAIR assessment."
-        )
-
-    try:
-        import anthropic
-    except ImportError:
-        raise RuntimeError(
-            "The 'anthropic' package is not installed. "
-            "Add it to requirements.txt and reinstall dependencies."
-        )
-
-    client = anthropic.Anthropic(api_key=api_key)
-
     # Trim columns to the fields the LLM needs (keep tokens low)
     columns_slim = [
         {
@@ -183,31 +167,16 @@ def run_llm_fair_score(
 
     user_message = "".join(prompt_parts)
 
-    message = client.messages.create(
-        model=os.getenv("FAIR_SCORER_MODEL", "claude-haiku-4-5-20251001"),
-        max_tokens=1024,
-        # Cache the static system prompt — saves input tokens on repeated calls
-        # within the same server process (ephemeral cache TTL is ~5 min).
-        system=[
-            {
-                "type": "text",
-                "text": _SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        tools=[_FAIR_COMMENTARY_TOOL],
-        tool_choice={"type": "tool", "name": "fair_commentary"},
-        messages=[
-            {
-                "role": "user",
-                "content": user_message,
-            }
-        ],
-    )
-
-    # With tool_choice forced, content[0] is always the tool_use block.
-    # .input is already a parsed dict.
-    return message.content[0].input
+    try:
+        return call_haiku(
+            system_prompt=_SYSTEM_PROMPT,
+            tool=_FAIR_COMMENTARY_TOOL,
+            user_message=user_message,
+            model_env="FAIR_SCORER_MODEL",
+            max_tokens=1024,
+        )
+    except LLMUnavailable as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 # ── Formatting helpers ────────────────────────────────────────────────────────

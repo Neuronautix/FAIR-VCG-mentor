@@ -628,7 +628,7 @@ export default function PaperImportPage() {
       if (err?.name === 'AbortError') return
       const msg =
         err?.message ??
-        'Extraction failed. Check that ANTHROPIC_API_KEY is configured on the server.'
+        'Extraction failed. Check that a local or cloud LLM provider is configured on the server.'
       setError(msg)
       setLoading(false)
     }
@@ -686,10 +686,9 @@ export default function PaperImportPage() {
       {!paperExtraction && !loading && (
         <>
           <Alert severity="info" sx={{ mb: 3 }}>
-            This feature sends the <strong>full PDF</strong> directly to the Claude API for
-            layout-aware processing (no text pre-extraction step). An{' '}
-            <strong>ANTHROPIC_API_KEY</strong> must be set in the backend environment.
-            Do not upload unpublished or confidential manuscripts. Max file size: 32 MB.
+            Anthropic uses native layout-aware PDF processing. Local and OpenAI-compatible
+            providers use server-side text extraction before the LLM call. Do not upload
+            unpublished or confidential manuscripts to a cloud provider without consent.
           </Alert>
           <DropZone onFile={handleFile} />
 
@@ -757,7 +756,7 @@ export default function PaperImportPage() {
                   <Typography variant="caption" color="text.secondary">
                     {paperExtraction._method === 'crossref_doi'
                       ? 'Bibliographic metadata via CrossRef · ARRIVE fields require full PDF'
-                      : `${paperExtraction._file_size_kb} KB · processed natively by Claude (layout-aware) · extraction complete`}
+                      : `${paperExtraction._file_size_kb} KB · ${paperExtraction._method} · extraction complete`}
                   </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>

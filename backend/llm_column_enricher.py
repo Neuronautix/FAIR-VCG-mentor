@@ -159,6 +159,8 @@ def suggest_column_metadata(
 
 def suggestion_to_hitl_payload(s: Dict[str, Any]) -> Dict[str, Any]:
     """Convert one LLM suggestion to the kwargs of hitl.add_suggestion."""
+    from llm_service import llm_source_label
+
     payload = {}
     if s.get("label"):
         payload["user_label"] = s["label"]
@@ -175,7 +177,7 @@ def suggestion_to_hitl_payload(s: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "category": "column_metadata",
         "target": s["column_name"],
-        "source": "llm:claude-haiku-4-5",
+        "source": llm_source_label("COLUMN_ENRICHER_MODEL"),
         "title": title,
         "rationale": rationale,
         "payload": payload,

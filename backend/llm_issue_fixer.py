@@ -146,13 +146,15 @@ def suggest_issue_fixes(
 
 
 def fix_to_hitl_payload(fix: Dict[str, Any], issue: Dict[str, Any]) -> Dict[str, Any]:
+    from llm_service import llm_source_label
+
     payload: Dict[str, Any] = {"recommendation": fix["recommendation"]}
     if fix.get("metadata_patch"):
         payload["metadata_patch"] = fix["metadata_patch"]
     return {
         "category": "issue_fix",
         "target": fix["issue_id"],
-        "source": "llm:claude-haiku-4-5",
+        "source": llm_source_label("ISSUE_FIXER_MODEL"),
         "title": f"Fix: {issue.get('problem', fix['issue_id'])[:120]}",
         "rationale": fix["recommendation"],
         "payload": payload,

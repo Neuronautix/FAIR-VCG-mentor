@@ -163,7 +163,7 @@ export default function VocabularyPanel() {
         </Box>
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          The vocabulary is the curated set of terms Claude Haiku is constrained to. Every LLM
+          The vocabulary is the curated set of terms the configured LLM is constrained to. Every
           tool call uses these enums; any term not listed here either gets dropped or arrives as
           a "schema extension" suggestion that you must approve.
         </Typography>

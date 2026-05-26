@@ -29,7 +29,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List
 
-from llm_service import LLMUnavailable, call_haiku, validate_columns_exist
+from llm_service import LLMUnavailable, call_haiku, llm_source_label, validate_columns_exist
 from vcg.constants import CONTROL_KEYWORDS
 from vocabulary import enum_array, enum_or_null, ensure_vocabulary, schema_prompt_block
 
@@ -301,7 +301,7 @@ def llm_turn(session: Dict[str, Any], user_message: str | None) -> Dict[str, Any
             hitl_suggestion = {
                 "category": "vcg_config",
                 "target": "vcg_chat",
-                "source": "llm:claude-haiku-4-5",
+                "source": llm_source_label("VCG_ORCHESTRATOR_MODEL"),
                 "title": "Approve LLM-proposed VCG configuration",
                 "rationale": (
                     "The chat assistant believes it has gathered enough information "
@@ -330,7 +330,7 @@ def llm_turn(session: Dict[str, Any], user_message: str | None) -> Dict[str, Any
         "options": options,
         "ready_to_build": False,  # never auto-trigger; HITL approval gates this
         "timestamp": datetime.now().isoformat(),
-        "source": "llm:claude-haiku-4-5",
+        "source": llm_source_label("VCG_ORCHESTRATOR_MODEL"),
     }
     conv.append(agent_msg)
 

@@ -198,10 +198,12 @@ def _post_filter(
 
 def extension_to_hitl_payload(ext: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a filtered extension to hitl.add_suggestion kwargs."""
+    from llm_service import llm_source_label
+
     return {
         "category": "schema_extension",
         "target": ext["hitl_key"],
-        "source": "llm:claude-haiku-4-5",
+        "source": llm_source_label("VOCAB_DISCOVERY_MODEL"),
         "title": f"Extend {ext['human_key']} with {len(ext['values'])} term(s)",
         "rationale": (
             (ext.get("evidence") or "Proposed from document.")

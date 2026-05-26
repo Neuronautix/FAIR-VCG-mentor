@@ -11,7 +11,10 @@ alongside the rest of the session via the existing SQLite layer.
 Each suggestion has:
     id           — uuid4
     category     — column_metadata | dataset_metadata | vcg_config |
-                   fair_recommendation | issue_fix
+                   fair_recommendation | issue_fix |
+                   schema_field | schema_conflict | ontology_mapping |
+                   unit_normalization | vcg_assumption |
+                   corpus_schema_approval
     target       — string key the suggestion applies to (e.g. column name)
     source       — "llm:claude-haiku-4-5" | "rule:<engine>"
     confidence   — 0..1 (model self-rated, used for sorting only)
@@ -43,6 +46,12 @@ HITL_CATEGORIES = {
     "fair_recommendation",
     "issue_fix",
     "schema_extension",   # propose new vocabulary terms (units, controlled values, etc.)
+    "schema_field",
+    "schema_conflict",
+    "ontology_mapping",
+    "unit_normalization",
+    "vcg_assumption",
+    "corpus_schema_approval",
 }
 
 HITL_STATUSES = {"pending", "approved", "rejected", "edited", "applied", "invalid", "stale"}
@@ -187,6 +196,9 @@ def _dry_run_validate(
     session: Dict[str, Any], category: str, target: str, payload: Dict[str, Any]
 ) -> Dict[str, Any]:
     errors: List[str] = []
+    if not isinstance(payload, dict):
+        return {"ok": False, "errors": ["Suggestion payload must be a dict."]}
+
     columns = session.get("columns") or []
     col_names = {c["name"] for c in columns}
 
@@ -254,7 +266,81 @@ def _dry_run_validate(
             if col not in col_names:
                 errors.append(f"controlled_values target column '{col}' does not exist.")
 
+    elif category == "schema_field":
+        if not _has_any_non_empty(payload, (
+            "field_name", "name", "key", "path", "proposed_field",
+            "description", "definition", "data_type", "semantic_type",
+            "value", "proposed_value", "required",
+        )):
+            errors.append("schema_field payload needs a field name/key/path or proposed value.")
+        applies_to = payload.get("column") or payload.get("column_name")
+        if applies_to and applies_to not in col_names:
+            errors.append(f"schema_field column '{applies_to}' does not exist.")
+
+    elif category == "schema_conflict":
+        if not _has_any_non_empty(payload, ("conflict", "issue", "description", "conflicting_values", "options", "resolution")):
+            errors.append("schema_conflict payload needs a conflict description, options, or resolution.")
+        options = payload.get("options")
+        if options is not None and (not isinstance(options, list) or not options):
+            errors.append("schema_conflict payload.options must be a non-empty list when provided.")
+
+    elif category == "ontology_mapping":
+        if not _has_any_non_empty(payload, ("source_label", "field", "term", "label")):
+            errors.append("ontology_mapping payload needs a source label, field, term, or label.")
+        if not _has_any_non_empty(payload, ("ontology_id", "curie", "iri", "target_term", "mapping")):
+            errors.append("ontology_mapping payload needs an ontology_id, curie, iri, target_term, or mapping.")
+        applies_to = payload.get("column") or payload.get("column_name")
+        if applies_to and applies_to not in col_names:
+            errors.append(f"ontology_mapping column '{applies_to}' does not exist.")
+
+    elif category == "unit_normalization":
+        if not _has_any_non_empty(payload, ("source_unit", "from_unit", "original_unit", "unit")):
+            errors.append("unit_normalization payload needs a source/from/original unit.")
+        if not _has_any_non_empty(payload, ("target_unit", "to_unit", "canonical_unit", "normalized_unit")):
+            errors.append("unit_normalization payload needs a target/to/canonical unit.")
+        applies_to = payload.get("column") or payload.get("column_name")
+        if applies_to and applies_to not in col_names:
+            errors.append(f"unit_normalization column '{applies_to}' does not exist.")
+
+    elif category == "vcg_assumption":
+        if not _has_any_non_empty(payload, ("assumption", "text", "field", "role", "value")):
+            errors.append("vcg_assumption payload needs an assumption, field/role, or value.")
+        role = payload.get("role")
+        valid_roles = {
+            "subject_id", "treatment_col", "treatment_value", "control_value",
+            "outcome_cols", "covariate_cols", "time_col", "exclude_cols",
+            "domain", "study_type", "design", "n_timepoints",
+        }
+        if role is not None and role not in valid_roles:
+            errors.append(f"vcg_assumption role '{role}' is not recognized.")
+
+    elif category == "corpus_schema_approval":
+        if not _has_any_non_empty(payload, ("schema_id", "corpus_id", "schema_name", "decision", "approval_status", "status")):
+            errors.append("corpus_schema_approval payload needs a schema/corpus id or approval decision.")
+        decision = payload.get("decision") or payload.get("approval_status") or payload.get("status")
+        valid_decisions = {
+            "draft", "approved", "approve", "auto_accept", "needs_review", "must_ask",
+            "rejected", "reject", "changes_requested", "pending",
+        }
+        if decision is not None and str(decision) not in valid_decisions:
+            errors.append(
+                "corpus_schema_approval decision/status must be one of "
+                f"{sorted(valid_decisions)}."
+            )
+
     return {"ok": not errors, "errors": errors}
+
+
+def _has_any_non_empty(payload: Dict[str, Any], keys: Tuple[str, ...]) -> bool:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return True
+        if isinstance(value, (list, tuple, set, dict)) and value:
+            return True
+        if value is not None and not isinstance(value, (str, list, tuple, set, dict)):
+            return True
+    return False
 
 
 # ── Per-category appliers ───────────────────────────────────────────────────
@@ -276,7 +362,29 @@ def _apply(
         return {"applied": True, "note": "Marked as acknowledged; no state change."}
     if category == "schema_extension":
         return _apply_schema_extension(session, payload)
+    if category in (
+        "schema_field",
+        "schema_conflict",
+        "ontology_mapping",
+        "unit_normalization",
+        "vcg_assumption",
+        "corpus_schema_approval",
+    ):
+        return _apply_schema_planning_note(session, category, target, payload)
     return {"applied": False, "errors": [f"Unknown category {category}"]}
+
+
+def _apply_schema_planning_note(
+    session: Dict[str, Any], category: str, target: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
+    notes = session.setdefault("schema_planning", {}).setdefault("approved_notes", [])
+    notes.append({
+        "category": category,
+        "target": target,
+        "payload": payload,
+        "applied_at": time.time(),
+    })
+    return {"applied": True, "note": "Recorded schema planning approval."}
 
 
 def _apply_schema_extension(session: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:

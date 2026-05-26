@@ -39,6 +39,7 @@ app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 
 from vcg.vcg_router import vcg_router, init_vcg_router  # noqa: E402
 from template_router import template_router, init_template_router  # noqa: E402
+from corpus_router import corpus_router, init_corpus_router  # noqa: E402
 from template_engine import (  # noqa: E402
     conformance_to_issues,
     get_template,
@@ -372,8 +373,20 @@ async def get_llm_fair_score(dataset_id: str):
 
 @app.get("/api/llm/status")
 async def llm_status():
-    from llm_service import llm_enabled
-    return {"enabled": llm_enabled()}
+    from llm_providers import create_provider
+    health = create_provider().healthcheck()
+    meta = health.metadata
+    return {
+        "enabled": health.available,
+        "provider": meta.name,
+        "model": meta.model,
+        "base_url": meta.base_url,
+        "local": meta.name in {"ollama", "openai-compatible"},
+        "healthy": health.available,
+        "reason": None if health.available else health.message,
+        "requires_api_key": meta.requires_api_key,
+        "api_key_configured": meta.api_key_configured,
+    }
 
 
 @app.get("/api/hitl/{dataset_id}/suggestions")
@@ -638,7 +651,7 @@ async def stream_paper_extract(file: UploadFile = File(...)):
         from paper_extractor import extract_paper_metadata
         from fastapi.responses import Response as _R  # noqa
 
-        yield f"data: {json.dumps({'type': 'status', 'message': 'Sending PDF to Claude…'})}\n\n"
+        yield f"data: {json.dumps({'type': 'status', 'message': 'Sending PDF to configured LLM…'})}\n\n"
 
         task = _asyncio.create_task(_asyncio.to_thread(extract_paper_metadata, content, filename))
 
@@ -706,6 +719,9 @@ app.include_router(vcg_router)
 
 init_template_router(sessions, _save_session, _load_session)
 app.include_router(template_router)
+
+init_corpus_router(sessions, _save_session, _load_session)
+app.include_router(corpus_router)
 
 
 if __name__ == "__main__":

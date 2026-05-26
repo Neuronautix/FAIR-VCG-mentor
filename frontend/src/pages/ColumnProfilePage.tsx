@@ -324,13 +324,13 @@ export default function ColumnProfilePage() {
         title="AI column suggestions — Human review required"
         emptyHint={
           llmEnabled === false
-            ? 'Claude Haiku is disabled on the server. Set ANTHROPIC_API_KEY to enable.'
-            : 'Click "Ask Claude Haiku" to get metadata suggestions for low-confidence columns. Every suggestion is shown here for you to approve, edit, or reject.'
+            ? 'No LLM provider is enabled on the server.'
+            : 'Click "Ask LLM" to get metadata suggestions for low-confidence columns. Every suggestion is shown here for you to approve, edit, or reject.'
         }
         refreshAction={{
           label: lowConfidenceColumns.length
-            ? `Ask Claude Haiku (${lowConfidenceColumns.length})`
-            : 'Ask Claude Haiku',
+            ? `Ask LLM (${lowConfidenceColumns.length})`
+            : 'Ask LLM',
           onClick: handleRequestLLM,
           pending: llmRequesting,
         }}

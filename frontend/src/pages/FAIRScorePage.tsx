@@ -95,8 +95,8 @@ export default function FAIRScorePage() {
       setLLMFairScore(result)
     } catch (e: any) {
       const msg: string = e?.response?.data?.detail ?? e?.message ?? 'Unknown error'
-      if (msg.includes('ANTHROPIC_API_KEY')) {
-        setLlmError('AI assessment requires ANTHROPIC_API_KEY to be configured on the server.')
+      if (msg.includes('API_KEY') || msg.includes('provider')) {
+        setLlmError('AI assessment requires a configured local or cloud LLM provider.')
       } else {
         setLlmError('AI assessment failed. Please try again.')
       }
@@ -131,9 +131,9 @@ export default function FAIRScorePage() {
 
       <HITLPanel
         title="AI-suggested fixes — Human review required"
-        emptyHint="Click 'Ask Claude Haiku' to propose concrete fixes for the detected FAIR issues."
+        emptyHint="Click 'Ask LLM' to propose concrete fixes for the detected FAIR issues."
         refreshAction={{
-          label: 'Ask Claude Haiku',
+          label: 'Ask LLM',
           onClick: requestIssueFixes,
           pending: issueFixLoading,
         }}
@@ -192,7 +192,7 @@ export default function FAIRScorePage() {
             <Card sx={{ mb: 2 }}>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="h6">AI Assessment (Claude)</Typography>
+                  <Typography variant="h6">AI Assessment</Typography>
                   {llmFairScore && (
                     <Tooltip title="Refresh AI assessment">
                       <IconButton
@@ -209,14 +209,14 @@ export default function FAIRScorePage() {
                 {!llmFairScore && !llmLoading && !llmError && (
                   <Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Claude analyses whether your metadata is substantively complete — not just present.
+                      The configured LLM analyses whether your metadata is substantively complete.
                     </Typography>
                     <Button
                       variant="outlined"
                       startIcon={<AutoAwesomeIcon />}
                       onClick={fetchLLMScore}
                     >
-                      Get AI Assessment (Claude Haiku)
+                      Get AI Assessment
                     </Button>
                   </Box>
                 )}
@@ -225,7 +225,7 @@ export default function FAIRScorePage() {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <CircularProgress size={20} />
                     <Typography variant="body2" color="text.secondary">
-                      Claude is analysing your metadata…
+                      The configured LLM is analysing your metadata…
                     </Typography>
                   </Box>
                 )}

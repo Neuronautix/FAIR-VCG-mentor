@@ -35,6 +35,12 @@ const CATEGORY_LABELS: Record<HITLSuggestion['category'], string> = {
   fair_recommendation: 'FAIR recommendation',
   issue_fix: 'Issue fix',
   schema_extension: 'Schema extension',
+  schema_field: 'Schema field',
+  schema_conflict: 'Schema conflict',
+  ontology_mapping: 'Ontology mapping',
+  unit_normalization: 'Unit normalization',
+  vcg_assumption: 'VCG assumption',
+  corpus_schema_approval: 'Corpus schema approval',
 }
 
 const STATUS_COLORS: Record<HITLSuggestion['status'], 'default' | 'warning' | 'success' | 'error' | 'info'> = {
@@ -177,13 +183,13 @@ export default function HITLPanel({
 
         {llmEnabled === false && (
           <Alert severity="info" sx={{ mb: 1.5 }}>
-            Set <code>ANTHROPIC_API_KEY</code> on the backend to enable Claude Haiku-powered suggestions.
+            Configure a local or cloud LLM provider on the backend to enable AI suggestions.
           </Alert>
         )}
 
         {filtered.length === 0 && !loading && (
           <Typography variant="body2" color="text.secondary">
-            {emptyHint ?? 'No suggestions yet. Click the action button to ask Claude Haiku.'}
+            {emptyHint ?? 'No suggestions yet. Click the action button to request proposals.'}
           </Typography>
         )}
 
@@ -262,7 +268,7 @@ function SuggestionCard({
               {isAI && (
                 <Chip
                   icon={<AutoAwesomeIcon sx={{ fontSize: 12 }} />}
-                  label={`Haiku · ${(s.confidence * 100).toFixed(0)}%`}
+                  label={`${s.source.replace('llm:', '')} · ${(s.confidence * 100).toFixed(0)}%`}
                   size="small"
                   variant="outlined"
                   color="primary"

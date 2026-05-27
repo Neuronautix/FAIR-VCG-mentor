@@ -27,6 +27,7 @@ from export_engine import (
 from fair_engine import compute_fair_score, detect_issues
 from uri_suggester import suggest_uris
 from arrive_engine import generate_arrive_zip
+from prepare_engine import generate_prepare_zip
 from template_store import (
     apply_template,
     load_template,
@@ -606,6 +607,22 @@ async def export_arrive(dataset_id: str):
     )
     return Response(zip_bytes, media_type="application/zip",
                     headers={"Content-Disposition": 'attachment; filename="arrive_guidelines.zip"'})
+
+
+@app.get("/api/export/{dataset_id}/prepare")
+async def export_prepare(dataset_id: str):
+    s = _prepare_exports(dataset_id)
+    zip_bytes = generate_prepare_zip(
+        s.get("metadata", {}),
+        s.get("columns", []),
+        s.get("template_validation", []),
+        s.get("template_id"),
+    )
+    return Response(
+        zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="prepare_study_plan.zip"'},
+    )
 
 
 @app.post("/api/paper/extract")

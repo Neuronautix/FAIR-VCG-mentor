@@ -1,0 +1,28 @@
+id: arrive-prepare-crosswalk-v1
+name: ARRIVE 2.0 + PREPARE Crosswalk
+version: 1.0.0
+description: >
+  Combined planning + reporting template. Inherits the full ARRIVE 2.0 reporting
+  field set and the full PREPARE 15-topic planning checklist via conforms_to.
+  Assign this template to fill both standards from one metadata wizard pass;
+  the conformance report surfaces each item's ARRIVE section and PREPARE
+  section in parallel where they cross-reference.
+identifier: https://norecopa.no/PREPARE
+conforms_to:
+  - arrive-v2
+  - prepare-v1
+ontology:
+  iri: https://norecopa.no/PREPARE/
+  prefix: prepare
+
+required_columns: []
+optional_columns: []
+
+# All required_metadata fields come from the parent templates (arrive-v2 and
+# prepare-v1) via conforms_to merge. Cross-walk annotations (arrive_section +
+# prepare_section on shared concepts) live on the prepare-v1 entries.
+required_metadata: []
+
+fair_bonus:
+  dimension: R
+  max_points: 5

@@ -651,30 +651,65 @@ export default function TemplateSelectorPage() {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {entries.map((e) => (
+                            {entries.map((e) => {
+                              const hasArrive = !!e.arrive_section
+                              const hasPrepare = !!e.prepare_section
+                              const viaCrosswalk = e.satisfied_by?.via_crosswalk === true
+                              return (
                               <TableRow key={`${e.standard}-${e.section}-${e.field_id}`}>
                                 <TableCell>
                                   <Typography variant="body2" fontWeight={500}>
                                     {e.field_id}
                                   </Typography>
-                                  <Typography variant="caption" color="text.secondary">
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                                     {e.is_column_field ? 'column field' : 'dataset field'}
                                   </Typography>
+                                  {(hasArrive || hasPrepare) ? (
+                                    <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                      {hasPrepare && (
+                                        <Chip
+                                          label={`PREPARE: ${e.prepare_section}`}
+                                          size="small"
+                                          color="warning"
+                                        />
+                                      )}
+                                      {hasArrive && (
+                                        <Chip
+                                          label={`ARRIVE: ${e.arrive_section}`}
+                                          size="small"
+                                          color="info"
+                                        />
+                                      )}
+                                    </Box>
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                      {e.section}
+                                    </Typography>
+                                  )}
                                 </TableCell>
                                 <TableCell>
                                   <StatusChip status={e.status} />
                                 </TableCell>
                                 <TableCell>
                                   {e.satisfied_by ? (
-                                    e.satisfied_by.column ? (
-                                      <Chip label={`column: ${e.satisfied_by.column}`} size="small" />
-                                    ) : e.satisfied_by.metadata ? (
-                                      <Chip label={`metadata: ${e.satisfied_by.metadata}`} size="small" />
-                                    ) : (
-                                      <Typography variant="caption" color="text.secondary">
-                                        —
-                                      </Typography>
-                                    )
+                                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                                      {e.satisfied_by.column ? (
+                                        <Chip label={`column: ${e.satisfied_by.column}`} size="small" />
+                                      ) : e.satisfied_by.metadata ? (
+                                        <Chip label={`metadata: ${e.satisfied_by.metadata}`} size="small" />
+                                      ) : !viaCrosswalk ? (
+                                        <Typography variant="caption" color="text.secondary">
+                                          —
+                                        </Typography>
+                                      ) : null}
+                                      {viaCrosswalk && (
+                                        <Chip
+                                          label="via crosswalk"
+                                          size="small"
+                                          sx={{ fontStyle: 'italic' }}
+                                        />
+                                      )}
+                                    </Box>
                                   ) : (
                                     <Typography variant="caption" color="text.secondary">
                                       —
@@ -695,7 +730,8 @@ export default function TemplateSelectorPage() {
                                   />
                                 </TableCell>
                               </TableRow>
-                            ))}
+                              )
+                            })}
                           </TableBody>
                         </Table>
                       </TableContainer>

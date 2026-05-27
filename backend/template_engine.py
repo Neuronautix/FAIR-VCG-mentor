@@ -71,6 +71,8 @@ META_SCHEMA: Dict[str, Any] = {
             "properties": {
                 "id": {"type": "string"},
                 "arrive_section": {"type": "string"},
+                "prepare_section": {"type": "string"},
+                "crosswalk": {"type": "array", "items": {"type": "string"}},
                 "severity": {"enum": ["high", "medium", "low"]},
             },
         },
@@ -95,6 +97,8 @@ class RequiredColumn:
 class RequiredMetadata:
     id: str
     arrive_section: Optional[str] = None
+    prepare_section: Optional[str] = None
+    crosswalk: List[str] = field(default_factory=list)
     severity: str = "medium"
 
 
@@ -173,6 +177,8 @@ def _build_metadata(d: Dict[str, Any]) -> RequiredMetadata:
     return RequiredMetadata(
         id=d["id"],
         arrive_section=d.get("arrive_section"),
+        prepare_section=d.get("prepare_section"),
+        crosswalk=list(d.get("crosswalk") or []),
         severity=d.get("severity", "medium"),
     )
 
@@ -455,11 +461,14 @@ def validate_against_template(
     report: List[Dict[str, Any]] = []
     standard = template.name
 
+    # Track which field_ids are satisfied (column or metadata) for crosswalk pass
+    field_satisfied: Dict[str, bool] = {}
+
     for field_spec in template.required_columns:
         col_name = _find_matching_column(field_spec, columns_list)
         section = field_spec.arrive_section or ""
         status = "missing"
-        satisfied_by: Optional[Dict[str, str]] = None
+        satisfied_by: Optional[Dict[str, Any]] = None
         if col_name:
             col = _find_column_by_name(columns_list, col_name)
             if field_spec.unit_required:
@@ -474,9 +483,12 @@ def validate_against_template(
             else:
                 status = "satisfied"
             satisfied_by = {"column": col_name}
+        field_satisfied[field_spec.id] = status == "satisfied"
         report.append({
             "standard": standard,
             "section": section,
+            "arrive_section": field_spec.arrive_section,
+            "prepare_section": None,
             "field_id": field_spec.id,
             "status": status,
             "satisfied_by": satisfied_by,
@@ -484,6 +496,7 @@ def validate_against_template(
             "is_column_field": True,
         })
 
+    # Step A: direct satisfaction for required_metadata
     for meta in template.required_metadata:
         val = metadata_dict.get(meta.id)
         if val not in (None, "", [], {}):
@@ -492,15 +505,41 @@ def validate_against_template(
         else:
             status = "missing"
             satisfied_by = None
+        field_satisfied[meta.id] = status == "satisfied"
         report.append({
             "standard": standard,
-            "section": meta.arrive_section or "",
+            "section": meta.arrive_section or meta.prepare_section or "",
+            "arrive_section": meta.arrive_section,
+            "prepare_section": meta.prepare_section,
             "field_id": meta.id,
             "status": status,
             "satisfied_by": satisfied_by,
             "severity": meta.severity,
             "is_column_field": False,
         })
+
+    # Step B: crosswalk auto-satisfaction for unsatisfied metadata entries
+    # Index report entries by field_id for in-place update.
+    entries_by_id: Dict[str, Dict[str, Any]] = {}
+    for entry in report:
+        if not entry.get("is_column_field"):
+            entries_by_id[entry["field_id"]] = entry
+
+    for meta in template.required_metadata:
+        if not meta.crosswalk:
+            continue
+        entry = entries_by_id.get(meta.id)
+        if entry is None or entry["status"] == "satisfied":
+            continue
+        for other_id in meta.crosswalk:
+            if field_satisfied.get(other_id):
+                entry["status"] = "satisfied"
+                entry["satisfied_by"] = {
+                    "metadata": other_id,
+                    "via_crosswalk": True,
+                }
+                field_satisfied[meta.id] = True
+                break
 
     return report
 
@@ -610,6 +649,17 @@ _FIELD_LOOKUP: List[Tuple[str, Optional[str], Optional[str]]] = [
     ("inclusion_exclusion_criteria",  "inclusion_exclusion_criteria", None),
     ("endpoints",                     "outcome_measures",          None),
     ("perturbations",                 None,                        "study_type"),
+    # PREPARE-only field_ids: resolve from ARRIVE-extracted concepts where applicable
+    ("prepare_clear_hypothesis",            "outcome_measures",      None),
+    ("prepare_species_relevance",           "experimental_animals",  None),
+    ("prepare_pilot_power_significance",    "sample_size",           None),
+    ("prepare_experimental_unit",           "sample_size",           None),
+    ("prepare_randomisation_blinding_criteria", "randomisation",     None),
+    ("prepare_harm_benefit_assessment",     "ethics_statement",      None),
+    ("prepare_humane_endpoints",            "adverse_events",        None),
+    ("prepare_animal_characteristics",      "experimental_animals",  None),
+    ("prepare_acclimatisation_housing",     "housing_husbandry",     None),
+    ("prepare_refined_substance_anaesthesia", "experimental_animals", None),
 ]
 _FIELD_LOOKUP_MAP: Dict[str, Tuple[Optional[str], Optional[str]]] = {
     fid: (ak, mk) for fid, ak, mk in _FIELD_LOOKUP
@@ -757,7 +807,40 @@ def _score_template_from_paper(
     n_found = sum(1 for f in arrive_vals if f.get("status") in ("found", "inferred"))
     n_total = len(arrive_vals)
 
-    if "arrive" in tid_lower:
+    if "arrive-prepare" in tid_lower:
+        # Combined crosswalk template: reward ARRIVE coverage like the arrive branch
+        # and add a small bonus reflecting dual-standard alignment.
+        if n_total > 0:
+            ratio = n_found / n_total
+            score += ratio * 0.6
+            if n_found > 0:
+                reasons.append(f"{n_found}/{n_total} ARRIVE 2.0 fields extracted (PREPARE crosswalk)")
+        if is_in_vivo:
+            score += 0.25
+            reasons.append(f"in vivo planning + reporting: {meta.get('species', '')}")
+    elif "prepare" in tid_lower:
+        # PREPARE planning checklist scored against PREPARE-relevant ARRIVE keys.
+        prepare_relevant_keys = {
+            "outcome_measures", "experimental_animals", "sample_size",
+            "randomisation", "ethics_statement", "adverse_events",
+            "housing_husbandry", "study_design", "inclusion_exclusion_criteria",
+        }
+        relevant = [
+            k for k in prepare_relevant_keys
+            if isinstance(arrive.get(k), dict)
+            and arrive[k].get("status") in ("found", "inferred")
+        ]
+        if prepare_relevant_keys:
+            ratio = len(relevant) / len(prepare_relevant_keys)
+            score += ratio * 0.6
+            if relevant:
+                reasons.append(
+                    f"{len(relevant)}/{len(prepare_relevant_keys)} PREPARE-relevant ARRIVE fields extracted"
+                )
+        if is_in_vivo:
+            score += 0.25
+            reasons.append(f"in vivo planning checklist applicable: {meta.get('species', '')}")
+    elif "arrive" in tid_lower:
         if n_total > 0:
             ratio = n_found / n_total
             score += ratio * 0.6

@@ -188,9 +188,11 @@ export interface TemplateCandidate {
 export interface ConformanceEntry {
   standard: string
   section: string
+  arrive_section?: string
+  prepare_section?: string
   field_id: string
   status: 'satisfied' | 'missing' | 'partial'
-  satisfied_by: { column?: string; metadata?: string } | null
+  satisfied_by: { column?: string; metadata?: string; via_crosswalk?: boolean } | null
   severity: 'high' | 'medium' | 'low'
   is_column_field: boolean
 }

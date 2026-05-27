@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import ArticleIcon from '@mui/icons-material/Article'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import BarChartIcon from '@mui/icons-material/BarChart'
+import ChecklistIcon from '@mui/icons-material/Checklist'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoIcon from '@mui/icons-material/Info'
@@ -21,6 +22,7 @@ import {
   ListItemIcon,
   ListItemText,
   Toolbar,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material'
@@ -37,6 +39,7 @@ interface NavItem {
   icon: ReactNode
   alwaysEnabled?: boolean
   vcgResultsOnly?: boolean
+  requiresTemplate?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -47,6 +50,7 @@ const navItems: NavItem[] = [
   { label: 'FAIR Score', path: '/fair-score' },
   { label: 'Metadata Wizard', path: '/metadata' },
   { label: 'Templates', path: '/templates', alwaysEnabled: true },
+  { label: 'Template Fill', path: '/template-fill', requiresTemplate: true },
   { label: 'VCG Wizard', path: '/vcg' },
   { label: 'Export', path: '/export' },
   { label: 'VCG Results', path: '/vcg/results', vcgResultsOnly: true },
@@ -54,7 +58,7 @@ const navItems: NavItem[] = [
   ...item,
   icon: [
     <CloudUploadIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
-    <TuneIcon />, <RuleIcon />, <ScienceIcon />, <DownloadIcon />, <BarChartIcon />,
+    <TuneIcon />, <RuleIcon />, <ChecklistIcon />, <ScienceIcon />, <DownloadIcon />, <BarChartIcon />,
   ][i],
 }))
 
@@ -62,7 +66,7 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const theme = useTheme()
-  const { datasetId, importInfo, vcgStatus, llmEnabled, setLLMEnabled } = useStore()
+  const { datasetId, importInfo, vcgStatus, llmEnabled, setLLMEnabled, templateId } = useStore()
 
   useEffect(() => {
     if (llmEnabled !== null) return
@@ -133,30 +137,45 @@ export default function Layout() {
               const disabled =
                 !item.alwaysEnabled &&
                 item.path !== '/' &&
-                (!datasetId || (item.vcgResultsOnly === true && vcgStatus !== 'done'))
+                (!datasetId ||
+                  (item.vcgResultsOnly === true && vcgStatus !== 'done') ||
+                  (item.requiresTemplate === true && !templateId))
+              const tooltip =
+                disabled && item.requiresTemplate && !templateId && datasetId
+                  ? 'Assign a template first'
+                  : ''
+              const buttonNode = (
+                <ListItemButton
+                  selected={active}
+                  disabled={disabled}
+                  onClick={() => navigate(item.path)}
+                  sx={{
+                    mx: 1,
+                    borderRadius: 2,
+                    mb: 0.5,
+                    '&.Mui-selected': {
+                      background: 'rgba(25, 118, 210, 0.12)',
+                      color: 'primary.main',
+                      '& .MuiListItemIcon-root': { color: 'primary.main' },
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 600 : 400 }}
+                  />
+                </ListItemButton>
+              )
               return (
                 <ListItem key={item.path} disablePadding>
-                  <ListItemButton
-                    selected={active}
-                    disabled={disabled}
-                    onClick={() => navigate(item.path)}
-                    sx={{
-                      mx: 1,
-                      borderRadius: 2,
-                      mb: 0.5,
-                      '&.Mui-selected': {
-                        background: 'rgba(25, 118, 210, 0.12)',
-                        color: 'primary.main',
-                        '& .MuiListItemIcon-root': { color: 'primary.main' },
-                      },
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
-                    <ListItemText
-                      primary={item.label}
-                      primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 600 : 400 }}
-                    />
-                  </ListItemButton>
+                  {tooltip ? (
+                    <Tooltip title={tooltip} placement="right">
+                      <span style={{ width: '100%' }}>{buttonNode}</span>
+                    </Tooltip>
+                  ) : (
+                    buttonNode
+                  )}
                 </ListItem>
               )
             })}

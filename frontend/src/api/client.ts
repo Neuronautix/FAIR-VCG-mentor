@@ -363,3 +363,95 @@ export const generateExperimentCsv = (
   api
     .post('/templates/paper/generate-csv', { template_id: templateId, extraction, include_field_ids: includeFieldIds })
     .then((r) => r.data)
+
+// ── Template Fill ──────────────────────────────────────────────────────────
+
+export interface TemplateCompletionField {
+  field_id: string
+  label: string
+  arrive_section: string | null
+  prepare_section: string | null
+  severity: 'high' | 'medium' | 'low'
+  status: 'satisfied' | 'partial' | 'missing'
+  via_crosswalk: boolean
+  satisfied_by_field: string | null
+  value: string | null
+  source: 'direct' | 'crosswalk' | null
+  is_column_field: boolean
+  prompt: string | null
+  paper_hint: string | null
+}
+
+export interface TemplateCompletionTotals {
+  total: number
+  satisfied_direct: number
+  satisfied_via_crosswalk: number
+  partial: number
+  missing: number
+}
+
+export interface TemplateCompletionSeverityRow {
+  total: number
+  satisfied: number
+  missing: number
+}
+
+export interface TemplateCompletionSection {
+  label: string
+  kind: 'arrive' | 'prepare'
+  total: number
+  satisfied: number
+  fields: string[]
+}
+
+export interface TemplateCompletionReport {
+  template_id: string
+  template_name: string
+  totals: TemplateCompletionTotals
+  by_severity: Record<'high' | 'medium' | 'low', TemplateCompletionSeverityRow>
+  by_section: TemplateCompletionSection[]
+  fields: TemplateCompletionField[]
+}
+
+export interface TemplateSuggestion {
+  field_id: string
+  value: string | null
+  rationale: string
+  confidence: number
+}
+
+export const getTemplateCompletion = (datasetId: string): Promise<TemplateCompletionReport> =>
+  api.get<TemplateCompletionReport>(`/${datasetId}/template/completion`).then((r) => r.data)
+
+export const fillTemplateFromPaper = (
+  datasetId: string,
+): Promise<{ filled: TemplateCompletionField[]; completion: TemplateCompletionReport }> =>
+  api
+    .post<{ filled: TemplateCompletionField[]; completion: TemplateCompletionReport }>(
+      `/${datasetId}/template/fill-from-paper`,
+    )
+    .then((r) => r.data)
+
+export const llmSuggestTemplate = (
+  datasetId: string,
+  fieldIds: string[] | null,
+): Promise<{ suggestions: TemplateSuggestion[] }> =>
+  api
+    .post<{ suggestions: TemplateSuggestion[] }>(`/${datasetId}/template/llm-suggest`, {
+      field_ids: fieldIds,
+    })
+    .then((r) => r.data)
+
+export const extractTemplateFromDocument = (
+  datasetId: string,
+  file: File,
+): Promise<{ suggestions: TemplateSuggestion[] }> => {
+  const form = new FormData()
+  form.append('file', file)
+  return api
+    .post<{ suggestions: TemplateSuggestion[] }>(
+      `/${datasetId}/template/extract-from-document`,
+      form,
+    )
+    .then((r) => r.data)
+}

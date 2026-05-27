@@ -5,9 +5,14 @@ import json
 from typing import Any, Callable, Dict, Optional
 
 import yaml
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from template_constants import MAX_ADDITIONAL_TERMS
 
+from template_completion import (
+    build_completion_report,
+    fields_to_llm_prompt,
+    fill_from_paper_extraction,
+)
 from template_engine import (
     conformance_to_issues,
     generate_experiment_csv,
@@ -20,6 +25,9 @@ from template_engine import (
     template_summary,
     validate_against_template,
 )
+
+_DOC_MAX_BYTES = 20 * 1024 * 1024  # 20 MB cap for supplementary document upload
+_LLM_BATCH_SIZE = 12
 
 template_router = APIRouter(tags=["templates"])
 
@@ -345,3 +353,278 @@ async def template_validation(dataset_id: str):
         raise HTTPException(404, f"Template '{tid}' not found.")
     report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
     return {"template_id": tid, "conformance_report": report}
+
+
+# ── Template Fill workspace ────────────────────────────────────────────────
+
+def _require_assigned_template(session: dict):
+    """Return the loaded Template for the session, or raise 400/404."""
+    tid = session.get("template_id")
+    if not tid:
+        raise HTTPException(400, "No template is assigned to this dataset.")
+    tpl = get_template(tid)
+    if not tpl:
+        raise HTTPException(404, f"Template '{tid}' not found.")
+    return tpl
+
+
+def _refresh_conformance(session: dict, tpl) -> list[dict]:
+    """Re-run validation, refresh template-derived issues, return the new report."""
+    report = validate_against_template(tpl, session.get("columns", []), session.get("metadata", {}))
+    _strip_template_issues(session)
+    session["template_validation"] = report
+    session["issues"].extend(conformance_to_issues(report, tpl.id))
+    return report
+
+
+@template_router.get("/api/{dataset_id}/template/completion")
+async def template_completion(dataset_id: str):
+    """Return the enriched completion report for the assigned template.
+
+    The shape is documented in CLAUDE.md (Template Fill workspace) — the
+    frontend reads ``totals``, ``by_severity``, ``by_section``, and ``fields``
+    by name.
+    """
+    s = _require(dataset_id)
+    tpl = _require_assigned_template(s)
+    report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
+    s["template_validation"] = report
+    completion = build_completion_report(
+        tpl,
+        s.get("metadata", {}) or {},
+        s.get("columns", []) or [],
+        s.get("paper_extraction"),
+        report,
+    )
+    return completion
+
+
+@template_router.post("/api/{dataset_id}/template/fill-from-paper")
+async def template_fill_from_paper(dataset_id: str):
+    """Bulk-fill missing template fields from session.paper_extraction.
+
+    Writes the proposed values into ``session["metadata"]``, re-runs
+    ``validate_against_template`` to refresh conformance + issues, persists
+    the session, and returns the list of filled-field records plus the
+    new completion report.
+    """
+    s = _require(dataset_id)
+    tpl = _require_assigned_template(s)
+    paper = s.get("paper_extraction")
+    if not paper:
+        raise HTTPException(
+            400,
+            "No paper extraction is attached to this dataset. Run /api/paper/extract first.",
+        )
+    current_md = s.get("metadata", {}) or {}
+    new_md, filled = fill_from_paper_extraction(tpl, current_md, paper)
+    s["metadata"] = new_md
+    report = _refresh_conformance(s, tpl)
+    _persist(dataset_id, s)
+    completion = build_completion_report(tpl, new_md, s.get("columns", []) or [], paper, report)
+    return {"filled": filled, "completion": completion}
+
+
+@template_router.post("/api/{dataset_id}/template/llm-suggest")
+async def template_llm_suggest(dataset_id: str, request: Request):
+    """Ask the LLM to draft candidate values for missing/partial template fields.
+
+    Body: ``{"field_ids": [...] | null}``. If ``field_ids`` is null or
+    omitted, every missing/partial metadata field on the assigned template
+    is considered. Calls are batched (at most ``_LLM_BATCH_SIZE`` fields
+    per LLM round-trip).
+
+    Returns ``{"suggestions": [{"field_id","value","rationale","confidence"}]}``.
+    The endpoint does NOT mutate the session — the frontend reviews
+    suggestions and applies accepted ones via PUT /api/metadata/{id}.
+    """
+    from llm_service import LLMUnavailable, call_haiku, llm_enabled
+
+    if not llm_enabled():
+        raise HTTPException(503, "LLM is disabled or unavailable.")
+
+    s = _require(dataset_id)
+    tpl = _require_assigned_template(s)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    requested_ids = body.get("field_ids") if isinstance(body, dict) else None
+    if requested_ids is not None and not isinstance(requested_ids, list):
+        raise HTTPException(400, "Field 'field_ids' must be an array of template field IDs or null.")
+
+    metadata = s.get("metadata", {}) or {}
+    columns = s.get("columns", []) or []
+    paper_extraction = s.get("paper_extraction") or {}
+    paper_summary = ""
+    if isinstance(paper_extraction, dict):
+        paper_summary = str(paper_extraction.get("summary") or "")[:3000]
+
+    # Determine which fields we should draft.
+    report = validate_against_template(tpl, columns, metadata)
+    entries_by_id = {e["field_id"]: e for e in report if not e.get("is_column_field")}
+
+    if requested_ids:
+        requested_set = {str(fid) for fid in requested_ids if isinstance(fid, str)}
+        candidate_ids = [req.id for req in tpl.required_metadata if req.id in requested_set]
+    else:
+        candidate_ids = [
+            req.id
+            for req in tpl.required_metadata
+            if (entries_by_id.get(req.id, {}).get("status") or "missing") != "satisfied"
+        ]
+
+    if not candidate_ids:
+        return {"suggestions": []}
+
+    tool = {
+        "name": "draft_template_fields",
+        "description": (
+            "Draft concise candidate metadata values for the requested research "
+            "reporting fields. Each value must be at most two sentences."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "field_id": {"type": "string"},
+                            "value": {"type": "string"},
+                            "rationale": {"type": "string"},
+                            "confidence": {"type": "number"},
+                        },
+                        "required": ["field_id", "value", "rationale", "confidence"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["fields"],
+            "additionalProperties": False,
+        },
+    }
+    system_prompt = (
+        "You are drafting candidate metadata values for a research-reporting "
+        "standard (ARRIVE 2.0 and/or PREPARE). Use the provided context "
+        "(existing metadata, paper summary, related sibling fields) to write "
+        "concise drafts. Every value MUST be at most two sentences and must "
+        "be grounded in the context — if there is no supporting information, "
+        "return an empty string with a low confidence score and explain why "
+        "in the rationale. Confidence is a number between 0 and 1."
+    )
+
+    # Batched prompts: chunk candidate ids into groups of _LLM_BATCH_SIZE.
+    suggestions: list[dict[str, Any]] = []
+    by_id = {req.id: req for req in tpl.required_metadata}
+
+    for start in range(0, len(candidate_ids), _LLM_BATCH_SIZE):
+        batch_ids = candidate_ids[start : start + _LLM_BATCH_SIZE]
+        prompts = fields_to_llm_prompt(tpl, batch_ids, metadata, columns, paper_summary)
+
+        # Attach paper hints inline so the model sees them per-field.
+        paper_arrive = paper_extraction.get("arrive") if isinstance(paper_extraction, dict) else {}
+        paper_meta = paper_extraction.get("dataset_metadata") if isinstance(paper_extraction, dict) else {}
+        from template_engine import _lookup_paper_value
+        for payload in prompts:
+            fid = payload["field_id"]
+            try:
+                val, _src, _status = _lookup_paper_value(fid, paper_arrive or {}, paper_meta or {})
+            except Exception:
+                val = None
+            if val not in (None, "", [], {}):
+                rendered = ", ".join(str(v) for v in val) if isinstance(val, list) else str(val)
+                payload["paper_hint"] = rendered[:480]
+
+        user_message = json.dumps(
+            {
+                "template_id": tpl.id,
+                "template_name": tpl.name,
+                "paper_summary": paper_summary,
+                "fields": prompts,
+            }
+        )
+        try:
+            result = call_haiku(
+                system_prompt=system_prompt,
+                tool=tool,
+                user_message=user_message,
+                max_tokens=2048,
+            )
+        except LLMUnavailable as exc:
+            raise HTTPException(503, str(exc))
+
+        for item in result.get("fields") or []:
+            fid = str(item.get("field_id") or "").strip()
+            if not fid or fid not in by_id:
+                continue
+            value = str(item.get("value") or "").strip()
+            rationale = str(item.get("rationale") or "").strip()
+            try:
+                confidence = float(item.get("confidence") or 0.0)
+            except (TypeError, ValueError):
+                confidence = 0.0
+            confidence = max(0.0, min(1.0, confidence))
+            suggestions.append(
+                {
+                    "field_id": fid,
+                    "value": value,
+                    "rationale": rationale,
+                    "confidence": confidence,
+                }
+            )
+
+    return {"suggestions": suggestions}
+
+
+@template_router.post("/api/{dataset_id}/template/extract-from-document")
+async def template_extract_from_document(dataset_id: str, file: UploadFile = File(...)):
+    """Extract metadata from a supplementary document and propose template fills.
+
+    Runs ``paper_extractor.extract_paper_metadata`` on the uploaded file
+    (PDF, ≤ 20 MB), maps the result against the assigned template using
+    the same field-lookup logic as ``fill_from_paper_extraction``, and
+    returns the proposed fills as *suggestions only*. The session's
+    canonical ``paper_extraction`` is left untouched — this endpoint is
+    for supplementary documents that the user reviews before applying.
+    """
+    s = _require(dataset_id)
+    tpl = _require_assigned_template(s)
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Uploaded file is empty.")
+    if len(content) > _DOC_MAX_BYTES:
+        raise HTTPException(
+            413,
+            f"Uploaded file is {len(content) // (1024 * 1024):.1f} MB; the limit is 20 MB.",
+        )
+
+    from paper_extractor import extract_paper_metadata
+
+    try:
+        extraction = extract_paper_metadata(content, file.filename or "document.pdf")
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    except Exception as exc:
+        raise HTTPException(500, f"Document extraction failed: {exc}")
+
+    # Map against the template using the same logic as fill_from_paper_extraction,
+    # but DO NOT merge into session.metadata.
+    _new_md, filled = fill_from_paper_extraction(tpl, {}, extraction)
+    suggestions = [
+        {
+            "field_id": rec["field_id"],
+            "value": rec["value"],
+            "source": rec.get("source"),
+            "arrive_section": rec.get("arrive_section"),
+            "prepare_section": rec.get("prepare_section"),
+            "severity": rec.get("severity"),
+            "rationale": f"Extracted from supplementary document ({file.filename}).",
+            "confidence": 0.7,
+        }
+        for rec in filled
+    ]
+    return {"suggestions": suggestions}

@@ -253,6 +253,7 @@ interface AppState {
   templateCandidates: TemplateCandidate[]
   templateConformance: ConformanceEntry[]
   availableTemplates: { builtin: TemplateSummary[]; user: TemplateSummary[] }
+  templateCompletion: import('../api/client').TemplateCompletionReport | null
 
   setUploadResult: (
     datasetId: string,
@@ -293,6 +294,7 @@ interface AppState {
   setTemplateCandidates: (c: TemplateCandidate[]) => void
   setTemplateConformance: (r: ConformanceEntry[]) => void
   setAvailableTemplates: (t: { builtin: TemplateSummary[]; user: TemplateSummary[] }) => void
+  setTemplateCompletion: (r: import('../api/client').TemplateCompletionReport | null) => void
 }
 
 const EMPTY_METRICS: InferenceMetrics = {
@@ -331,6 +333,7 @@ export const useStore = create<AppState>((set) => ({
   templateCandidates: [],
   templateConformance: [],
   availableTemplates: { builtin: [], user: [] },
+  templateCompletion: null,
 
   setUploadResult: (datasetId, importInfo, columns, tableStructure, issues, extras) =>
     set({
@@ -379,6 +382,7 @@ export const useStore = create<AppState>((set) => ({
       templateId: null,
       templateCandidates: [],
       templateConformance: [],
+      templateCompletion: null,
     }),
 
   setVCGStatus: (status) => set({ vcgStatus: status }),
@@ -399,4 +403,5 @@ export const useStore = create<AppState>((set) => ({
   setTemplateCandidates: (templateCandidates) => set({ templateCandidates }),
   setTemplateConformance: (templateConformance) => set({ templateConformance }),
   setAvailableTemplates: (availableTemplates) => set({ availableTemplates }),
+  setTemplateCompletion: (templateCompletion) => set({ templateCompletion }),
 }))

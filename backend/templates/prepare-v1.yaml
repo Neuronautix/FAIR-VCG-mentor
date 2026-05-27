@@ -1,0 +1,264 @@
+id: prepare-v1
+name: PREPARE Guidelines
+version: 1.0.0
+description: >
+  PREPARE (Planning Research and Experimental Procedures on Animals: Recommendations for Excellence,
+  Smith et al. 2018) is a pre-study planning checklist of 15 topics across three areas:
+  (A) Formulation of the study, (B) Dialogue between scientists and the animal facility, and
+  (C) Quality control of the components in the study. PREPARE is complementary to ARRIVE 2.0:
+  PREPARE addresses planning (from day 1), ARRIVE addresses reporting. The recommended
+  workflow is PREPARE → CARE → SHARE → FLAG.
+identifier: https://norecopa.no/PREPARE
+ontology:
+  iri: https://norecopa.no/PREPARE/
+  prefix: prepare
+
+required_columns: []
+optional_columns: []
+
+required_metadata:
+  # ── (A) Formulation of the study ────────────────────────────────────────────
+
+  # Topic 1: Literature searches
+  - id: prepare_clear_hypothesis
+    prepare_section: "1. Literature searches"
+    arrive_section: Outcome & statistics
+    crosswalk:
+      - outcome_measures
+      - primary_outcome
+    severity: high
+  - id: prepare_systematic_reviews
+    prepare_section: "1. Literature searches"
+    severity: medium
+  - id: prepare_search_strategy
+    prepare_section: "1. Literature searches"
+    severity: medium
+  - id: prepare_species_relevance
+    prepare_section: "1. Literature searches"
+    severity: high
+  - id: prepare_reproducibility_translatability
+    prepare_section: "1. Literature searches"
+    severity: medium
+
+  # Topic 2: Legal issues
+  - id: prepare_legislation_compliance
+    prepare_section: "2. Legal issues"
+    arrive_section: Study details
+    crosswalk:
+      - protocol_numbers
+      - project_licence
+    severity: high
+  - id: prepare_guidance_documents
+    prepare_section: "2. Legal issues"
+    severity: medium
+
+  # Topic 3: Ethical issues, harm-benefit assessment and humane endpoints
+  - id: prepare_lay_summary
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    severity: medium
+  - id: prepare_ethics_committee_dialogue
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    severity: medium
+  - id: prepare_3rs_3ss
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    severity: high
+  - id: prepare_preregistration_negative_results
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    severity: medium
+  - id: prepare_harm_benefit_assessment
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    severity: high
+  - id: prepare_learning_objectives
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    severity: low
+  - id: prepare_severity_classification
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    arrive_section: Study details
+    crosswalk:
+      - severity_classification
+    severity: high
+  - id: prepare_humane_endpoints
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    arrive_section: Animal care & monitoring
+    crosswalk:
+      - humane_endpoints
+    severity: high
+  - id: prepare_death_endpoint_justification
+    prepare_section: "3. Ethical issues, harm-benefit assessment and humane endpoints"
+    severity: medium
+
+  # Topic 4: Experimental design and statistical analysis
+  - id: prepare_pilot_power_significance
+    prepare_section: "4. Experimental design and statistical analysis"
+    arrive_section: Study design & sample size
+    crosswalk:
+      - sample_size_justification
+      - sample_size_per_group
+      - analysis_plan
+    severity: high
+  - id: prepare_experimental_unit
+    prepare_section: "4. Experimental design and statistical analysis"
+    arrive_section: Study design & sample size
+    crosswalk:
+      - experimental_unit
+      - total_n
+    severity: high
+  - id: prepare_randomisation_blinding_criteria
+    prepare_section: "4. Experimental design and statistical analysis"
+    arrive_section: Randomisation & blinding
+    crosswalk:
+      - randomisation_method
+      - blinding_strategy
+      - inclusion_criteria
+      - exclusion_criteria
+    severity: high
+
+  # ── (B) Dialogue between scientists and the animal facility ─────────────────
+
+  # Topic 5: Objectives and timescale, funding and division of labour
+  - id: prepare_staff_meetings
+    prepare_section: "5. Objectives and timescale, funding and division of labour"
+    severity: medium
+  - id: prepare_project_timescale
+    prepare_section: "5. Objectives and timescale, funding and division of labour"
+    arrive_section: Study details
+    crosswalk:
+      - start_date
+      - end_date
+    severity: medium
+  - id: prepare_cost_disclosure
+    prepare_section: "5. Objectives and timescale, funding and division of labour"
+    arrive_section: Study details
+    crosswalk:
+      - grant_code
+    severity: medium
+  - id: prepare_labour_division_plan
+    prepare_section: "5. Objectives and timescale, funding and division of labour"
+    arrive_section: Personnel
+    crosswalk:
+      - personnel_names
+      - personnel_procedures
+    severity: medium
+
+  # Topic 6: Facility evaluation
+  - id: prepare_facility_inspection
+    prepare_section: "6. Facility evaluation"
+    severity: medium
+  - id: prepare_staffing_extra_risk
+    prepare_section: "6. Facility evaluation"
+    severity: medium
+
+  # Topic 7: Education and training
+  - id: prepare_staff_competence
+    prepare_section: "7. Education and training"
+    arrive_section: Personnel
+    crosswalk:
+      - personnel_training
+    severity: high
+
+  # Topic 8: Health risks, waste disposal and decontamination
+  - id: prepare_risk_assessment
+    prepare_section: "8. Health risks, waste disposal and decontamination"
+    arrive_section: Risk assessment
+    crosswalk:
+      - personnel_risks
+      - emergency_procedures
+    severity: high
+  - id: prepare_project_stage_guidance
+    prepare_section: "8. Health risks, waste disposal and decontamination"
+    severity: medium
+  - id: prepare_containment_disposal
+    prepare_section: "8. Health risks, waste disposal and decontamination"
+    severity: medium
+
+  # ── (C) Quality control of the components in the study ─────────────────────
+
+  # Topic 9: Test substances and procedures
+  - id: prepare_test_substance_info
+    prepare_section: "9. Test substances and procedures"
+    arrive_section: Experimental procedures
+    crosswalk:
+      - procedures_description
+    severity: high
+  - id: prepare_procedure_feasibility
+    prepare_section: "9. Test substances and procedures"
+    severity: medium
+
+  # Topic 10: Experimental animals
+  - id: prepare_animal_characteristics
+    prepare_section: "10. Experimental animals"
+    arrive_section: Experimental animals
+    crosswalk:
+      - species
+      - strain
+      - sex
+      - age
+      - weight
+      - supplier
+    severity: high
+  - id: prepare_avoid_surplus
+    prepare_section: "10. Experimental animals"
+    severity: medium
+
+  # Topic 11: Quarantine and health monitoring
+  - id: prepare_health_status_quarantine
+    prepare_section: "11. Quarantine and health monitoring"
+    arrive_section: Animal care & monitoring
+    crosswalk:
+      - welfare_monitoring
+      - clinical_assessment_form
+    severity: medium
+
+  # Topic 12: Housing and husbandry
+  - id: prepare_specific_needs
+    prepare_section: "12. Housing and husbandry"
+    arrive_section: Experimental procedures
+    crosswalk:
+      - adverse_events
+      - housing_density
+    severity: medium
+  - id: prepare_acclimatisation_housing
+    prepare_section: "12. Housing and husbandry"
+    arrive_section: Experimental procedures
+    crosswalk:
+      - acclimatisation
+      - housing_density
+    severity: high
+
+  # Topic 13: Experimental procedures
+  - id: prepare_refined_capture_marking
+    prepare_section: "13. Experimental procedures"
+    arrive_section: Experimental procedures
+    crosswalk:
+      - procedures_description
+    severity: medium
+  - id: prepare_refined_substance_anaesthesia
+    prepare_section: "13. Experimental procedures"
+    arrive_section: Experimental procedures
+    crosswalk:
+      - anaesthesia
+      - analgesia
+      - surgical_procedures
+    severity: high
+
+  # Topic 14: Humane killing, release, reuse or rehoming
+  - id: prepare_killing_legislation
+    prepare_section: "14. Humane killing, release, reuse or rehoming"
+    severity: medium
+  - id: prepare_killing_methods
+    prepare_section: "14. Humane killing, release, reuse or rehoming"
+    arrive_section: Animal care & monitoring
+    crosswalk:
+      - humane_endpoints
+    severity: high
+  - id: prepare_killer_competence
+    prepare_section: "14. Humane killing, release, reuse or rehoming"
+    arrive_section: Personnel
+    crosswalk:
+      - personnel_training
+    severity: medium
+
+  # Topic 15: Necropsy
+  - id: prepare_necropsy_plan
+    prepare_section: "15. Necropsy"
+    severity: medium

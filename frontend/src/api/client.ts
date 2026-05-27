@@ -81,6 +81,8 @@ export const exportUrl = (id: string, type: string) => `/api/export/${id}/${type
 
 export const arriveExportUrl = (id: string) => `/api/export/${id}/arrive`
 
+export const prepareExportUrl = (id: string) => `/api/export/${id}/prepare`
+
 export const getVCGWizardPrefill = (id: string) =>
   api.get(`/vcg/${id}/wizard-prefill`).then(r => r.data)
 

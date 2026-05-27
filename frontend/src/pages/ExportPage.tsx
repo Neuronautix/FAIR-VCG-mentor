@@ -17,7 +17,7 @@ import {
 import { useState } from 'react'
 import { getFairScore } from '../api/client'
 import { exportUrl } from '../api/client'
-import { arriveExportUrl } from '../api/client'
+import { arriveExportUrl, prepareExportUrl } from '../api/client'
 import FAIRScoreBreakdown from '../components/FAIRScoreBreakdown'
 import { useStore } from '../store/useStore'
 
@@ -241,6 +241,75 @@ function ARRIVEExportCard({ datasetId }: { datasetId: string }) {
   )
 }
 
+function PREPAREExportCard({ datasetId }: { datasetId: string }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleDownload = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const resp = await fetch(prepareExportUrl(datasetId))
+      if (!resp.ok) throw new Error('Export failed')
+      const blob = await resp.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = 'prepare_guidelines.zip'
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch {
+      setError('PREPARE export failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Card sx={{ mt: 2, border: '1.5px solid #ed6c02', background: '#fff8f1' }}>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          PREPARE study plan (zip)
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          Pre-study planning checklist (15 topics, Smith et al. 2018). Complementary to ARRIVE — PREPARE
+          covers the planning stage, ARRIVE covers reporting. Downloads a ZIP containing:
+        </Typography>
+        <Box component="ul" sx={{ pl: 2.5, mb: 1.5, '& li': { mb: 0.5 } }}>
+          <li>
+            <Typography variant="body2">
+              <strong>prepare_study_plan.md</strong> — pre-study plan template filled with your dataset
+              metadata across the 15 PREPARE topics.
+            </Typography>
+          </li>
+          <li>
+            <Typography variant="body2">
+              <strong>prepare_checklist.md</strong> — PREPARE checklist with auto-detected status per
+              item and an action list of missing entries.
+            </Typography>
+          </li>
+        </Box>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+          Based on the PREPARE guidelines (Smith AJ et al., Lab Anim 2018).
+        </Typography>
+        {error && (
+          <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+        <Button
+          variant="contained"
+          color="warning"
+          startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <FolderZipIcon />}
+          onClick={handleDownload}
+          disabled={loading}
+        >
+          {loading ? 'Generating…' : 'Download PREPARE ZIP'}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function ExportPage() {
   const { datasetId, fairScore, metadata, importInfo, setFairScore } = useStore()
   const [refreshing, setRefreshing] = useState(false)
@@ -306,6 +375,8 @@ export default function ExportPage() {
           </Card>
 
           <ARRIVEExportCard datasetId={datasetId} />
+
+          <PREPAREExportCard datasetId={datasetId} />
         </Grid>
 
         <Grid item xs={12} md={5}>

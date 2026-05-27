@@ -28,10 +28,13 @@ FAIR-vcg-mentor/
 │   ├── template_engine.py    # Template loader, matcher, validator, conformance reporting
 │   ├── template_router.py    # FastAPI router — /api/templates/* and /api/{id}/template/* endpoints
 │   ├── linkml_import.py      # LinkML schema → starter template converter
+│   ├── prepare_engine.py     # PREPARE study plan + checklist export (planning counterpart to ARRIVE)
 │   ├── templates/
 │   │   ├── arrive-v2.yaml    # ARRIVE 2.0 reporting standard (dataset-level metadata)
 │   │   ├── mnms-v1.yaml      # MNMS schema for DVC cages (conforms_to ARRIVE)
 │   │   ├── namo-nam-assay-v1.yaml  # NAMO NAM dose-response / functional assay (hand-crafted)
+│   │   ├── prepare-v1.yaml                  # PREPARE 15-topic planning checklist (Smith et al. 2018)
+│   │   ├── arrive-prepare-crosswalk-v1.yaml # ARRIVE 2.0 + PREPARE combined (conforms_to both)
 │   │   └── user/             # User-uploaded custom templates
 │   └── vcg/
 │       ├── __init__.py
@@ -191,6 +194,8 @@ Downstream effects (when template assigned):
 
 **Templates conform to a hierarchical model.** `mnms-v1` declares `conforms_to: [arrive-v2]` and inherits ARRIVE's `required_metadata`. MNMS columns annotated with `arrive_section` satisfy specific ARRIVE fields automatically, so the conformance report cross-walks column presence against the reporting standard.
 
+**ARRIVE + PREPARE crosswalk.** `arrive-prepare-crosswalk-v1` declares `conforms_to: [arrive-v2, prepare-v1]` and inherits the full required-metadata sets of both parents. `RequiredMetadata` entries support two additional keys: `prepare_section` (Optional[str], the PREPARE topic label) and `crosswalk` (List[str], sibling field_ids that satisfy this entry when filled). Conformance entries produced by `validate_against_template` carry both `arrive_section` and `prepare_section` keys (either may be None) alongside the legacy `section` field. When any field_id listed in an entry's `crosswalk` is already satisfied, the engine flips that entry to `status: satisfied` and records `satisfied_by: {"metadata": <other_field_id>, "via_crosswalk": True}`. Crosswalks are directional — only entries that *declare* a crosswalk list are auto-satisfied; the reverse direction is not inferred.
+
 **Two compliance tiers per template:**
 - **Column-level** (`required_columns`): the CSV must contain matching columns.
 - **Dataset-level** (`required_metadata`): the metadata wizard must contain matching fields.
@@ -217,6 +222,7 @@ Downstream effects (when template assigned):
   - `GET /api/fair-score/{id}` → compute + return FAIR score
   - `GET /api/uris/{id}` → generate URI suggestions
   - `GET /api/export/{id}/{type}` → stream export file
+  - `GET /api/export/{id}/prepare` → PREPARE planning zip (study plan + checklist)
 
 ### `csv_profiler.py`
 - `profile_csv(file_bytes, filename)` → `ProfileResult`
@@ -243,6 +249,9 @@ Downstream effects (when template assigned):
 ### `export_engine.py`
 - Exports: `cleaned-csv | data-dictionary | frictionless | csvw | jsonld | report | rocrate`
 - All functions return `bytes`; `main.py` streams them directly without writing to disk
+
+### `prepare_engine.py`
+- PREPARE planning export. `generate_prepare_zip()` returns a zip of `prepare_study_plan.md` (pre-filled study plan by 15 PREPARE topics) and `prepare_checklist.md` (status table for all PREPARE sub-items). Reads from `session["metadata"]` and `session["template_validation"]`; resolves via ARRIVE↔PREPARE crosswalks when the assigned template links them.
 
 ---
 
@@ -477,3 +486,5 @@ docker-compose up --build
 - Templates are loaded once at app startup. New user uploads via `POST /api/templates` must call `load_templates()` again (or invalidate cache) to be picked up by `suggest_templates`.
 - `wizard-prefill` returns `template_locked: list[str]` and optionally `clustering_warning: str` when a template is assigned. The frontend reads these field names exactly; do not rename.
 - `vcg_results["template_analyses"]` is appended only when the assigned template declares `predefined_analyses`. Each entry has `{id, type, status, description, result, error}`.
+- `prepare_section`, `crosswalk`, and `satisfied_by.via_crosswalk` are additive — never remove these fields from conformance entries; frontend reads them by name.
+- PREPARE field_ids use the `prepare_` prefix (e.g. `prepare_humane_endpoints`). ARRIVE field_ids do not. Don't unify them — the engine distinguishes them by id.

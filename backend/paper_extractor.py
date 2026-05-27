@@ -10,15 +10,70 @@ _PDF_MAX_BYTES = 32 * 1024 * 1024
 
 _SYSTEM_PROMPT = (
     "You are a scientific data management assistant specialising in preclinical and "
-    "clinical research. Extract structured metadata from scientific papers."
+    "clinical research. Extract structured metadata from scientific papers, including "
+    "ARRIVE 2.0 reporting items and PREPARE pre-study planning topics."
 )
+
+# PREPARE-only field ids (those not already covered by the ARRIVE block).
+# `housing_husbandry` is included because PREPARE expects deeper detail than ARRIVE.
+_PREPARE_FIELDS = (
+    "literature_searches",
+    "legal_issues",
+    "lay_summary",
+    "harm_benefit_assessment",
+    "severity_classification",
+    "humane_endpoints",
+    "facility_evaluation",
+    "education_training",
+    "health_risks_waste",
+    "quarantine_health_monitoring",
+    "housing_husbandry",
+    "humane_killing",
+    "necropsy",
+)
+
+
+def _prepare_field_schema(description: str) -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "value": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "description": description,
+            },
+            "status": {
+                "type": "string",
+                "enum": ["found", "inferred", "missing"],
+                "description": "found=explicitly stated, inferred=reasonable inference, missing=not present.",
+            },
+        },
+        "required": ["value", "status"],
+    }
+
+
+_PREPARE_FIELD_DESCRIPTIONS: Dict[str, str] = {
+    "literature_searches": "Systematic literature review, search strategy, species relevance and translatability rationale, or null.",
+    "legal_issues": "Applicable legislation, regulatory permits, guidance documents observed, or null.",
+    "lay_summary": "Plain-language summary of the project as required by project licensing, or null.",
+    "harm_benefit_assessment": "Harm-benefit analysis weighing animal welfare costs against scientific benefit, or null.",
+    "severity_classification": "Procedure severity classification (e.g. mild, moderate, severe) per EU Directive 2010/63 or equivalent, or null.",
+    "humane_endpoints": "Predefined humane endpoints and criteria for early termination, or null.",
+    "facility_evaluation": "Assessment of facility suitability (housing, equipment, biosecurity) for the planned study, or null.",
+    "education_training": "Personnel qualifications, training records, and competency assurance, or null.",
+    "health_risks_waste": "Occupational health risks (zoonoses, allergens, sharps) and waste-handling procedures, or null.",
+    "quarantine_health_monitoring": "Quarantine policy, acclimatisation period, and sentinel/health-monitoring programme, or null.",
+    "housing_husbandry": "Detailed housing, husbandry, environmental enrichment and social housing arrangements (PREPARE expects more depth than ARRIVE), or null.",
+    "humane_killing": "Method of humane killing, operator competency, and confirmation of death, or null.",
+    "necropsy": "Planned necropsy procedures, tissue collection, and post-mortem analyses, or null.",
+}
 
 # Tool definition with input_schema mirroring the original _EXTRACTION_SCHEMA structure
 _EXTRACT_TOOL = {
     "name": "extract_paper_metadata",
     "description": (
         "Extract structured metadata from a scientific paper PDF, including dataset "
-        "metadata, ARRIVE 2.0 checklist items, VCG configuration hints, and a summary."
+        "metadata, ARRIVE 2.0 checklist items, PREPARE pre-study planning topics, "
+        "VCG configuration hints, and a summary."
     ),
     "input_schema": {
         "type": "object",
@@ -182,6 +237,18 @@ _EXTRACT_TOOL = {
                     "adverse_events", "interpretation",
                 ],
             },
+            "prepare": {
+                "type": "object",
+                "description": (
+                    "PREPARE (Smith et al. 2018) pre-study planning checklist fields not "
+                    "already covered by ARRIVE. Each field is an object with a value and a status."
+                ),
+                "properties": {
+                    field_id: _prepare_field_schema(_PREPARE_FIELD_DESCRIPTIONS[field_id])
+                    for field_id in _PREPARE_FIELDS
+                },
+                "required": list(_PREPARE_FIELDS),
+            },
             "vcg_hints": {
                 "type": "object",
                 "description": "Hints for pre-filling the Virtual Control Group configuration wizard.",
@@ -230,7 +297,7 @@ _EXTRACT_TOOL = {
                 ),
             },
         },
-        "required": ["dataset_metadata", "arrive", "vcg_hints", "summary"],
+        "required": ["dataset_metadata", "arrive", "prepare", "vcg_hints", "summary"],
     },
 }
 
@@ -295,6 +362,15 @@ def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
     # With tool_choice forced, content[0] is always the tool_use block.
     # .input is already a parsed dict — no JSON parsing needed.
     result = message.content[0].input
+
+    # Defensive default-fill: ensure every PREPARE field is present even if the
+    # model omits one. Same shape used for arrive — missing => {"value": None, "status": "missing"}.
+    prepare_block = result.get("prepare") or {}
+    for field_id in _PREPARE_FIELDS:
+        entry = prepare_block.get(field_id)
+        if not isinstance(entry, dict) or "value" not in entry or "status" not in entry:
+            prepare_block[field_id] = {"value": None, "status": "missing"}
+    result["prepare"] = prepare_block
 
     result["_filename"] = filename
     result["_file_size_kb"] = round(len(pdf_bytes) / 1024)

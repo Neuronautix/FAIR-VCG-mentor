@@ -183,9 +183,9 @@ export default function Layout() {
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3, pt: 0 }}>
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, overflowX: 'hidden', p: 3, pt: 0 }}>
         <Toolbar />
-        <Container maxWidth="xl" sx={{ mt: 3 }}>
+        <Container maxWidth="xl" sx={{ mt: 3, px: { xs: 0, sm: 2, md: 3 }, minWidth: 0 }}>
           <Outlet />
         </Container>
       </Box>

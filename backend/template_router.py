@@ -318,21 +318,6 @@ async def apply_template_from_paper(dataset_id: str, request: Request):
     return {"template_id": tid, "conformance_report": report}
 
 
-@template_router.post("/api/{dataset_id}/template/{tid}")
-async def assign_template(dataset_id: str, tid: str):
-    s = _require(dataset_id)
-    tpl = get_template(tid)
-    if not tpl:
-        raise HTTPException(404, f"Template '{tid}' not found.")
-    report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
-    _strip_template_issues(s)
-    s["template_id"] = tid
-    s["template_validation"] = report
-    s["issues"].extend(conformance_to_issues(report, tid))
-    _persist(dataset_id, s)
-    return {"template_id": tid, "conformance_report": report}
-
-
 @template_router.delete("/api/{dataset_id}/template")
 async def unassign_template(dataset_id: str):
     s = _require(dataset_id)
@@ -630,3 +615,21 @@ async def template_extract_from_document(dataset_id: str, file: UploadFile = Fil
         for rec in filled
     ]
     return {"suggestions": suggestions}
+
+
+# Keep this generic route after every named POST route under
+# /template/* so fixed endpoints such as llm-suggest are not parsed as
+# template ids.
+@template_router.post("/api/{dataset_id}/template/{tid}")
+async def assign_template(dataset_id: str, tid: str):
+    s = _require(dataset_id)
+    tpl = get_template(tid)
+    if not tpl:
+        raise HTTPException(404, f"Template '{tid}' not found.")
+    report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
+    _strip_template_issues(s)
+    s["template_id"] = tid
+    s["template_validation"] = report
+    s["issues"].extend(conformance_to_issues(report, tid))
+    _persist(dataset_id, s)
+    return {"template_id": tid, "conformance_report": report}

@@ -97,6 +97,22 @@ const STATUS_RANK: Record<TemplateCompletionField['status'], number> = {
   satisfied: 2,
 }
 
+const DRAWER_TOP = { xs: 56, sm: 64 }
+
+const SECTION_CHIP_SX = {
+  maxWidth: '100%',
+  height: 'auto',
+  minHeight: 24,
+  alignItems: 'flex-start',
+  '& .MuiChip-label': {
+    display: 'block',
+    overflow: 'visible',
+    textOverflow: 'clip',
+    whiteSpace: 'normal',
+    py: 0.25,
+  },
+}
+
 type PendingSuggestion = TemplateSuggestion & {
   _id: string
   source: 'llm' | 'document'
@@ -153,12 +169,22 @@ function SectionChips({ field }: { field: TemplateCompletionField }) {
     )
   }
   return (
-    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', minWidth: 0 }}>
       {hasPrepare && (
-        <Chip label={`PREPARE: ${field.prepare_section}`} size="small" color="warning" />
+        <Chip
+          label={`PREPARE: ${field.prepare_section}`}
+          size="small"
+          color="warning"
+          sx={SECTION_CHIP_SX}
+        />
       )}
       {hasArrive && (
-        <Chip label={`ARRIVE: ${field.arrive_section}`} size="small" color="info" />
+        <Chip
+          label={`ARRIVE: ${field.arrive_section}`}
+          size="small"
+          color="info"
+          sx={SECTION_CHIP_SX}
+        />
       )}
     </Box>
   )
@@ -558,10 +584,10 @@ export default function TemplateFillPage() {
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <Box>
+    <Box sx={{ maxWidth: '100%', minWidth: 0 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
-        <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ minWidth: 0 }}>
           <Typography variant="h5">
             Template Fill — {templateCompletion.template_name}
           </Typography>
@@ -569,7 +595,7 @@ export default function TemplateFillPage() {
             Complete required fields from your paper, an external document, or the LLM assistant.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
@@ -739,7 +765,7 @@ export default function TemplateFillPage() {
       </Card>
 
       {/* Bulk Action Toolbar */}
-      <Paper variant="outlined" sx={{ p: 1.5, mb: 2, position: 'sticky', top: 64, zIndex: 2, bgcolor: 'background.paper' }}>
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 2, position: 'sticky', top: DRAWER_TOP, zIndex: 2, bgcolor: 'background.paper' }}>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <Tooltip
             title={paperExtraction ? 'Bulk-fill fields from the imported paper' : 'Import a paper first'}
@@ -919,11 +945,11 @@ export default function TemplateFillPage() {
       )}
 
       {/* Field Table */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
+      <Card sx={{ mb: 3, maxWidth: '100%', overflow: 'hidden' }}>
+        <CardContent sx={{ minWidth: 0 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
             <Typography variant="h6">Fields ({sortedFields.length})</Typography>
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               <FormControl size="small" sx={{ minWidth: 140 }}>
                 <InputLabel>Filter</InputLabel>
                 <Select
@@ -956,16 +982,18 @@ export default function TemplateFillPage() {
           {sortedFields.length === 0 ? (
             <Alert severity="success">No fields match this filter.</Alert>
           ) : (
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
+            <TableContainer component={Paper} variant="outlined" sx={{ width: '100%', overflowX: 'hidden' }}>
+              <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ width: 32 }} />
-                    <TableCell>Section</TableCell>
-                    <TableCell>Severity</TableCell>
-                    <TableCell>Field</TableCell>
-                    <TableCell>Value</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell sx={{ width: 44 }} />
+                    <TableCell sx={{ width: { xs: '40%', md: '34%' } }}>Section</TableCell>
+                    <TableCell sx={{ width: 96 }}>Severity</TableCell>
+                    <TableCell sx={{ width: { xs: '32%', md: '22%' } }}>Field</TableCell>
+                    <TableCell sx={{ display: { xs: 'none', xl: 'table-cell' }, width: '22%' }}>
+                      Value
+                    </TableCell>
+                    <TableCell align="right" sx={{ width: 96 }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -983,13 +1011,13 @@ export default function TemplateFillPage() {
                         sx={{ cursor: 'pointer' }}
                         onClick={() => openDrawer(f)}
                       >
-                        <TableCell>
+                        <TableCell sx={{ width: 44 }}>
                           <StatusIcon field={f} />
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ minWidth: 0, pr: 1 }}>
                           <SectionChips field={f} />
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ width: 96 }}>
                           <Chip
                             label={f.severity}
                             size="small"
@@ -997,14 +1025,14 @@ export default function TemplateFillPage() {
                             sx={{ textTransform: 'capitalize' }}
                           />
                         </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={500}>
+                        <TableCell sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={500} sx={{ overflowWrap: 'anywhere' }}>
                             {f.label}
                           </Typography>
                           <Typography
                             variant="caption"
                             color="text.secondary"
-                            sx={{ display: 'block', fontFamily: 'monospace' }}
+                            sx={{ display: 'block', fontFamily: 'monospace', overflowWrap: 'anywhere' }}
                           >
                             {f.field_id}
                             {f.is_column_field ? ' · column' : ''}
@@ -1019,7 +1047,7 @@ export default function TemplateFillPage() {
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell sx={{ maxWidth: 320 }}>
+                        <TableCell sx={{ display: { xs: 'none', xl: 'table-cell' }, minWidth: 0 }}>
                           {displayValue ? (
                             <Tooltip title={displayValue} placement="top-start">
                               <Typography
@@ -1039,8 +1067,8 @@ export default function TemplateFillPage() {
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                          <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                        <TableCell align="right" onClick={(e) => e.stopPropagation()} sx={{ width: 96 }}>
+                          <Stack direction="row" spacing={0.5} justifyContent="flex-end" flexWrap="wrap" useFlexGap>
                             {f.paper_hint && (
                               <Tooltip title={`Paper hint: ${f.paper_hint}`}>
                                 <IconButton
@@ -1093,17 +1121,23 @@ export default function TemplateFillPage() {
         anchor="right"
         open={drawerField !== null}
         onClose={closeDrawer}
-        PaperProps={{ sx: { width: { xs: '100%', sm: 460 } } }}
+        PaperProps={{
+          sx: {
+            top: DRAWER_TOP,
+            height: { xs: 'calc(100% - 56px)', sm: 'calc(100% - 64px)' },
+            width: { xs: '100%', sm: 460 },
+          },
+        }}
       >
         {drawerField && (
-          <Box sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-              <Box>
-                <Typography variant="h6">{drawerField.label}</Typography>
+          <Box sx={{ p: 3, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, gap: 1 }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h6" sx={{ overflowWrap: 'anywhere' }}>{drawerField.label}</Typography>
                 <Typography
                   variant="caption"
                   color="text.secondary"
-                  sx={{ fontFamily: 'monospace' }}
+                  sx={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}
                 >
                   {drawerField.field_id}
                 </Typography>

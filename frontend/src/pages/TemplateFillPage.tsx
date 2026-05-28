@@ -411,8 +411,9 @@ export default function TemplateFillPage() {
     }
     setDrawerField(field)
     setDrawerValue(s.value ?? '')
-    // Remove from pending — user is taking ownership
-    setPendingSuggestions((prev) => prev.filter((p) => p._id !== s._id))
+    // Keep the suggestion in the pending queue so a cancelled drawer
+    // doesn't silently drop it; it gets cleared on successful save in
+    // handleDrawerSave below.
   }
 
   const rejectSuggestion = (s: PendingSuggestion) => {
@@ -440,6 +441,10 @@ export default function TemplateFillPage() {
         [drawerField.field_id]: drawerValue,
       } as Record<string, unknown>)
       setMetadata(result.metadata)
+      // Drop any pending suggestion(s) for this field — the user has now
+      // taken ownership of the value via the drawer.
+      const savedFieldId = drawerField.field_id
+      setPendingSuggestions((prev) => prev.filter((p) => p.field_id !== savedFieldId))
       setToast(`Saved ${drawerField.field_id}.`)
       closeDrawer()
       await refreshCompletion()

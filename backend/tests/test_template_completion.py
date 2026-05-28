@@ -318,6 +318,70 @@ def test_fill_from_paper_extraction_handles_empty_or_malformed(
 # ── PREPARE prompts drift guard ──────────────────────────────────────────────
 
 
+def test_paper_hint_surfaces_for_prepare_only_fields(prepare_tpl):
+    """Paper hints for PREPARE-only template fields must surface from the
+    new ``paper_extraction['prepare']`` block, not just from the ARRIVE
+    block. Multiple template sub-items share one topic-level extraction
+    key (e.g. ``literature_searches`` feeds 5 prepare_* fields)."""
+    paper = {
+        "arrive": {},
+        "dataset_metadata": {},
+        "prepare": {
+            "literature_searches": {
+                "value": "Searched PubMed, EMBASE; 12 papers reviewed.",
+                "status": "found",
+            },
+            "facility_evaluation": {
+                "value": "AAALAC accredited; visited 2026-02",
+                "status": "found",
+            },
+            "necropsy": {
+                "value": "Standard gross pathology + histology",
+                "status": "found",
+            },
+        },
+    }
+    rep = validate_against_template(prepare_tpl, [], {})
+    cr = build_completion_report(prepare_tpl, {}, [], paper, rep)
+    by_id = {f["field_id"]: f for f in cr["fields"]}
+
+    # All 5 literature-searches sub-items share the same topic hint
+    for fid in (
+        "prepare_clear_hypothesis",
+        "prepare_systematic_reviews",
+        "prepare_search_strategy",
+        "prepare_species_relevance",
+        "prepare_reproducibility_translatability",
+    ):
+        assert by_id[fid]["paper_hint"] == "Searched PubMed, EMBASE; 12 papers reviewed."
+    assert by_id["prepare_facility_inspection"]["paper_hint"] == (
+        "AAALAC accredited; visited 2026-02"
+    )
+    assert by_id["prepare_necropsy_plan"]["paper_hint"] == (
+        "Standard gross pathology + histology"
+    )
+
+
+def test_fill_from_paper_uses_prepare_block(prepare_tpl):
+    """Bulk-fill must populate PREPARE-only fields from the prepare block."""
+    paper = {
+        "arrive": {},
+        "dataset_metadata": {},
+        "prepare": {
+            "humane_killing": {"value": "CO2 chamber per AVMA", "status": "found"},
+            "necropsy": {"value": "Gross pathology + histology", "status": "found"},
+        },
+    }
+    new_md, filled = fill_from_paper_extraction(prepare_tpl, {}, paper)
+    filled_ids = {r["field_id"] for r in filled}
+    assert "prepare_necropsy_plan" in filled_ids
+    assert "prepare_killing_methods" in filled_ids
+    assert new_md["prepare_necropsy_plan"] == "Gross pathology + histology"
+    # Source path uses the prepare.<topic_key> notation
+    necropsy_rec = next(r for r in filled if r["field_id"] == "prepare_necropsy_plan")
+    assert necropsy_rec["source"] == "prepare.necropsy"
+
+
 def test_PREPARE_PROMPTS_covers_all_prepare_fields(prepare_tpl):
     """Every ``prepare_*`` field in prepare-v1 must have a non-empty prompt."""
     missing_prompts = []

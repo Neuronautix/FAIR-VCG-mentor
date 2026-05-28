@@ -14,6 +14,7 @@ from template_completion import (
     fill_from_paper_extraction,
 )
 from template_engine import (
+    _lookup_paper_value,
     conformance_to_issues,
     generate_experiment_csv,
     generate_starter_yaml,
@@ -387,8 +388,10 @@ async def template_completion(dataset_id: str):
     """
     s = _require(dataset_id)
     tpl = _require_assigned_template(s)
+    # Idempotent read — recompute conformance for this request but don't
+    # mutate the cached session.template_validation (which is refreshed by
+    # the write endpoints via _refresh_conformance).
     report = validate_against_template(tpl, s.get("columns", []), s.get("metadata", {}))
-    s["template_validation"] = report
     completion = build_completion_report(
         tpl,
         s.get("metadata", {}) or {},
@@ -527,7 +530,6 @@ async def template_llm_suggest(dataset_id: str, request: Request):
         # Attach paper hints inline so the model sees them per-field.
         paper_arrive = paper_extraction.get("arrive") if isinstance(paper_extraction, dict) else {}
         paper_meta = paper_extraction.get("dataset_metadata") if isinstance(paper_extraction, dict) else {}
-        from template_engine import _lookup_paper_value
         for payload in prompts:
             fid = payload["field_id"]
             try:
@@ -599,7 +601,7 @@ async def template_extract_from_document(dataset_id: str, file: UploadFile = Fil
     if len(content) > _DOC_MAX_BYTES:
         raise HTTPException(
             413,
-            f"Uploaded file is {len(content) // (1024 * 1024):.1f} MB; the limit is 20 MB.",
+            f"Uploaded file is {len(content) / (1024 * 1024):.1f} MB; the limit is 20 MB.",
         )
 
     from paper_extractor import extract_paper_metadata

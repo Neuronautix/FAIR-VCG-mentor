@@ -27,6 +27,86 @@ except Exception:  # pragma: no cover - defensive fallback
 _MAX_VALUE_PREVIEW = 240
 
 
+# Mapping from PREPARE template field_id → extraction["prepare"][key].
+# The paper_extractor emits 13 topic-level PREPARE keys but the template has
+# 42 sub-items; multiple sub-items map back to the same extracted topic.
+# Fields not listed here fall through to _lookup_paper_value (which handles
+# ARRIVE-based crosswalks for the items that have one).
+_PREPARE_HINT_MAP: Dict[str, str] = {
+    # Topic 1: literature_searches
+    "prepare_clear_hypothesis": "literature_searches",
+    "prepare_systematic_reviews": "literature_searches",
+    "prepare_search_strategy": "literature_searches",
+    "prepare_species_relevance": "literature_searches",
+    "prepare_reproducibility_translatability": "literature_searches",
+    # Topic 2: legal_issues
+    "prepare_legislation_compliance": "legal_issues",
+    "prepare_guidance_documents": "legal_issues",
+    # Topic 3: ethical issues — split across lay_summary, harm_benefit_assessment,
+    # severity_classification, humane_endpoints
+    "prepare_lay_summary": "lay_summary",
+    "prepare_ethics_committee_dialogue": "lay_summary",
+    "prepare_3rs_3ss": "harm_benefit_assessment",
+    "prepare_preregistration_negative_results": "lay_summary",
+    "prepare_harm_benefit_assessment": "harm_benefit_assessment",
+    "prepare_learning_objectives": "lay_summary",
+    "prepare_severity_classification": "severity_classification",
+    "prepare_humane_endpoints": "humane_endpoints",
+    "prepare_death_endpoint_justification": "humane_endpoints",
+    # Topic 6: facility_evaluation
+    "prepare_facility_inspection": "facility_evaluation",
+    "prepare_staffing_extra_risk": "facility_evaluation",
+    # Topic 7: education_training
+    "prepare_staff_competence": "education_training",
+    # Topic 8: health_risks_waste
+    "prepare_risk_assessment": "health_risks_waste",
+    "prepare_project_stage_guidance": "health_risks_waste",
+    "prepare_containment_disposal": "health_risks_waste",
+    # Topic 11: quarantine_health_monitoring
+    "prepare_health_status_quarantine": "quarantine_health_monitoring",
+    # Topic 12: housing_husbandry
+    "prepare_specific_needs": "housing_husbandry",
+    "prepare_acclimatisation_housing": "housing_husbandry",
+    # Topic 14: humane_killing
+    "prepare_killing_legislation": "humane_killing",
+    "prepare_killing_methods": "humane_killing",
+    "prepare_killer_competence": "humane_killing",
+    # Topic 15: necropsy
+    "prepare_necropsy_plan": "necropsy",
+}
+
+
+def _prepare_block_value(
+    field_id: str,
+    paper_extraction: Optional[Dict[str, Any]],
+) -> Optional[Any]:
+    """Pull a value from paper_extraction['prepare'] for a PREPARE field_id.
+
+    The paper_extractor emits a top-level ``prepare`` block keyed by 13
+    topic-level snake_case names (literature_searches, facility_evaluation,
+    …). The PREPARE template has 42 sub-items, so multiple template
+    field_ids share one extraction key — see ``_PREPARE_HINT_MAP``.
+    Returns the extracted value (string) or None.
+    """
+    if not paper_extraction or not isinstance(paper_extraction, dict):
+        return None
+    prepare = paper_extraction.get("prepare") or {}
+    if not isinstance(prepare, dict):
+        return None
+    key = _PREPARE_HINT_MAP.get(field_id)
+    if not key:
+        return None
+    entry = prepare.get(key)
+    if isinstance(entry, dict):
+        val = entry.get("value")
+    else:
+        val = entry
+    if val in (None, "", [], {}):
+        return None
+    return val
+
+
+
 def _truncate(value: Any) -> Optional[str]:
     """Render a metadata value as a preview string, truncated to 240 chars."""
     if value is None:
@@ -73,7 +153,11 @@ def _paper_hint_for_field(
     try:
         val, _source, _status = _lookup_paper_value(field_id, arrive, meta)
     except Exception:
-        return None
+        val = None
+    # Fallback: PREPARE-only fields aren't in _FIELD_LOOKUP/_PAPER_ARRIVE_KEYS;
+    # consult the paper extractor's new top-level "prepare" block.
+    if val in (None, "", [], {}):
+        val = _prepare_block_value(field_id, paper_extraction)
     return _truncate(val)
 
 
@@ -261,9 +345,14 @@ def fill_from_paper_extraction(
         try:
             val, source, _status = _lookup_paper_value(fid, arrive, meta)
         except Exception:
-            continue
+            val, source = None, None
         if val in (None, "", [], {}):
-            continue
+            # Fallback for PREPARE-only fields via the new prepare block.
+            prepare_val = _prepare_block_value(fid, paper_extraction)
+            if prepare_val in (None, "", [], {}):
+                continue
+            val = prepare_val
+            source = f"prepare.{_PREPARE_HINT_MAP.get(fid, '?')}"
         updated[fid] = val
         filled.append({
             "field_id": fid,

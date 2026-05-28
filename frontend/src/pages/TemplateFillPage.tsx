@@ -102,6 +102,15 @@ type PendingSuggestion = TemplateSuggestion & {
   source: 'llm' | 'document'
 }
 
+function errorMessage(err: unknown, fallback: string): string {
+  // axios errors have err.response.data.detail (FastAPI HTTPException shape)
+  const ax = err as { response?: { data?: { detail?: string } }; message?: string }
+  const detail = ax?.response?.data?.detail
+  if (typeof detail === 'string' && detail) return `${fallback}: ${detail}`
+  if (ax?.message) return `${fallback}: ${ax.message}`
+  return fallback
+}
+
 function StatusIcon({ field }: { field: TemplateCompletionField }) {
   if (field.status === 'satisfied') {
     return (
@@ -238,6 +247,8 @@ export default function TemplateFillPage() {
   // Action busy flags
   const [fillBusy, setFillBusy] = useState(false)
   const [docBusy, setDocBusy] = useState(false)
+  // Per-row busy: field_id currently waiting on a single-field LLM call
+  const [rowLlmBusy, setRowLlmBusy] = useState<string | null>(null)
 
   // Suggestions
   const [pendingSuggestions, setPendingSuggestions] = useState<PendingSuggestion[]>([])
@@ -256,8 +267,8 @@ export default function TemplateFillPage() {
       const r = await getTemplateCompletion(datasetId)
       setTemplateCompletion(r)
       return r
-    } catch {
-      setError('Failed to load completion report.')
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to load completion report'))
       return null
     } finally {
       setLoading(false)
@@ -321,8 +332,8 @@ export default function TemplateFillPage() {
       const result = await fillTemplateFromPaper(datasetId)
       setTemplateCompletion(result.completion)
       setToast(`Filled ${result.filled.length} field(s) from paper.`)
-    } catch {
-      setError('Failed to fill from paper.')
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to fill from paper'))
     } finally {
       setFillBusy(false)
     }
@@ -356,8 +367,8 @@ export default function TemplateFillPage() {
       setSuggestionsOpen(true)
       setLlmDialogOpen(false)
       setToast(`Received ${stamped.length} suggestion(s).`)
-    } catch {
-      setError('LLM suggestion failed.')
+    } catch (e) {
+      setError(errorMessage(e, 'LLM suggestion failed'))
     } finally {
       setLlmBusy(false)
     }
@@ -378,8 +389,8 @@ export default function TemplateFillPage() {
       setPendingSuggestions((prev) => [...stamped, ...prev])
       setSuggestionsOpen(true)
       setToast(`Extracted ${stamped.length} suggestion(s) from ${file.name}.`)
-    } catch {
-      setError('Document extraction failed.')
+    } catch (e) {
+      setError(errorMessage(e, 'Document extraction failed'))
     } finally {
       setDocBusy(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -398,8 +409,8 @@ export default function TemplateFillPage() {
       setPendingSuggestions((prev) => prev.filter((p) => p._id !== s._id))
       setToast(`Accepted suggestion for ${s.field_id}.`)
       await refreshCompletion()
-    } catch {
-      setError(`Failed to save suggestion for ${s.field_id}.`)
+    } catch (e) {
+      setError(errorMessage(e, `Failed to save suggestion for ${s.field_id}`))
     }
   }
 
@@ -411,8 +422,9 @@ export default function TemplateFillPage() {
     }
     setDrawerField(field)
     setDrawerValue(s.value ?? '')
-    // Remove from pending — user is taking ownership
-    setPendingSuggestions((prev) => prev.filter((p) => p._id !== s._id))
+    // Keep the suggestion in the pending queue so a cancelled drawer
+    // doesn't silently drop it; it gets cleared on successful save in
+    // handleDrawerSave below.
   }
 
   const rejectSuggestion = (s: PendingSuggestion) => {
@@ -440,11 +452,15 @@ export default function TemplateFillPage() {
         [drawerField.field_id]: drawerValue,
       } as Record<string, unknown>)
       setMetadata(result.metadata)
+      // Drop any pending suggestion(s) for this field — the user has now
+      // taken ownership of the value via the drawer.
+      const savedFieldId = drawerField.field_id
+      setPendingSuggestions((prev) => prev.filter((p) => p.field_id !== savedFieldId))
       setToast(`Saved ${drawerField.field_id}.`)
       closeDrawer()
       await refreshCompletion()
-    } catch {
-      setError(`Failed to save ${drawerField.field_id}.`)
+    } catch (e) {
+      setError(errorMessage(e, `Failed to save ${drawerField.field_id}`))
     } finally {
       setDrawerSaving(false)
     }
@@ -452,7 +468,7 @@ export default function TemplateFillPage() {
 
   const requestLlmForField = async (field: TemplateCompletionField) => {
     if (!datasetId) return
-    setLoading(true)
+    setRowLlmBusy(field.field_id)
     try {
       const result = await llmSuggestTemplate(datasetId, [field.field_id])
       const stamped: PendingSuggestion[] = result.suggestions.map((s, i) => ({
@@ -463,10 +479,10 @@ export default function TemplateFillPage() {
       setPendingSuggestions((prev) => [...stamped, ...prev])
       setSuggestionsOpen(true)
       setToast(`Got ${stamped.length} suggestion(s) for ${field.label}.`)
-    } catch {
-      setError('LLM suggestion failed.')
+    } catch (e) {
+      setError(errorMessage(e, `LLM suggestion failed for ${field.field_id}`))
     } finally {
-      setLoading(false)
+      setRowLlmBusy(null)
     }
   }
 
@@ -1047,9 +1063,16 @@ export default function TemplateFillPage() {
                                 <IconButton
                                   size="small"
                                   onClick={() => requestLlmForField(f)}
-                                  disabled={llmEnabled === false || loading}
+                                  disabled={
+                                    llmEnabled === false ||
+                                    rowLlmBusy !== null
+                                  }
                                 >
-                                  <AutoAwesomeIcon fontSize="small" />
+                                  {rowLlmBusy === f.field_id ? (
+                                    <CircularProgress size={14} />
+                                  ) : (
+                                    <AutoAwesomeIcon fontSize="small" />
+                                  )}
                                 </IconButton>
                               </span>
                             </Tooltip>

@@ -5,6 +5,19 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract plain text from a PDF using pypdf. Returns empty string on failure."""
+    try:
+        import io
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        pages = [page.extract_text() or "" for page in reader.pages[:30]]
+        return "\n\n".join(p for p in pages if p.strip())
+    except Exception as exc:
+        logger.warning("pypdf extraction failed: %s", exc)
+        return ""
+
 # 32 MB — Anthropic's hard limit for native PDF input
 _PDF_MAX_BYTES = 32 * 1024 * 1024
 

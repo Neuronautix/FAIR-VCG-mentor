@@ -1,9 +1,14 @@
 """
-Central wrapper around the Anthropic Claude Haiku API.
+Central wrapper around LLM providers (Anthropic Claude Haiku or OpenAI).
 
 All LLM calls in the app should funnel through `call_haiku` so we get
 consistent error handling, ephemeral system-prompt caching, and a
 single place to enforce anti-hallucination guards on tool outputs.
+
+Provider selection (in priority order):
+1. ANTHROPIC_API_KEY set → use Anthropic Claude Haiku (preferred)
+2. OpenAI key configured via openai_service → use OpenAI function calling
+3. Neither → raise LLMUnavailable
 
 Anti-hallucination strategy:
 - Tool inputs are constrained by JSON schema (forced via tool_choice).
@@ -16,6 +21,7 @@ Anti-hallucination strategy:
 
 from __future__ import annotations
 
+import json as _json
 import logging
 import os
 import time
@@ -25,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class LLMUnavailable(RuntimeError):
-    """Raised when the Anthropic API key is missing or the call fails."""
+    """Raised when no LLM provider is configured or a call fails."""
 
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -33,10 +39,12 @@ _RETRYABLE_STATUS = (408, 429, 500, 502, 503, 504, 529)
 
 
 def llm_enabled() -> bool:
-    return bool(os.getenv("ANTHROPIC_API_KEY"))
+    """True if ANY LLM provider is available."""
+    import openai_service  # imported here to avoid circular import at module load
+    return bool(os.getenv("ANTHROPIC_API_KEY")) or openai_service.is_configured()
 
 
-def _client():
+def _anthropic_client():
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise LLMUnavailable(
@@ -52,7 +60,7 @@ def _client():
     return anthropic.Anthropic(api_key=api_key)
 
 
-def call_haiku(
+def _call_anthropic(
     *,
     system_prompt: str,
     tool: Dict[str, Any],
@@ -63,17 +71,8 @@ def call_haiku(
     max_retries: int = 2,
     extra_system_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """
-    Call Claude Haiku with a single forced tool, return the parsed tool input dict.
-
-    `user_message` may be a string or a list of content blocks (e.g. for PDF input).
-    `extra_system_blocks` lets callers append additional cached system blocks
-    (e.g. the validated vocabulary). Each must be a `{"type": "text", "text": ...}`
-    dict; cache_control is added automatically when cache_system is True.
-
-    Raises LLMUnavailable on auth/network failure after retries are exhausted.
-    """
-    client = _client()
+    """Call Anthropic Claude with a forced tool. Returns parsed tool input dict."""
+    client = _anthropic_client()
     model = os.getenv(model_env, DEFAULT_MODEL)
 
     if isinstance(user_message, str):
@@ -119,6 +118,121 @@ def call_haiku(
             break
 
     raise LLMUnavailable(f"Haiku call failed: {last_err}")
+
+
+def _call_openai(
+    *,
+    system_prompt: str,
+    tool: Dict[str, Any],
+    user_message: Any,
+    max_tokens: int = 1024,
+) -> Dict[str, Any]:
+    """Call OpenAI with function calling, mirroring call_haiku's interface."""
+    import openai_service  # imported here to avoid circular import
+    import openai
+
+    if not openai_service.is_configured():
+        raise LLMUnavailable("OpenAI API key not configured.")
+
+    client = openai.OpenAI(api_key=openai_service._api_key)
+
+    # Translate Anthropic tool format → OpenAI function format
+    oai_tool = {
+        "type": "function",
+        "function": {
+            "name": tool["name"],
+            "description": tool.get("description", ""),
+            "parameters": tool.get("input_schema", {"type": "object", "properties": {}}),
+        },
+    }
+
+    # Build messages — OpenAI uses system message in messages list
+    messages: List[Dict[str, Any]] = [
+        {"role": "system", "content": system_prompt},
+    ]
+    if isinstance(user_message, str):
+        messages.append({"role": "user", "content": user_message})
+    else:
+        # user_message is a list of content blocks (e.g. Anthropic format with PDF)
+        # For OpenAI, convert to text-only (extract text blocks)
+        text_parts = []
+        for block in user_message:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    text_parts.append(block.get("text", ""))
+                elif block.get("type") == "document":
+                    # Anthropic native PDF block — extract any text available
+                    source = block.get("source", {})
+                    if source.get("type") == "text":
+                        text_parts.append(source.get("data", ""))
+        messages.append({"role": "user", "content": "\n".join(text_parts) or "(no text extracted)"})
+
+    resp = client.chat.completions.create(
+        model=openai_service.OPENAI_MODEL,
+        max_tokens=max_tokens,
+        tools=[oai_tool],
+        tool_choice={"type": "function", "function": {"name": tool["name"]}},
+        messages=messages,
+        temperature=0.2,
+    )
+
+    for choice in resp.choices:
+        if choice.message.tool_calls:
+            tc = choice.message.tool_calls[0]
+            if tc.function.name == tool["name"]:
+                return _json.loads(tc.function.arguments)
+
+    raise LLMUnavailable("OpenAI returned no function call result.")
+
+
+def call_haiku(
+    *,
+    system_prompt: str,
+    tool: Dict[str, Any],
+    user_message: Any,
+    model_env: str = "HAIKU_MODEL",
+    max_tokens: int = 1024,
+    cache_system: bool = True,
+    max_retries: int = 2,
+    extra_system_blocks: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    Call an LLM with a single forced tool, return the parsed tool input dict.
+
+    Dispatches to Anthropic if ANTHROPIC_API_KEY is set, otherwise falls back
+    to OpenAI if an OpenAI key has been configured via openai_service.
+
+    `user_message` may be a string or a list of content blocks (e.g. for PDF input).
+    `extra_system_blocks` lets callers append additional cached system blocks
+    (e.g. the validated vocabulary). Each must be a `{"type": "text", "text": ...}`
+    dict; cache_control is added automatically when cache_system is True.
+
+    Raises LLMUnavailable on auth/network failure after retries are exhausted.
+    """
+    import openai_service  # imported here to avoid circular import
+
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return _call_anthropic(
+            system_prompt=system_prompt,
+            tool=tool,
+            user_message=user_message,
+            model_env=model_env,
+            max_tokens=max_tokens,
+            cache_system=cache_system,
+            max_retries=max_retries,
+            extra_system_blocks=extra_system_blocks,
+        )
+    elif openai_service.is_configured():
+        return _call_openai(
+            system_prompt=system_prompt,
+            tool=tool,
+            user_message=user_message,
+            max_tokens=max_tokens,
+        )
+    else:
+        raise LLMUnavailable(
+            "No AI provider configured. Set ANTHROPIC_API_KEY or add an OpenAI key in Settings."
+        )
 
 
 # ── Anti-hallucination helpers ───────────────────────────────────────────────

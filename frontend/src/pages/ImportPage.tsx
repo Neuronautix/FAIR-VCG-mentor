@@ -20,12 +20,14 @@ import {
 import type { AxiosError } from 'axios'
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import ScienceIcon from '@mui/icons-material/Science'
 import {
   buildMetadataPatch,
   extractPaperMetadataStream,
   importFreeText,
   saveMetadata,
   startAssessmentOnly,
+  startDemoSession,
   uploadCSV,
 } from '../api/client'
 import type { PaperExtraction } from '../store/useStore'
@@ -223,6 +225,10 @@ export default function ImportPage() {
   // Skip / assessment-only state
   const [skipLoading, setSkipLoading] = useState(false)
 
+  // Demo preload state
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [demoError, setDemoError] = useState<string | null>(null)
+
   const handleCSV = useCallback(
     async (file: File) => {
       setCsvError(null)
@@ -389,6 +395,35 @@ export default function ImportPage() {
     }
   }
 
+  const handleLoadDemo = async () => {
+    setDemoLoading(true)
+    setDemoError(null)
+    reset()
+    try {
+      const result = await startDemoSession()
+      setUploadResult(
+        result.dataset_id,
+        result.import_info,
+        result.columns,
+        result.table_structure,
+        result.issues,
+        {
+          lowConfidenceColumns: result.low_confidence_columns ?? [],
+          templateApplied: result.template_applied ?? 0,
+          templateId: result.template_id ?? null,
+          templateCandidates: result.template_candidates ?? [],
+        },
+      )
+      setAssessmentOnly(false)
+      navigate('/template-fill')
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? err?.message ?? 'Demo load failed.'
+      setDemoError(msg)
+    } finally {
+      setDemoLoading(false)
+    }
+  }
+
   return (
     <Box sx={{ maxWidth: 960, mx: 'auto' }}>
       <Box sx={{ mb: 3 }}>
@@ -400,6 +435,48 @@ export default function ImportPage() {
           study planning readiness — with or without a dataset.
         </Typography>
       </Box>
+
+      {/* Demo preload banner */}
+      <Card
+        sx={{
+          mb: 3,
+          background: 'linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%)',
+          border: '1px solid',
+          borderColor: 'primary.light',
+        }}
+      >
+        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <ScienceIcon color="primary" sx={{ fontSize: 36 }} />
+          <Box sx={{ flex: 1, minWidth: 200 }}>
+            <Typography variant="subtitle1" fontWeight={700}>
+              Try the demo — no API key needed
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Loads a pre-filled example from{' '}
+              <strong>Huzard et al. (2025), Translational Psychiatry</strong> — mechanical itch
+              hypersensitivity in a Shank3 mouse model of autism. All ARRIVE 2.0 and PREPARE fields
+              are extracted and ready to explore.
+            </Typography>
+          </Box>
+          <Stack spacing={1} alignItems="flex-end">
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleLoadDemo}
+              disabled={demoLoading}
+              startIcon={demoLoading ? <CircularProgress size={16} color="inherit" /> : <ScienceIcon />}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              {demoLoading ? 'Loading demo…' : 'Load example dataset'}
+            </Button>
+            {demoError && (
+              <Alert severity="error" onClose={() => setDemoError(null)} sx={{ py: 0.5 }}>
+                {demoError}
+              </Alert>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
 
       <Grid container spacing={3}>
         {/* Panel 1: Research Documents */}

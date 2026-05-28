@@ -185,11 +185,33 @@ export default function Layout() {
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3, pt: 0 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 3, pt: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Toolbar />
-        <Container maxWidth="xl" sx={{ mt: 3 }}>
+        <Container maxWidth="xl" sx={{ mt: 3, flexGrow: 1 }}>
           <Outlet />
         </Container>
+        <Box
+          component="footer"
+          sx={{
+            mt: 6,
+            py: 2,
+            textAlign: 'center',
+            borderTop: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            Made with{' '}
+            <Box component="span" sx={{ color: '#e53935' }}>
+              ♥
+            </Box>
+            {' '}by{' '}
+            <Box component="span" fontWeight={600} color="text.primary">
+              Neuronautix
+            </Box>
+            {' '}(Damien Huzard)
+          </Typography>
+        </Box>
       </Box>
     </Box>
   )

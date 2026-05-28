@@ -445,3 +445,6 @@ export const startAssessmentOnly = (title?: string, description?: string): Promi
 
 export const importFreeText = (text: string): Promise<any> =>
   api.post('/import/free-text', { text }).then((r) => r.data)
+
+export const startDemoSession = (): Promise<UploadResponse & { demo: boolean }> =>
+  api.post('/demo/start').then((r) => r.data)

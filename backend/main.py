@@ -733,6 +733,76 @@ async def start_assessment_only(body: Dict[str, Any]):
     return {"dataset_id": dataset_id, "assessment_only": True}
 
 
+# ── Demo preload session ─────────────────────────────────────────────────────
+
+@app.post("/api/demo/start")
+async def start_demo():
+    """Create a fully pre-filled demo session from Huzard et al. (2025).
+
+    No API key required — all metadata is hardcoded from the publication.
+    Includes a representative CSV dataset and ARRIVE-PREPARE crosswalk
+    template pre-assigned and validated.
+    """
+    from demo_preload import DEMO_CSV, DEMO_FILENAME, DEMO_METADATA
+
+    # Profile the sample CSV
+    try:
+        result = profile_csv(DEMO_CSV, DEMO_FILENAME)
+    except Exception as exc:
+        raise HTTPException(500, f"Demo CSV profiling failed: {exc}")
+
+    df = result.pop("df")
+    result.pop("content")
+
+    table_structure = detect_entity_structure(df, result["columns"])
+    issues = detect_issues(result["import_info"], result["columns"], table_structure)
+
+    dataset_id = str(uuid.uuid4())
+    session: Dict[str, Any] = {
+        "dataset_id": dataset_id,
+        "import_info": {**result["import_info"], "demo": True},
+        "columns": result["columns"],
+        "table_structure": table_structure,
+        "issues": issues,
+        "metadata": {**DEMO_METADATA, "base_uri": "https://igf.cnrs.fr"},
+        "df": df,
+        "original_bytes": DEMO_CSV,
+        "template_signature": None,
+        "template_applied": 0,
+        "template_id": None,
+        "template_candidates": [],
+        "template_validation": [],
+        "inference_metrics": {"total_updates": 0, "type_corrections": 0,
+                               "label_corrections": 0, "unit_corrections": 0},
+    }
+
+    # Auto-assign the ARRIVE-PREPARE crosswalk template
+    try:
+        tpl = get_template("arrive-prepare-crosswalk-v1")
+        if tpl is not None:
+            report = validate_against_template(tpl, session["columns"], session["metadata"])
+            session["template_id"] = "arrive-prepare-crosswalk-v1"
+            session["template_validation"] = report
+            session["issues"].extend(conformance_to_issues(report, "arrive-prepare-crosswalk-v1"))
+    except Exception as exc:
+        logger.warning("Demo template assignment failed: %s", exc)
+
+    sessions[dataset_id] = session
+    _save_session(dataset_id, session)
+
+    return {
+        "dataset_id": dataset_id,
+        "demo": True,
+        "import_info": session["import_info"],
+        "columns": session["columns"],
+        "table_structure": table_structure,
+        "issues": session["issues"],
+        "template_id": session["template_id"],
+        "template_candidates": session["template_candidates"],
+        "low_confidence_columns": low_confidence_columns(result["columns"]),
+    }
+
+
 # ── OpenAI settings endpoints ────────────────────────────────────────────────
 
 @app.post("/api/settings/openai-key")

@@ -25,3 +25,10 @@ Thumbs.db
 
 # Runtime database (generated at startup, not for version control)
 backend/sessions.db
+*.db
+*.sqlite
+data/
+caddy_data/
+caddy_config/
+secrets/
+Caddyfile

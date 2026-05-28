@@ -246,30 +246,7 @@ async def generate_starter_yaml_endpoint(request: Request):
 
 @template_router.post("/api/templates/import-linkml")
 async def import_linkml(request: Request):
-    body = await request.json()
-    linkml_yaml = body.get("linkml_yaml")
-    target_class = body.get("target_class") or None
-    save = bool(body.get("save_as_user_template", False))
-    if not isinstance(linkml_yaml, str) or not linkml_yaml.strip():
-        raise HTTPException(400, "Field 'linkml_yaml' is required and must be a non-empty string.")
-    from linkml_import import parse_linkml_yaml, linkml_to_template
-    try:
-        parsed = parse_linkml_yaml(linkml_yaml)
-        template_dict = linkml_to_template(parsed, target_class)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-    saved_summary = None
-    if save:
-        try:
-            tpl = save_user_template(yaml.safe_dump(template_dict, sort_keys=False), "yaml")
-            saved_summary = template_summary(tpl)
-        except ValueError as exc:
-            raise HTTPException(400, f"Generated template rejected on save: {exc}")
-    return {
-        "template": template_dict,
-        "saved": saved_summary,
-        "as_yaml": yaml.safe_dump(template_dict, sort_keys=False, allow_unicode=True),
-    }
+    raise HTTPException(404, "LinkML import is not available in this version.")
 
 
 # ── Dataset-scoped routes ──────────────────────────────────────────────────

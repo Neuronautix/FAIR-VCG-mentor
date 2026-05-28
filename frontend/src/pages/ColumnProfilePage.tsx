@@ -1,5 +1,6 @@
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'
 import SaveIcon from '@mui/icons-material/Save'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import {
   Alert,
@@ -10,6 +11,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   Grid,
   InputLabel,
@@ -26,16 +31,17 @@ import {
   TablePagination,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   getProfile,
-  listHITLSuggestions,
-  requestLLMColumnSuggestions,
   saveTemplate,
   updateColumns,
+  previewAIColumnSuggestions,
+  getAIColumnSuggestions,
 } from '../api/client'
 import HITLPanel from '../components/HITLPanel'
 import { useStore } from '../store/useStore'
@@ -70,9 +76,13 @@ const TYPE_COLORS: Record<string, string> = {
 function ColumnEditor({
   col,
   onChange,
+  aiDescription,
+  onAcceptAI,
 }: {
   col: ColumnProfile
   onChange: (updated: ColumnProfile) => void
+  aiDescription?: string
+  onAcceptAI?: () => void
 }) {
   return (
     <Grid container spacing={1.5}>
@@ -86,13 +96,27 @@ function ColumnEditor({
         />
       </Grid>
       <Grid item xs={12} sm={6} md={3}>
-        <TextField
-          label="Description"
-          size="small"
-          fullWidth
-          value={col.user_description ?? ''}
-          onChange={(e) => onChange({ ...col, user_description: e.target.value })}
-        />
+        <Box>
+          <TextField
+            label="Description"
+            size="small"
+            fullWidth
+            value={col.user_description ?? ''}
+            onChange={(e) => onChange({ ...col, user_description: e.target.value })}
+          />
+          {aiDescription && !col.user_description && (
+            <Box sx={{ mt: 0.5 }}>
+              <Typography variant="caption" color="text.secondary">
+                AI suggestion: {aiDescription}
+              </Typography>
+              {onAcceptAI && (
+                <Button size="small" sx={{ ml: 1, p: 0, fontSize: 11 }} onClick={onAcceptAI}>
+                  Accept
+                </Button>
+              )}
+            </Box>
+          )}
+        </Box>
       </Grid>
       <Grid item xs={6} sm={4} md={2}>
         <FormControl size="small" fullWidth>
@@ -167,11 +191,8 @@ export default function ColumnProfilePage() {
     setFairScore,
     setLowConfidenceColumns,
     setInferenceMetrics,
-    paperExtraction,
-    llmEnabled,
-    setHITLSuggestions,
+    aiConfigured,
   } = useStore()
-  const [llmRequesting, setLlmRequesting] = useState(false)
   const [localCols, setLocalCols] = useState<ColumnProfile[]>(columns)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -180,7 +201,14 @@ export default function ColumnProfilePage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
-  const [paperHintDismissed, setPaperHintDismissed] = useState(false)
+
+  // AI column suggestions state
+  const [aiPreviewOpen, setAIPreviewOpen] = useState(false)
+  const [aiPreviewData, setAIPreviewData] = useState<any>(null)
+  const [aiPreviewLoading, setAIPreviewLoading] = useState(false)
+  const [aiLoading, setAILoading] = useState(false)
+  const [aiError, setAIError] = useState<string | null>(null)
+  const [aiSuggestions, setAISuggestions] = useState<Record<string, string>>({})
 
   if (!datasetId) {
     return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>
@@ -206,21 +234,6 @@ export default function ColumnProfilePage() {
     }
   }
 
-  const handleRequestLLM = async () => {
-    if (!datasetId) return
-    setLlmRequesting(true)
-    try {
-      const targets = lowConfidenceColumns.length
-        ? lowConfidenceColumns.map((c) => c.name)
-        : undefined
-      await requestLLMColumnSuggestions(datasetId, targets)
-      const fresh = await listHITLSuggestions(datasetId)
-      setHITLSuggestions(fresh)
-    } finally {
-      setLlmRequesting(false)
-    }
-  }
-
   const refreshColumns = async () => {
     if (!datasetId) return
     const fresh = await getProfile(datasetId)
@@ -241,23 +254,69 @@ export default function ColumnProfilePage() {
     }
   }
 
-  const lowConfidenceNames = new Set(lowConfidenceColumns.map((c) => c.name))
+  const handleAIPreview = async () => {
+    if (!datasetId) return
+    setAIPreviewLoading(true)
+    setAIError(null)
+    try {
+      const preview = await previewAIColumnSuggestions(datasetId)
+      setAIPreviewData(preview.preview)
+      setAIPreviewOpen(true)
+    } catch (err: any) {
+      setAIError(err?.response?.data?.detail || 'Preview failed.')
+    } finally {
+      setAIPreviewLoading(false)
+    }
+  }
 
-  const paperOutcomeSet = new Set(paperExtraction?.vcg_hints.outcome_columns ?? [])
-  const paperCovariateSet = new Set(paperExtraction?.vcg_hints.covariate_columns ?? [])
-  const paperMatchCount = localCols.filter(
-    (c) => paperOutcomeSet.has(c.name) || paperCovariateSet.has(c.name)
-  ).length
-  const showPaperHintBanner =
-    !paperHintDismissed &&
-    paperExtraction != null &&
-    paperMatchCount > 0
+  const handleAIConfirm = async () => {
+    if (!datasetId) return
+    setAIPreviewOpen(false)
+    setAILoading(true)
+    setAIError(null)
+    try {
+      const result = await getAIColumnSuggestions(datasetId)
+      setAISuggestions(result.suggestions)
+    } catch (err: any) {
+      setAIError(err?.response?.data?.detail || 'AI column suggestions failed.')
+    } finally {
+      setAILoading(false)
+    }
+  }
+
+  const handleAcceptAISuggestion = (colName: string) => {
+    const suggestion = aiSuggestions[colName]
+    if (!suggestion) return
+    setLocalCols((prev) =>
+      prev.map((c) => (c.name === colName ? { ...c, user_description: suggestion } : c))
+    )
+    setAISuggestions((prev) => {
+      const updated = { ...prev }
+      delete updated[colName]
+      return updated
+    })
+  }
+
+  const lowConfidenceNames = new Set(lowConfidenceColumns.map((c) => c.name))
+  const pendingAISuggestions = Object.keys(aiSuggestions).length
 
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5">Column Profile</Typography>
         <Stack direction="row" spacing={1.5}>
+          {aiConfigured && (
+            <Tooltip title="Get AI-generated descriptions for all columns">
+              <Button
+                variant="outlined"
+                startIcon={aiPreviewLoading || aiLoading ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+                onClick={handleAIPreview}
+                disabled={aiPreviewLoading || aiLoading}
+              >
+                {pendingAISuggestions > 0 ? `AI (${pendingAISuggestions} pending)` : 'Suggest descriptions'}
+              </Button>
+            </Tooltip>
+          )}
           <Button
             variant="outlined"
             startIcon={savingTemplate ? <CircularProgress size={16} /> : <BookmarkAddIcon />}
@@ -281,6 +340,19 @@ export default function ColumnProfilePage() {
         <Alert severity="success" sx={{ mb: 2 }}>
           Re-applied a saved template to {templateApplied} column
           {templateApplied === 1 ? '' : 's'} for this dataset signature.
+        </Alert>
+      )}
+
+      {aiError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setAIError(null)}>
+          {aiError}
+        </Alert>
+      )}
+
+      {pendingAISuggestions > 0 && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {pendingAISuggestions} AI description suggestion{pendingAISuggestions === 1 ? '' : 's'} pending.
+          Expand a column below to review and accept suggestions.
         </Alert>
       )}
 
@@ -316,39 +388,17 @@ export default function ColumnProfilePage() {
 
       <Alert severity="info" sx={{ mb: 2 }}>
         Review and correct the automatic column classification below. Descriptions and units are used
-        to generate the data dictionary, CSVW, and JSON-LD exports.
+        to generate the data dictionary and assessment reports.
       </Alert>
 
       <HITLPanel
         category="column_metadata"
-        title="AI column suggestions — Human review required"
-        emptyHint={
-          llmEnabled === false
-            ? 'Claude Haiku is disabled on the server. Set ANTHROPIC_API_KEY to enable.'
-            : 'Click "Ask Claude Haiku" to get metadata suggestions for low-confidence columns. Every suggestion is shown here for you to approve, edit, or reject.'
-        }
-        refreshAction={{
-          label: lowConfidenceColumns.length
-            ? `Ask Claude Haiku (${lowConfidenceColumns.length})`
-            : 'Ask Claude Haiku',
-          onClick: handleRequestLLM,
-          pending: llmRequesting,
-        }}
+        title="Suggested column corrections — Human review required"
+        emptyHint="No pending column suggestions."
         onApplied={() => {
           refreshColumns()
         }}
       />
-
-      {showPaperHintBanner && (
-        <Alert
-          severity="info"
-          sx={{ mb: 2 }}
-          onClose={() => setPaperHintDismissed(true)}
-        >
-          {paperMatchCount} column{paperMatchCount === 1 ? '' : 's'} match paper hints from "
-          {paperExtraction!._filename}". Highlighted below.
-        </Alert>
-      )}
 
       {/* Summary table */}
       <Card sx={{ mb: 3 }}>
@@ -381,11 +431,8 @@ export default function ColumnProfilePage() {
                     <Typography variant="body2" fontWeight={600}>
                       {col.name}
                     </Typography>
-                    {paperOutcomeSet.has(col.name) && (
-                      <Chip label="endpoint (paper)" color="warning" size="small" sx={{ mt: 0.5, mr: 0.5 }} />
-                    )}
-                    {paperCovariateSet.has(col.name) && (
-                      <Chip label="covariate (paper)" color="secondary" size="small" sx={{ mt: 0.5 }} />
+                    {aiSuggestions[col.name] && (
+                      <Chip label="AI suggestion" color="secondary" size="small" sx={{ mt: 0.5, fontSize: 10 }} />
                     )}
                   </TableCell>
                   <TableCell>
@@ -457,6 +504,8 @@ export default function ColumnProfilePage() {
             onChange={(updated) =>
               setLocalCols((prev) => prev.map((c) => (c.name === updated.name ? updated : c)))
             }
+            aiDescription={aiSuggestions[expanded]}
+            onAcceptAI={() => handleAcceptAISuggestion(expanded)}
           />
         </Paper>
       )}
@@ -492,6 +541,30 @@ export default function ColumnProfilePage() {
           {templateMessage}
         </Alert>
       </Snackbar>
+
+      {/* AI Preview Dialog */}
+      <Dialog open={aiPreviewOpen} onClose={() => setAIPreviewOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Preview — what will be sent to OpenAI</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {aiPreviewData?.note}
+          </Alert>
+          {aiPreviewData?.sent_fields && (
+            <Box
+              component="pre"
+              sx={{ fontSize: 11, background: '#f5f5f5', p: 1.5, borderRadius: 1, overflowX: 'auto', maxHeight: 300 }}
+            >
+              {JSON.stringify(aiPreviewData.sent_fields, null, 2)}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAIPreviewOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleAIConfirm}>
+            Confirm — Get suggestions
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

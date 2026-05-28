@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Tuple, Optional
 import chardet
 import pandas as pd
 
-from vcg.constants import (
+from column_constants import (
     BIOLOGICAL_PATTERNS,
     CONDITION_PATTERNS,
     IDENTIFIER_PATTERNS,

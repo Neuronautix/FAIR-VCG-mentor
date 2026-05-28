@@ -1,4 +1,5 @@
 import SaveIcon from '@mui/icons-material/Save'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import {
   Alert,
   Box,
@@ -7,6 +8,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControl,
   Grid,
@@ -19,7 +24,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMetadata, getTemplateValidation, saveMetadata } from '../api/client'
+import { getMetadata, getTemplateValidation, saveMetadata, previewAIMetadataSuggestions, getAIMetadataSuggestions } from '../api/client'
 import HITLPanel from '../components/HITLPanel'
 import VocabularyPanel from '../components/VocabularyPanel'
 import { useStore } from '../store/useStore'
@@ -93,6 +98,7 @@ export default function MetadataWizardPage() {
     setTemplateConformance,
     setTemplateId,
     templateId,
+    aiConfigured,
   } = useStore()
   const [form, setForm] = useState<DatasetMetadata>(metadata)
   const [saving, setSaving] = useState(false)
@@ -100,6 +106,15 @@ export default function MetadataWizardPage() {
   const [error, setError] = useState<string | null>(null)
   const [paperFilledFields, setPaperFilledFields] = useState<Set<string>>(new Set())
   const [paperAlertDismissed, setPaperAlertDismissed] = useState(false)
+
+  // AI suggestions state
+  const [aiPreviewOpen, setAIPreviewOpen] = useState(false)
+  const [aiPreviewData, setAIPreviewData] = useState<any>(null)
+  const [aiPreviewLoading, setAIPreviewLoading] = useState(false)
+  const [aiLoading, setAILoading] = useState(false)
+  const [aiError, setAIError] = useState<string | null>(null)
+  const [aiSuggestions, setAISuggestions] = useState<any | null>(null)
+  const [acceptedFields, setAcceptedFields] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!datasetId) return
@@ -186,6 +201,42 @@ export default function MetadataWizardPage() {
     }
   }
 
+  const handleAIPreview = async () => {
+    if (!datasetId) return
+    setAIPreviewLoading(true)
+    setAIError(null)
+    try {
+      const preview = await previewAIMetadataSuggestions(datasetId)
+      setAIPreviewData(preview.preview)
+      setAIPreviewOpen(true)
+    } catch (err: any) {
+      setAIError(err?.response?.data?.detail || 'Preview failed.')
+    } finally {
+      setAIPreviewLoading(false)
+    }
+  }
+
+  const handleAIConfirm = async () => {
+    if (!datasetId) return
+    setAIPreviewOpen(false)
+    setAILoading(true)
+    setAIError(null)
+    try {
+      const result = await getAIMetadataSuggestions(datasetId)
+      setAISuggestions(result.suggestions)
+    } catch (err: any) {
+      setAIError(err?.response?.data?.detail || 'AI suggestions failed.')
+    } finally {
+      setAILoading(false)
+    }
+  }
+
+  const handleAcceptSuggestion = (field: 'title' | 'description', value: string | null) => {
+    if (!value) return
+    setForm((prev) => ({ ...prev, [field]: value }))
+    setAcceptedFields((prev) => new Set(prev).add(field))
+  }
+
   const identifiers = tableStructure?.detected_identifiers ?? []
   const identifierOptions = identifiers.length > 0 ? identifiers : columns.map((c) => c.name)
 
@@ -200,17 +251,75 @@ export default function MetadataWizardPage() {
             Complete metadata improves your FAIR score and enables richer exports
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-          onClick={handleSave}
-          disabled={saving}
-        >
-          Save metadata
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
+          {aiConfigured && (
+            <Button
+              variant="outlined"
+              startIcon={aiPreviewLoading ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+              onClick={handleAIPreview}
+              disabled={aiPreviewLoading || aiLoading}
+            >
+              Get AI suggestions
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            Save metadata
+          </Button>
+        </Box>
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {aiError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setAIError(null)}>{aiError}</Alert>}
+
+      {aiSuggestions && (
+        <Card sx={{ mb: 3, border: '1.5px solid #9c27b0', background: '#fdf4ff' }}>
+          <CardContent>
+            <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+              AI Suggestions (review and accept individually)
+            </Typography>
+            {aiSuggestions.title_suggestion && (
+              <Box sx={{ mb: 1.5 }}>
+                <Typography variant="body2"><strong>Suggested title:</strong> {aiSuggestions.title_suggestion}</Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="secondary"
+                  onClick={() => handleAcceptSuggestion('title', aiSuggestions.title_suggestion)}
+                  disabled={acceptedFields.has('title')}
+                  sx={{ mt: 0.5 }}
+                >
+                  {acceptedFields.has('title') ? 'Accepted' : 'Accept title'}
+                </Button>
+              </Box>
+            )}
+            {aiSuggestions.description_suggestion && (
+              <Box sx={{ mb: 1.5 }}>
+                <Typography variant="body2"><strong>Suggested description:</strong> {aiSuggestions.description_suggestion}</Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="secondary"
+                  onClick={() => handleAcceptSuggestion('description', aiSuggestions.description_suggestion)}
+                  disabled={acceptedFields.has('description')}
+                  sx={{ mt: 0.5 }}
+                >
+                  {acceptedFields.has('description') ? 'Accepted' : 'Accept description'}
+                </Button>
+              </Box>
+            )}
+            {aiSuggestions.rationale && (
+              <Typography variant="caption" color="text.secondary">
+                Rationale: {aiSuggestions.rationale}
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {paperFilledFields.size > 0 && !paperAlertDismissed && paperExtraction && (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => setPaperAlertDismissed(true)}>
@@ -455,6 +564,30 @@ export default function MetadataWizardPage() {
           Metadata saved. Your FAIR score will update when you return to the FAIR Score page.
         </Alert>
       </Snackbar>
+
+      {/* AI Preview Dialog */}
+      <Dialog open={aiPreviewOpen} onClose={() => setAIPreviewOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Preview — what will be sent to OpenAI</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {aiPreviewData?.note}
+          </Alert>
+          {aiPreviewData?.sent_fields && (
+            <Box
+              component="pre"
+              sx={{ fontSize: 12, background: '#f5f5f5', p: 1.5, borderRadius: 1, overflowX: 'auto' }}
+            >
+              {JSON.stringify(aiPreviewData.sent_fields, null, 2)}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAIPreviewOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleAIConfirm}>
+            Confirm — Get suggestions
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

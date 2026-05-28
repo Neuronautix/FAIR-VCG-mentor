@@ -38,7 +38,7 @@ const SECTION_LABELS: Array<[keyof import('../api/client').Vocabulary, string]> 
 ]
 
 export default function VocabularyPanel() {
-  const { datasetId, vocabulary, setVocabulary, llmEnabled, setHITLSuggestions } = useStore()
+  const { datasetId, vocabulary, setVocabulary, aiConfigured, setHITLSuggestions } = useStore()
   const [loading, setLoading] = useState(false)
   const [validating, setValidating] = useState(false)
   const [discovering, setDiscovering] = useState(false)
@@ -188,7 +188,7 @@ export default function VocabularyPanel() {
               discovering ? <CircularProgress size={14} /> : <UploadFileIcon fontSize="small" />
             }
             onClick={() => fileInput.current?.click()}
-            disabled={discovering || llmEnabled === false}
+            disabled={discovering}
           >
             Discover terms from PDF…
           </Button>

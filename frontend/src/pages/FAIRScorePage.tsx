@@ -1,48 +1,35 @@
 import RefreshIcon from '@mui/icons-material/Refresh'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
+import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
 import {
   Alert,
   Box,
   Button,
   Card,
   CardContent,
-  Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
-  IconButton,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   getFairScore,
-  getLLMFairScore,
-  listHITLSuggestions,
-  requestLLMIssueFixes,
+  getAIChecklist,
+  previewAIChecklist,
 } from '../api/client'
 import FAIRScoreBreakdown from '../components/FAIRScoreBreakdown'
 import HITLPanel from '../components/HITLPanel'
 import { useStore } from '../store/useStore'
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
-import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
-
-const VERDICT_COLOR: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-  good: 'success',
-  adequate: 'warning',
-  weak: 'error',
-}
-
-const DIMENSION_LABELS: Record<string, string> = {
-  findable: 'Findable',
-  accessible: 'Accessible',
-  interoperable: 'Interoperable',
-  reusable: 'Reusable',
-}
 
 export default function FAIRScorePage() {
   const navigate = useNavigate()
@@ -50,27 +37,19 @@ export default function FAIRScorePage() {
     datasetId,
     fairScore,
     setFairScore,
-    llmFairScore,
-    setLLMFairScore,
     setHITLSuggestions,
+    aiConfigured,
   } = useStore()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [llmLoading, setLlmLoading] = useState(false)
-  const [llmError, setLlmError] = useState<string | null>(null)
-  const [issueFixLoading, setIssueFixLoading] = useState(false)
 
-  const requestIssueFixes = async () => {
-    if (!datasetId) return
-    setIssueFixLoading(true)
-    try {
-      await requestLLMIssueFixes(datasetId)
-      const fresh = await listHITLSuggestions(datasetId)
-      setHITLSuggestions(fresh)
-    } finally {
-      setIssueFixLoading(false)
-    }
-  }
+  // AI checklist state
+  const [checklistLoading, setChecklistLoading] = useState(false)
+  const [checklistError, setChecklistError] = useState<string | null>(null)
+  const [checklist, setChecklist] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewData, setPreviewData] = useState<any>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const load = async () => {
     if (!datasetId) return
@@ -86,28 +65,39 @@ export default function FAIRScorePage() {
     }
   }
 
-  const fetchLLMScore = async () => {
-    if (!datasetId) return
-    setLlmLoading(true)
-    setLlmError(null)
-    try {
-      const result = await getLLMFairScore(datasetId)
-      setLLMFairScore(result)
-    } catch (e: any) {
-      const msg: string = e?.response?.data?.detail ?? e?.message ?? 'Unknown error'
-      if (msg.includes('ANTHROPIC_API_KEY')) {
-        setLlmError('AI assessment requires ANTHROPIC_API_KEY to be configured on the server.')
-      } else {
-        setLlmError('AI assessment failed. Please try again.')
-      }
-    } finally {
-      setLlmLoading(false)
-    }
-  }
-
   useEffect(() => {
     if (datasetId && !fairScore) load()
   }, [datasetId, fairScore]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAIChecklist = async () => {
+    if (!datasetId) return
+    setPreviewLoading(true)
+    setChecklistError(null)
+    try {
+      const preview = await previewAIChecklist(datasetId)
+      setPreviewData(preview.preview)
+      setPreviewOpen(true)
+    } catch (err: any) {
+      setChecklistError(err?.response?.data?.detail || 'Preview failed.')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handleConfirmChecklist = async () => {
+    if (!datasetId) return
+    setPreviewOpen(false)
+    setChecklistLoading(true)
+    setChecklistError(null)
+    try {
+      const result = await getAIChecklist(datasetId)
+      setChecklist(result.checklist)
+    } catch (err: any) {
+      setChecklistError(err?.response?.data?.detail || 'AI checklist request failed.')
+    } finally {
+      setChecklistLoading(false)
+    }
+  }
 
   if (!datasetId) {
     return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>
@@ -131,14 +121,8 @@ export default function FAIRScorePage() {
 
       <HITLPanel
         title="AI-suggested fixes — Human review required"
-        emptyHint="Click 'Ask Claude Haiku' to propose concrete fixes for the detected FAIR issues."
-        refreshAction={{
-          label: 'Ask Claude Haiku',
-          onClick: requestIssueFixes,
-          pending: issueFixLoading,
-        }}
+        emptyHint="Use the Settings page to configure an OpenAI API key and unlock AI suggestions."
         onApplied={() => {
-          // metadata may have changed; let the FAIR score recompute on next mount
           setFairScore(null)
           load()
         }}
@@ -191,91 +175,68 @@ export default function FAIRScorePage() {
 
             <Card sx={{ mb: 2 }}>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="h6">AI Assessment (Claude)</Typography>
-                  {llmFairScore && (
-                    <Tooltip title="Refresh AI assessment">
-                      <IconButton
-                        size="small"
-                        onClick={() => { setLLMFairScore(null); fetchLLMScore() }}
-                        disabled={llmLoading}
-                      >
-                        <RefreshIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                </Box>
-
-                {!llmFairScore && !llmLoading && !llmError && (
+                <Typography variant="h6" gutterBottom>
+                  AI Improvement Checklist
+                </Typography>
+                {!aiConfigured && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Configure an OpenAI API key in{' '}
+                    <Button size="small" onClick={() => navigate('/settings')} sx={{ p: 0, minWidth: 0, textDecoration: 'underline' }}>
+                      Settings
+                    </Button>{' '}
+                    to get a prioritised AI improvement checklist.
+                  </Alert>
+                )}
+                {aiConfigured && !checklist && !checklistLoading && (
                   <Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Claude analyses whether your metadata is substantively complete — not just present.
+                      Get a prioritised checklist of FAIR, ARRIVE, and PREPARE improvement actions
+                      generated by OpenAI based on your score breakdown.
                     </Typography>
+                    {checklistError && (
+                      <Alert severity="error" sx={{ mb: 2 }}>{checklistError}</Alert>
+                    )}
                     <Button
                       variant="outlined"
-                      startIcon={<AutoAwesomeIcon />}
-                      onClick={fetchLLMScore}
+                      startIcon={previewLoading ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+                      onClick={handleAIChecklist}
+                      disabled={previewLoading}
                     >
-                      Get AI Assessment (Claude Haiku)
+                      Get Improvement Checklist
                     </Button>
                   </Box>
                 )}
-
-                {llmLoading && (
+                {checklistLoading && (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <CircularProgress size={20} />
                     <Typography variant="body2" color="text.secondary">
-                      Claude is analysing your metadata…
+                      Generating checklist…
                     </Typography>
                   </Box>
                 )}
-
-                {llmError && (
-                  <Alert severity="error" sx={{ mt: 1 }}>
-                    {llmError}
-                  </Alert>
-                )}
-
-                {llmFairScore && !llmLoading && (
+                {checklist && !checklistLoading && (
                   <Box>
-                    {llmFairScore.overall_assessment && (
-                      <Typography variant="body2" sx={{ mb: 2 }}>
-                        {llmFairScore.overall_assessment}
-                      </Typography>
-                    )}
-
-                    {llmFairScore.top_priority && (
-                      <Alert severity="warning" sx={{ mb: 2 }}>
-                        <strong>Top priority:</strong> {llmFairScore.top_priority}
-                      </Alert>
-                    )}
-
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      {Object.entries(DIMENSION_LABELS).map(([key, label]) => {
-                        const dim = llmFairScore[key]
-                        if (!dim) return null
-                        const verdict: string = (dim.verdict ?? '').toLowerCase()
-                        const color = VERDICT_COLOR[verdict] ?? 'default'
-                        return (
-                          <Box key={key} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                            <Box sx={{ minWidth: 100, pt: 0.25 }}>
-                              <Typography variant="caption" fontWeight={700} sx={{ mr: 0.5 }}>
-                                {label}
-                              </Typography>
-                              <Chip
-                                label={dim.verdict ?? '—'}
-                                size="small"
-                                color={color}
-                                sx={{ height: 18, fontSize: 10 }}
-                              />
-                            </Box>
-                            <Typography variant="body2" color="text.secondary">
-                              {dim.commentary ?? dim.comment ?? ''}
-                            </Typography>
-                          </Box>
-                        )
-                      })}
+                    <Box
+                      sx={{
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        whiteSpace: 'pre-wrap',
+                        background: '#f5f5f5',
+                        borderRadius: 1,
+                        p: 2,
+                        maxHeight: 400,
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {checklist}
                     </Box>
+                    <Button
+                      size="small"
+                      sx={{ mt: 1 }}
+                      onClick={() => { setChecklist(null); setChecklistError(null) }}
+                    >
+                      Refresh
+                    </Button>
                   </Box>
                 )}
               </CardContent>
@@ -286,16 +247,9 @@ export default function FAIRScorePage() {
                 <Typography variant="h6" gutterBottom>
                   What FAIR means for your data
                 </Typography>
-                <Typography variant="body2" color="text.secondary" paragraph>
-                  <strong>A CSV file is not "bad" because it is CSV.</strong> CSV becomes weak when it
-                  is isolated from metadata. Adding a data dictionary, stable identifiers, units,
-                  controlled vocabularies, provenance, a license, and a JSON-LD or RO-Crate package
-                  transforms a raw CSV into a much more reusable and machine-actionable research
-                  object.
-                </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Complete the Metadata Wizard to improve your score, then export all artifacts
-                  from the Export page.
+                  Complete the Metadata Wizard to improve your score, then export your assessment
+                  reports from the Export page.
                 </Typography>
               </CardContent>
             </Card>
@@ -315,6 +269,30 @@ export default function FAIRScorePage() {
           Add Metadata
         </Button>
       </Box>
+
+      {/* Preview dialog */}
+      <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Preview — what will be sent to OpenAI</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {previewData?.note}
+          </Alert>
+          {previewData?.sent_fields && (
+            <Box
+              component="pre"
+              sx={{ fontSize: 12, background: '#f5f5f5', p: 1.5, borderRadius: 1, overflowX: 'auto' }}
+            >
+              {JSON.stringify(previewData.sent_fields, null, 2)}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleConfirmChecklist}>
+            Confirm — Get Checklist
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

@@ -31,7 +31,6 @@ import { useStore } from '../store/useStore'
 const CATEGORY_LABELS: Record<HITLSuggestion['category'], string> = {
   column_metadata: 'Column metadata',
   dataset_metadata: 'Dataset metadata',
-  vcg_config: 'VCG configuration',
   fair_recommendation: 'FAIR recommendation',
   issue_fix: 'Issue fix',
   schema_extension: 'Schema extension',
@@ -67,7 +66,7 @@ export default function HITLPanel({
   onApplied,
   maxVisible = 6,
 }: Props) {
-  const { datasetId, hitlSuggestions, setHITLSuggestions, llmEnabled } = useStore()
+  const { datasetId, hitlSuggestions, setHITLSuggestions, aiConfigured } = useStore()
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -139,8 +138,8 @@ export default function HITLPanel({
     }
   }
 
-  if (llmEnabled === false && filtered.length === 0) {
-    return null // AI not configured + no rule-based suggestions either
+  if (!aiConfigured && filtered.length === 0) {
+    return null // AI not configured + no suggestions
   }
 
   return (
@@ -167,19 +166,13 @@ export default function HITLPanel({
               variant="outlined"
               startIcon={refreshAction.pending ? <CircularProgress size={14} /> : <ScienceIcon />}
               onClick={() => refreshAction.onClick()}
-              disabled={refreshAction.pending || llmEnabled === false}
+              disabled={refreshAction.pending}
               sx={{ ml: 1 }}
             >
               {refreshAction.label}
             </Button>
           )}
         </Box>
-
-        {llmEnabled === false && (
-          <Alert severity="info" sx={{ mb: 1.5 }}>
-            Set <code>ANTHROPIC_API_KEY</code> on the backend to enable Claude Haiku-powered suggestions.
-          </Alert>
-        )}
 
         {filtered.length === 0 && !loading && (
           <Typography variant="body2" color="text.secondary">

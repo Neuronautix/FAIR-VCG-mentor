@@ -214,47 +214,7 @@ function ARRIVEChecklist({ arrive }: { arrive: Record<string, { value: string | 
   )
 }
 
-function VCGHintsCard({ hints }: { hints: PaperExtraction['vcg_hints'] }) {
-  const hasHints =
-    hints.treatment_column_name ||
-    hints.control_group_label ||
-    hints.outcome_columns.length > 0
-
-  return (
-    <Card variant="outlined">
-      <CardContent>
-        <Typography variant="subtitle1" fontWeight={600} mb={1.5}>
-          VCG Configuration Hints
-        </Typography>
-        {hasHints ? (
-          <>
-            <MetaRow label="Treatment / Group Column" value={hints.treatment_column_name} />
-            <MetaRow label="Control Group Label" value={hints.control_group_label} />
-            <MetaRow label="Treatment Group Label" value={hints.treatment_group_label} />
-            <MetaRow label="Suggested Outcome Columns" value={hints.outcome_columns.length ? hints.outcome_columns : null} />
-            <MetaRow label="Suggested Covariate Columns" value={hints.covariate_columns.length ? hints.covariate_columns : null} />
-            <Stack direction="row" spacing={2} mt={1}>
-              {hints.n_control != null && (
-                <Chip size="small" label={`n control = ${hints.n_control}`} variant="outlined" />
-              )}
-              {hints.n_treatment != null && (
-                <Chip size="small" label={`n treatment = ${hints.n_treatment}`} variant="outlined" />
-              )}
-            </Stack>
-          </>
-        ) : (
-          <Typography variant="body2" color="text.secondary" fontStyle="italic">
-            No VCG column hints could be inferred from this paper.
-          </Typography>
-        )}
-        <Alert severity="info" sx={{ mt: 2, fontSize: 12 }}>
-          These are suggestions based on the paper text. The VCG wizard lets you confirm or
-          override each column assignment when you have your CSV loaded.
-        </Alert>
-      </CardContent>
-    </Card>
-  )
-}
+// VCG hints removed in fair-only demo
 
 interface FieldMapping {
   field_id: string
@@ -1045,10 +1005,6 @@ export default function PaperImportPage() {
               </Card>
             </Grid>
 
-            {/* VCG Hints */}
-            <Grid item xs={12} md={6}>
-              <VCGHintsCard hints={paperExtraction.vcg_hints} />
-            </Grid>
           </Grid>
 
           {/* Template suggestions */}

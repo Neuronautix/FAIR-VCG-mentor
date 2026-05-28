@@ -71,47 +71,17 @@ export const saveMetadata = (id: string, metadata: DatasetMetadata) =>
 export const getFairScore = (id: string): Promise<FAIRScore> =>
   api.get<FAIRScore>(`/fair-score/${id}`).then((r) => r.data)
 
-export const getLLMFairScore = (id: string) =>
-  api.get(`/fair-score/${id}/llm`).then((r) => r.data)
-
-export const getUriSuggestions = (id: string) =>
-  api.get(`/uris/${id}`).then((r) => r.data)
-
 export const exportUrl = (id: string, type: string) => `/api/export/${id}/${type}`
 
 export const arriveExportUrl = (id: string) => `/api/export/${id}/arrive`
 
 export const prepareExportUrl = (id: string) => `/api/export/${id}/prepare`
 
-export const getVCGWizardPrefill = (id: string) =>
-  api.get(`/vcg/${id}/wizard-prefill`).then(r => r.data)
+export const arriveReportUrl = (id: string) => `/api/export/${id}/arrive-report`
 
-export const saveVCGWizard = (id: string, payload: object) =>
-  api.put(`/vcg/${id}/wizard`, payload).then(r => r.data)
+export const prepareReportUrl = (id: string) => `/api/export/${id}/prepare-report`
 
-export const startVCGChat = (id: string) =>
-  api.post(`/vcg/${id}/chat/start`).then(r => r.data)
-
-export const respondVCGChat = (id: string, message: string) =>
-  api.post(`/vcg/${id}/chat/respond`, { message }).then(r => r.data)
-
-export const startVCGGeneration = (id: string) =>
-  api.post(`/vcg/${id}/generate`).then(r => r.data)
-
-export const getVCGSuitability = (id: string) =>
-  api.get(`/vcg/${id}/suitability`).then(r => r.data)
-
-export const getVCGStatus = (id: string) =>
-  api.get(`/vcg/${id}/status`).then(r => r.data)
-
-export const getVCGResults = (id: string) =>
-  api.get(`/vcg/${id}/results`).then(r => r.data)
-
-export const getVCGConversation = (id: string) =>
-  api.get(`/vcg/${id}/conversation`).then(r => r.data)
-
-export const vcgExportUrl = (id: string, type: 'vcg-csv' | 'vcg-report') =>
-  `/api/vcg/${id}/export/${type}`
+export const fairReportUrl = (id: string) => `/api/export/${id}/fair-report`
 
 export const extractPaperMetadata = (file: File): Promise<any> => {
   const form = new FormData()
@@ -191,7 +161,6 @@ export const getStoredPaperExtraction = (id: string): Promise<any> =>
 export type HITLCategory =
   | 'column_metadata'
   | 'dataset_metadata'
-  | 'vcg_config'
   | 'fair_recommendation'
   | 'issue_fix'
   | 'schema_extension'
@@ -222,7 +191,7 @@ export interface HITLSuggestion {
 }
 
 export const getLLMStatus = (): Promise<{ enabled: boolean }> =>
-  api.get('/llm/status').then((r) => r.data)
+  api.get('/settings/openai-key/status').then((r) => ({ enabled: r.data.configured ?? false }))
 
 export const listHITLSuggestions = (
   id: string,
@@ -245,24 +214,6 @@ export const rejectHITLSuggestion = (id: string, sid: string) =>
 export const editHITLSuggestion = (id: string, sid: string, payload: Record<string, any>) =>
   api
     .put<{ suggestion: HITLSuggestion }>(`/hitl/${id}/suggestions/${sid}`, { payload })
-    .then((r) => r.data)
-
-export const requestLLMColumnSuggestions = (id: string, columns?: string[]) =>
-  api
-    .post<{ created: HITLSuggestion[]; n_raw: number }>(
-      `/llm/${id}/suggest/columns`,
-      columns ? { columns } : {},
-    )
-    .then((r) => r.data)
-
-export const requestLLMIssueFixes = (id: string) =>
-  api
-    .post<{ created: HITLSuggestion[]; n_raw: number }>(`/llm/${id}/suggest/issue-fixes`)
-    .then((r) => r.data)
-
-export const requestVCGLLMSuggest = (id: string) =>
-  api
-    .post<{ agent_msg: any; suggestion: HITLSuggestion | null }>(`/vcg/${id}/llm-suggest`)
     .then((r) => r.data)
 
 // ── Vocabulary ─────────────────────────────────────────────────────────────
@@ -289,14 +240,14 @@ export const validateVocabulary = (id: string) =>
     .post<{ vocabulary: Vocabulary; marked_stale: number }>(`/vocabulary/${id}/validate`)
     .then((r) => r.data)
 
-export const discoverVocabFromPDF = (id: string, file: File) => {
+export const discoverVocabFromPDF = (
+  id: string,
+  file: File,
+): Promise<{ created: Array<{ key: string; values: string[] }> }> => {
   const form = new FormData()
   form.append('file', file)
   return api
-    .post<{ created: HITLSuggestion[]; n_raw: number }>(
-      `/llm/${id}/discover-vocab/from-pdf`,
-      form,
-    )
+    .post<{ created: Array<{ key: string; values: string[] }> }>(`/vocabulary/${id}/discover-pdf`, form)
     .then((r) => r.data)
 }
 
@@ -325,15 +276,6 @@ export const unassignTemplate = (id: string) =>
 
 export const getTemplateValidation = (id: string) =>
   api.get(`/${id}/template/validation`).then((r) => r.data)
-
-export const importLinkmlTemplate = (
-  linkml_yaml: string,
-  target_class: string | null,
-  save_as_user_template: boolean,
-) =>
-  api
-    .post('/templates/import-linkml', { linkml_yaml, target_class, save_as_user_template })
-    .then((r) => r.data)
 
 export const getPaperTemplateSuggestions = (
   extraction: object,
@@ -455,3 +397,43 @@ export const extractTemplateFromDocument = (
     )
     .then((r) => r.data)
 }
+
+// ── OpenAI settings ─────────────────────────────────────────────────────────
+
+export const getOpenAIKeyStatus = (): Promise<{ configured: boolean; model: string }> =>
+  api.get('/settings/openai-key/status').then((r) => r.data)
+
+export const storeOpenAIKey = (apiKey: string): Promise<{ stored: boolean }> =>
+  api.post('/settings/openai-key', { api_key: apiKey }).then((r) => r.data)
+
+export const clearOpenAIKey = (): Promise<{ cleared: boolean }> =>
+  api.delete('/settings/openai-key').then((r) => r.data)
+
+export const testOpenAIKey = (): Promise<{ ok: boolean; response?: string; error?: string }> =>
+  api.post('/settings/openai-key/test').then((r) => r.data)
+
+// ── AI suggestion endpoints ─────────────────────────────────────────────────
+
+export interface AIMetadataSuggestions {
+  title_suggestion: string | null
+  description_suggestion: string | null
+  rationale: string
+}
+
+export const previewAIMetadataSuggestions = (id: string) =>
+  api.post<{ preview: { sent_fields: any; note: string } }>(`/ai/suggest-metadata/${id}?preview=true`).then((r) => r.data)
+
+export const getAIMetadataSuggestions = (id: string): Promise<{ suggestions: AIMetadataSuggestions }> =>
+  api.post(`/ai/suggest-metadata/${id}`).then((r) => r.data)
+
+export const previewAIColumnSuggestions = (id: string) =>
+  api.post<{ preview: { sent_fields: any; note: string } }>(`/ai/suggest-columns/${id}?preview=true`).then((r) => r.data)
+
+export const getAIColumnSuggestions = (id: string): Promise<{ suggestions: Record<string, string> }> =>
+  api.post(`/ai/suggest-columns/${id}`).then((r) => r.data)
+
+export const previewAIChecklist = (id: string) =>
+  api.post<{ preview: { sent_fields: any; note: string } }>(`/ai/suggest-checklist/${id}?preview=true`).then((r) => r.data)
+
+export const getAIChecklist = (id: string): Promise<{ checklist: string }> =>
+  api.post(`/ai/suggest-checklist/${id}`).then((r) => r.data)

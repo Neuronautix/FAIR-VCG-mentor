@@ -1,5 +1,4 @@
 import DownloadIcon from '@mui/icons-material/Download'
-import FolderZipIcon from '@mui/icons-material/FolderZip'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import {
   Alert,
@@ -10,88 +9,69 @@ import {
   CircularProgress,
   Divider,
   Grid,
-  LinearProgress,
   Snackbar,
   Typography,
 } from '@mui/material'
 import { useState } from 'react'
 import { getFairScore } from '../api/client'
-import { exportUrl } from '../api/client'
-import { arriveExportUrl, prepareExportUrl } from '../api/client'
+import { exportUrl, arriveReportUrl, prepareReportUrl, fairReportUrl } from '../api/client'
 import FAIRScoreBreakdown from '../components/FAIRScoreBreakdown'
 import { useStore } from '../store/useStore'
 
 interface ExportItem {
   label: string
   description: string
-  endpoint: string
+  url: (id: string) => string
   filename: string
   mime: string
   highlight?: boolean
+  badge?: string
 }
 
-const EXPORTS: ExportItem[] = [
-  {
-    label: 'Original CSV',
-    description: 'Your uploaded file, unchanged.',
-    endpoint: 'cleaned-csv',
-    filename: 'original_data.csv',
-    mime: 'text/csv',
-  },
-  {
-    label: 'Cleaned CSV',
-    description: 'Normalized column names and consistent value encoding.',
-    endpoint: 'cleaned-csv',
-    filename: 'cleaned_data.csv',
-    mime: 'text/csv',
-    highlight: true,
-  },
-  {
-    label: 'Data Dictionary',
-    description: 'CSV with label, description, unit, allowed values, and URI per column.',
-    endpoint: 'data-dictionary',
-    filename: 'data_dictionary.csv',
-    mime: 'text/csv',
-    highlight: true,
-  },
-  {
-    label: 'Frictionless datapackage.json',
-    description: 'W3C-compatible tabular data package with Table Schema.',
-    endpoint: 'frictionless',
-    filename: 'datapackage.json',
-    mime: 'application/json',
-  },
-  {
-    label: 'CSVW Metadata',
-    description: 'W3C CSV on the Web metadata for machine-readable column descriptions.',
-    endpoint: 'csvw',
-    filename: 'csvw_metadata.json',
-    mime: 'application/json',
-  },
-  {
-    label: 'JSON-LD Metadata',
-    description: 'Schema.org dataset description, linked data ready.',
-    endpoint: 'jsonld',
-    filename: 'metadata.jsonld',
-    mime: 'application/ld+json',
-  },
-  {
-    label: 'FAIR-Readiness Report',
-    description: 'Markdown report with score breakdown, issues, and recommendations.',
-    endpoint: 'report',
-    filename: 'fair_readiness_report.md',
-    mime: 'text/markdown',
-    highlight: true,
-  },
-  {
-    label: 'RO-Crate ZIP',
-    description: 'Complete research object: all files + ro-crate-metadata.json.',
-    endpoint: 'rocrate',
-    filename: 'ro-crate.zip',
-    mime: 'application/zip',
-    highlight: true,
-  },
-]
+function getExports(id: string): ExportItem[] {
+  return [
+    {
+      label: 'Cleaned CSV',
+      description: 'Normalized column names and consistent value encoding.',
+      url: (id) => exportUrl(id, 'cleaned-csv'),
+      filename: 'cleaned_data.csv',
+      mime: 'text/csv',
+      highlight: true,
+    },
+    {
+      label: 'Data Dictionary',
+      description: 'CSV with label, description, unit, allowed values per column.',
+      url: (id) => exportUrl(id, 'data-dictionary'),
+      filename: 'data_dictionary.csv',
+      mime: 'text/csv',
+      highlight: true,
+    },
+    {
+      label: 'FAIR-Readiness Report',
+      description: 'Markdown report with FAIR score breakdown, issues, and recommendations.',
+      url: fairReportUrl,
+      filename: 'fair_readiness_report.md',
+      mime: 'text/markdown',
+      highlight: true,
+    },
+    {
+      label: 'ARRIVE 2.0 Conformance Report',
+      description: 'Reporting completeness assessment — which ARRIVE 2.0 fields are satisfied.',
+      url: arriveReportUrl,
+      filename: 'arrive_conformance_report.md',
+      mime: 'text/markdown',
+      badge: 'ARRIVE 2.0',
+    },
+    {
+      label: 'PREPARE Readiness Report',
+      description: 'Study planning readiness assessment — which PREPARE checklist items are addressed.',
+      url: prepareReportUrl,
+      filename: 'prepare_readiness_report.md',
+      mime: 'text/markdown',
+      badge: 'PREPARE',
+    },
+  ]
+}
 
 function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string }) {
   const [loading, setLoading] = useState(false)
@@ -101,7 +81,7 @@ function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string
     setLoading(true)
     setExportError(null)
     try {
-      const url = exportUrl(datasetId, item.endpoint)
+      const url = item.url(datasetId)
       const resp = await fetch(url)
       if (!resp.ok) throw new Error('Export failed')
       const blob = await resp.blob()
@@ -129,9 +109,27 @@ function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string
       <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle2" fontWeight={700}>
-              {item.label}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="subtitle2" fontWeight={700}>
+                {item.label}
+              </Typography>
+              {item.badge && (
+                <Box
+                  component="span"
+                  sx={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    px: 0.8,
+                    py: 0.2,
+                    borderRadius: 1,
+                    background: '#e3f2fd',
+                    color: '#1565c0',
+                  }}
+                >
+                  {item.badge}
+                </Box>
+              )}
+            </Box>
             <Typography variant="caption" color="text.secondary">
               {item.description}
             </Typography>
@@ -139,15 +137,7 @@ function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string
           <Button
             variant={item.highlight ? 'contained' : 'outlined'}
             size="small"
-            startIcon={
-              loading ? (
-                <CircularProgress size={14} color="inherit" />
-              ) : item.endpoint === 'rocrate' ? (
-                <FolderZipIcon />
-              ) : (
-                <DownloadIcon />
-              )
-            }
+            startIcon={loading ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />}
             onClick={handleDownload}
             disabled={loading}
             sx={{ whiteSpace: 'nowrap' }}
@@ -171,145 +161,6 @@ function ExportButton({ item, datasetId }: { item: ExportItem; datasetId: string
   )
 }
 
-function ARRIVEExportCard({ datasetId }: { datasetId: string }) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleDownload = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const resp = await fetch(arriveExportUrl(datasetId))
-      if (!resp.ok) throw new Error('Export failed')
-      const blob = await resp.blob()
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = 'arrive_guidelines.zip'
-      a.click()
-      URL.revokeObjectURL(a.href)
-    } catch {
-      setError('ARRIVE export failed. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <Card sx={{ mt: 2, border: '1.5px solid #2e7d32', background: '#f1f8f1' }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          ARRIVE 2.0 Guidelines Export
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Downloads a ZIP containing two pre-filled Markdown documents:
-        </Typography>
-        <Box component="ul" sx={{ pl: 2.5, mb: 1.5, '& li': { mb: 0.5 } }}>
-          <li>
-            <Typography variant="body2">
-              <strong>arrive_study_plan.md</strong> — pre-study plan template filled with your dataset
-              metadata, animal information, experimental groups, and VCG statistics (if generated).
-            </Typography>
-          </li>
-          <li>
-            <Typography variant="body2">
-              <strong>arrive_checklist.md</strong> — ARRIVE 2.0 author checklist (Essential 10 + Recommended Set)
-              with auto-detected status (✅ / ⚠️ / ❌) per item, pre-filled section references, and
-              an action list of missing items.
-            </Typography>
-          </li>
-        </Box>
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
-          Based on the official ARRIVE 2.0 Author Checklist and ARRIVE Study Plan template
-          (www.ARRIVEguidelines.org).
-        </Typography>
-        {error && (
-          <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-        <Button
-          variant="contained"
-          color="success"
-          startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <FolderZipIcon />}
-          onClick={handleDownload}
-          disabled={loading}
-        >
-          {loading ? 'Generating…' : 'Download ARRIVE ZIP'}
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-function PREPAREExportCard({ datasetId }: { datasetId: string }) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleDownload = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const resp = await fetch(prepareExportUrl(datasetId))
-      if (!resp.ok) throw new Error('Export failed')
-      const blob = await resp.blob()
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = 'prepare_guidelines.zip'
-      a.click()
-      URL.revokeObjectURL(a.href)
-    } catch {
-      setError('PREPARE export failed. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <Card sx={{ mt: 2, border: '1.5px solid #ed6c02', background: '#fff8f1' }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          PREPARE study plan (zip)
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Pre-study planning checklist (15 topics, Smith et al. 2018). Complementary to ARRIVE — PREPARE
-          covers the planning stage, ARRIVE covers reporting. Downloads a ZIP containing:
-        </Typography>
-        <Box component="ul" sx={{ pl: 2.5, mb: 1.5, '& li': { mb: 0.5 } }}>
-          <li>
-            <Typography variant="body2">
-              <strong>prepare_study_plan.md</strong> — pre-study plan template filled with your dataset
-              metadata across the 15 PREPARE topics.
-            </Typography>
-          </li>
-          <li>
-            <Typography variant="body2">
-              <strong>prepare_checklist.md</strong> — PREPARE checklist with auto-detected status per
-              item and an action list of missing entries.
-            </Typography>
-          </li>
-        </Box>
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
-          Based on the PREPARE guidelines (Smith AJ et al., Lab Anim 2018).
-        </Typography>
-        {error && (
-          <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-        <Button
-          variant="contained"
-          color="warning"
-          startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <FolderZipIcon />}
-          onClick={handleDownload}
-          disabled={loading}
-        >
-          {loading ? 'Generating…' : 'Download PREPARE ZIP'}
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
 export default function ExportPage() {
   const { datasetId, fairScore, metadata, importInfo, setFairScore } = useStore()
   const [refreshing, setRefreshing] = useState(false)
@@ -329,6 +180,7 @@ export default function ExportPage() {
   }
 
   const title = metadata.title || importInfo?.filename || 'Your dataset'
+  const exports = getExports(datasetId)
 
   return (
     <Box>
@@ -336,8 +188,16 @@ export default function ExportPage() {
         Export
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Download individual files or the complete RO-Crate package containing all artifacts.
+        Download your cleaned data and assessment reports.
       </Typography>
+
+      <Alert severity="info" sx={{ mb: 3 }}>
+        <Typography variant="body2">
+          <strong>ARRIVE 2.0</strong> is a reporting completeness assessment — it checks whether
+          required reporting fields are present. <strong>PREPARE</strong> is a study planning
+          readiness assessment. Neither is regulatory validation or proof of research quality.
+        </Typography>
+      </Alert>
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={7}>
@@ -347,11 +207,11 @@ export default function ExportPage() {
                 Export Files
               </Typography>
               <Alert severity="info" sx={{ mb: 2 }}>
-                The <strong>highlighted</strong> exports have the highest educational and reuse value: the
-                data dictionary, the cleaned CSV, the report, and the RO-Crate package.
+                <strong>Highlighted exports</strong> are the most useful: cleaned CSV, data dictionary,
+                and the FAIR-readiness report.
               </Alert>
-              {EXPORTS.map((item) => (
-                <ExportButton key={item.endpoint + item.filename} item={item} datasetId={datasetId} />
+              {exports.map((item) => (
+                <ExportButton key={item.filename} item={item} datasetId={datasetId} />
               ))}
             </CardContent>
           </Card>
@@ -359,24 +219,26 @@ export default function ExportPage() {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                What is in the RO-Crate?
+                About the reports
+              </Typography>
+              <Divider sx={{ mb: 1.5 }} />
+              <Typography variant="body2" color="text.secondary" paragraph>
+                <strong>FAIR-Readiness Report:</strong> Describes your dataset's Findable, Accessible,
+                Interoperable, and Reusable score with a breakdown of detected issues and recommended
+                improvements.
               </Typography>
               <Typography variant="body2" color="text.secondary" paragraph>
-                The RO-Crate ZIP packages all export files together with a{' '}
-                <code>ro-crate-metadata.json</code> file — a JSON-LD document that describes the
-                research object and all its files in a machine-readable way, conforming to the
-                RO-Crate 1.2 specification.
+                <strong>ARRIVE 2.0 Report:</strong> Checks which fields required by the ARRIVE 2.0
+                reporting guideline (arriveGuidelines.org) are present in your dataset metadata.
+                Assign the ARRIVE 2.0 template on the Templates page for a detailed assessment.
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                This is appropriate when you want to archive the dataset, share it with a repository,
-                or submit it as a research output with rich, structured metadata.
+                <strong>PREPARE Report:</strong> Checks which PREPARE study planning checklist items
+                (Smith AJ et al., Lab Anim 2018) are addressed in your metadata. Assign a PREPARE
+                or ARRIVE-PREPARE crosswalk template for a detailed assessment.
               </Typography>
             </CardContent>
           </Card>
-
-          <ARRIVEExportCard datasetId={datasetId} />
-
-          <PREPAREExportCard datasetId={datasetId} />
         </Grid>
 
         <Grid item xs={12} md={5}>

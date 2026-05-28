@@ -222,7 +222,7 @@ export default function TemplateFillPage() {
     templateCompletion,
     setTemplateCompletion,
     paperExtraction,
-    llmEnabled,
+    aiConfigured,
     setMetadata,
   } = useStore()
 
@@ -756,14 +756,14 @@ export default function TemplateFillPage() {
               </Button>
             </span>
           </Tooltip>
-          <Tooltip title={llmEnabled === false ? 'LLM is disabled' : 'Get AI suggestions for selected fields'}>
+          <Tooltip title={aiConfigured === false ? 'AI not configured' : 'Get AI suggestions for selected fields'}>
             <span>
               <Button
                 variant="outlined"
                 size="small"
                 startIcon={<AutoAwesomeIcon />}
                 onClick={openLlmDialog}
-                disabled={llmEnabled === false || loading}
+                disabled={!aiConfigured || loading}
               >
                 Suggest with LLM
               </Button>
@@ -1054,7 +1054,7 @@ export default function TemplateFillPage() {
                             )}
                             <Tooltip
                               title={
-                                llmEnabled === false
+                                !aiConfigured
                                   ? 'LLM disabled'
                                   : 'Get an LLM suggestion'
                               }
@@ -1064,7 +1064,7 @@ export default function TemplateFillPage() {
                                   size="small"
                                   onClick={() => requestLlmForField(f)}
                                   disabled={
-                                    llmEnabled === false ||
+                                    !aiConfigured ||
                                     rowLlmBusy !== null
                                   }
                                 >

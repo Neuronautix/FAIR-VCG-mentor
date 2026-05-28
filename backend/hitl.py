@@ -316,10 +316,5 @@ def _apply_dataset_metadata(
 
 
 def _apply_vcg_config(session: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
-    if "vcg" not in session:
-        from vcg.context_model import DEFAULT_VCG_SESSION
-        session["vcg"] = DEFAULT_VCG_SESSION()
-    for key in ("column_roles", "vcg_config", "research_context"):
-        if key in payload:
-            session["vcg"][key].update(payload[key])
-    return {"applied": True, "updated": list(payload.keys())}
+    # VCG is not available in this deployment; ignore vcg_config suggestions
+    return {"applied": False, "error": "VCG is not available in this version."}

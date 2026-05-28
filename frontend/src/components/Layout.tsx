@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react'
 import ArticleIcon from '@mui/icons-material/Article'
 import AssessmentIcon from '@mui/icons-material/Assessment'
-import BarChartIcon from '@mui/icons-material/BarChart'
 import ChecklistIcon from '@mui/icons-material/Checklist'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoIcon from '@mui/icons-material/Info'
-import ScienceIcon from '@mui/icons-material/Science'
 import RuleIcon from '@mui/icons-material/Rule'
+import SettingsIcon from '@mui/icons-material/Settings'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
@@ -28,7 +27,6 @@ import {
 } from '@mui/material'
 import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { getLLMStatus } from '../api/client'
 import { useStore } from '../store/useStore'
 
 const DRAWER_WIDTH = 220
@@ -38,7 +36,6 @@ interface NavItem {
   path: string
   icon: ReactNode
   alwaysEnabled?: boolean
-  vcgResultsOnly?: boolean
   requiresTemplate?: boolean
 }
 
@@ -51,14 +48,13 @@ const navItems: NavItem[] = [
   { label: 'Metadata Wizard', path: '/metadata' },
   { label: 'Templates', path: '/templates', alwaysEnabled: true },
   { label: 'Template Fill', path: '/template-fill', requiresTemplate: true },
-  { label: 'VCG Wizard', path: '/vcg' },
   { label: 'Export', path: '/export' },
-  { label: 'VCG Results', path: '/vcg/results', vcgResultsOnly: true },
+  { label: 'Settings', path: '/settings', alwaysEnabled: true },
 ].map((item, i) => ({
   ...item,
   icon: [
     <CloudUploadIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
-    <TuneIcon />, <RuleIcon />, <ChecklistIcon />, <ScienceIcon />, <DownloadIcon />, <BarChartIcon />,
+    <TuneIcon />, <RuleIcon />, <ChecklistIcon />, <DownloadIcon />, <SettingsIcon />,
   ][i],
 }))
 
@@ -66,14 +62,15 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const theme = useTheme()
-  const { datasetId, importInfo, vcgStatus, llmEnabled, setLLMEnabled, templateId } = useStore()
+  const { datasetId, importInfo, aiConfigured, setAIConfigured, templateId } = useStore()
 
   useEffect(() => {
-    if (llmEnabled !== null) return
-    getLLMStatus()
-      .then((r) => setLLMEnabled(r.enabled))
-      .catch(() => setLLMEnabled(false))
-  }, [llmEnabled, setLLMEnabled])
+    if (aiConfigured !== null) return
+    fetch('/api/settings/openai-key/status')
+      .then((r) => r.json())
+      .then((data) => setAIConfigured(data.configured ?? false))
+      .catch(() => setAIConfigured(false))
+  }, [aiConfigured, setAIConfigured])
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -94,13 +91,13 @@ export default function Layout() {
               variant="outlined"
             />
           )}
-          {llmEnabled !== null && (
+          {aiConfigured !== null && (
             <Chip
-              label={llmEnabled ? 'Claude Haiku · on' : 'Claude Haiku · off'}
+              label={aiConfigured ? 'AI suggestions: on' : 'AI suggestions: off'}
               size="small"
               sx={{
                 color: 'white',
-                borderColor: llmEnabled ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)',
+                borderColor: aiConfigured ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)',
                 mr: 1,
                 fontSize: 11,
               }}
@@ -138,7 +135,6 @@ export default function Layout() {
                 !item.alwaysEnabled &&
                 item.path !== '/' &&
                 (!datasetId ||
-                  (item.vcgResultsOnly === true && vcgStatus !== 'done') ||
                   (item.requiresTemplate === true && !templateId))
               const tooltip =
                 disabled && item.requiresTemplate && !templateId && datasetId

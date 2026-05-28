@@ -1,0 +1,12 @@
+your-demo-domain.example {
+    # Optional basic auth — uncomment and set password hash via: caddy hash-password
+    # basicauth {
+    #     demo $2a$14$...hashedpassword...
+    # }
+
+    # Forward API calls to backend
+    reverse_proxy /api/* backend:8000
+
+    # Serve frontend
+    reverse_proxy frontend:80
+}

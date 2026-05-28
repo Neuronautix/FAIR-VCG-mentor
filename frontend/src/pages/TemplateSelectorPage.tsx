@@ -45,7 +45,6 @@ import {
   listTemplates,
   unassignTemplate,
   uploadTemplate,
-  importLinkmlTemplate,
 } from '../api/client'
 import { useStore } from '../store/useStore'
 import type {
@@ -232,32 +231,7 @@ export default function TemplateSelectorPage() {
   }
 
   const handleImportLinkml = async () => {
-    if (!linkmlBody.trim()) {
-      setError('Paste a LinkML schema first.')
-      return
-    }
-    setLinkmlBusy(true)
-    setError(null)
-    setLinkmlPreview(null)
-    try {
-      const result = await importLinkmlTemplate(
-        linkmlBody,
-        linkmlTarget.trim() || null,
-        linkmlSave,
-      )
-      setLinkmlPreview(result.as_yaml ?? '')
-      if (linkmlSave) {
-        const list = await listTemplates()
-        setAvailableTemplates(list)
-        setToast('LinkML schema imported and saved as user template.')
-      } else {
-        setToast('LinkML schema converted — review the preview below.')
-      }
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'LinkML import failed.')
-    } finally {
-      setLinkmlBusy(false)
-    }
+    setError('LinkML import is not available in this version.')
   }
 
   const handleSaveImported = async () => {

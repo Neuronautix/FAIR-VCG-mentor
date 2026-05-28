@@ -129,44 +129,9 @@ export interface PaperExtraction {
     protocol_reference: string | null
   }
   arrive: Record<string, ARRIVEField>
-  vcg_hints: {
-    treatment_column_name: string | null
-    control_group_label: string | null
-    treatment_group_label: string | null
-    outcome_columns: string[]
-    covariate_columns: string[]
-    n_control: number | null
-    n_treatment: number | null
-  }
   summary: string
-}
-
-export interface VCGColumnRoles {
-  subject_id: string | null
-  treatment_col: string | null
-  treatment_value: string | null
-  control_value: string | null
-  outcome_cols: string[]
-  covariate_cols: string[]
-  time_col: string | null
-  exclude_cols: string[]
-}
-
-export interface VCGConfig {
-  method: string          // "bootstrap"|"synthetic"|"auto"
-  n_synthetic: number
-  seed: number
-  bootstrap_iters: number
-  confidence_level: number
-}
-
-export interface ChatMessage {
-  role: 'agent' | 'user'
-  content: string
-  state?: string
-  options?: string[]
-  ready_to_build?: boolean
-  timestamp: string
+  // vcg_hints kept for backward compatibility with paper_extractor responses
+  vcg_hints?: Record<string, any>
 }
 
 export interface TemplateSummary {
@@ -185,6 +150,12 @@ export interface TemplateCandidate {
   reasons: string[]
 }
 
+export interface ChatMessage {
+  role: 'user' | 'agent'
+  content: string
+  options?: string[]
+}
+
 export interface ConformanceEntry {
   standard: string
   section: string
@@ -195,33 +166,6 @@ export interface ConformanceEntry {
   satisfied_by: { column?: string; metadata?: string; via_crosswalk?: boolean } | null
   severity: 'high' | 'medium' | 'low'
   is_column_field: boolean
-}
-
-export interface VCGResults {
-  method_used: string
-  n_subjects_real: number
-  n_subjects_vcg: number
-  balance_report: {
-    covariates: Array<{col: string, smd: number, balance_label: string}>
-    outcomes: Array<{col: string, mean_real: number, sd_real: number, mean_vcg: number, sd_vcg: number, p_value: number}>
-  }
-  diagnostic_plots: Record<string, string>   // base64 PNG strings
-  per_endpoint_plots?: Record<string, Record<string, string>>
-  reliability_score?: number
-  reliability_breakdown?: {
-    per_endpoint?: Record<string, Record<string, unknown>>
-    [key: string]: unknown
-  }
-  method_diagnostics?: {
-    method?: string
-    n_control?: number
-    fitted_distributions?: Record<string, Record<string, unknown>>
-    per_column_method?: Record<string, string>
-    [key: string]: unknown
-  }
-  warnings?: string[]
-  stat_report: string
-  generated_at: string
 }
 
 interface AppState {
@@ -236,16 +180,9 @@ interface AppState {
   templateApplied: number
   inferenceMetrics: InferenceMetrics
 
-  vcgStatus: 'not_started' | 'running' | 'done' | 'failed' | null
-  vcgResults: VCGResults | null
-  vcgConversation: ChatMessage[]
-  vcgColumnRoles: VCGColumnRoles | null
-  vcgConfig: VCGConfig | null
-
   paperExtraction: PaperExtraction | null
-  llmFairScore: any | null
 
-  llmEnabled: boolean | null
+  aiConfigured: boolean | null
   hitlSuggestions: import('../api/client').HITLSuggestion[]
   vocabulary: import('../api/client').Vocabulary | null
 
@@ -276,17 +213,9 @@ interface AppState {
   setInferenceMetrics: (metrics: InferenceMetrics) => void
   reset: () => void
 
-  setVCGStatus: (status: AppState['vcgStatus']) => void
-  setVCGResults: (results: VCGResults | null) => void
-  addChatMessage: (msg: ChatMessage) => void
-  clearVCGConversation: () => void
-  setVCGColumnRoles: (roles: VCGColumnRoles) => void
-  setVCGConfig: (config: VCGConfig) => void
-
   setPaperExtraction: (extraction: PaperExtraction | null) => void
-  setLLMFairScore: (score: any | null) => void
 
-  setLLMEnabled: (enabled: boolean | null) => void
+  setAIConfigured: (configured: boolean | null) => void
   setHITLSuggestions: (suggestions: import('../api/client').HITLSuggestion[]) => void
   setVocabulary: (vocab: import('../api/client').Vocabulary | null) => void
 
@@ -316,16 +245,9 @@ export const useStore = create<AppState>((set) => ({
   templateApplied: 0,
   inferenceMetrics: EMPTY_METRICS,
 
-  vcgStatus: null,
-  vcgResults: null,
-  vcgConversation: [],
-  vcgColumnRoles: null,
-  vcgConfig: null,
-
   paperExtraction: null,
-  llmFairScore: null,
 
-  llmEnabled: null,
+  aiConfigured: null,
   hitlSuggestions: [],
   vocabulary: null,
 
@@ -370,13 +292,7 @@ export const useStore = create<AppState>((set) => ({
       lowConfidenceColumns: [],
       templateApplied: 0,
       inferenceMetrics: EMPTY_METRICS,
-      vcgStatus: null,
-      vcgResults: null,
-      vcgConversation: [],
-      vcgColumnRoles: null,
-      vcgConfig: null,
       paperExtraction: null,
-      llmFairScore: null,
       hitlSuggestions: [],
       vocabulary: null,
       templateId: null,
@@ -385,17 +301,9 @@ export const useStore = create<AppState>((set) => ({
       templateCompletion: null,
     }),
 
-  setVCGStatus: (status) => set({ vcgStatus: status }),
-  setVCGResults: (results) => set({ vcgResults: results }),
-  addChatMessage: (msg) => set((s) => ({ vcgConversation: [...s.vcgConversation, msg] })),
-  clearVCGConversation: () => set({ vcgConversation: [] }),
-  setVCGColumnRoles: (roles) => set({ vcgColumnRoles: roles }),
-  setVCGConfig: (config) => set({ vcgConfig: config }),
-
   setPaperExtraction: (extraction) => set({ paperExtraction: extraction }),
-  setLLMFairScore: (score) => set({ llmFairScore: score }),
 
-  setLLMEnabled: (llmEnabled) => set({ llmEnabled }),
+  setAIConfigured: (aiConfigured) => set({ aiConfigured }),
   setHITLSuggestions: (hitlSuggestions) => set({ hitlSuggestions }),
   setVocabulary: (vocabulary) => set({ vocabulary }),
 

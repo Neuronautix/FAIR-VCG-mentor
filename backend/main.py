@@ -9,25 +9,20 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 import pandas as pd
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from csv_profiler import profile_csv
 from entity_detector import detect_entity_structure
 from export_engine import (
     generate_cleaned_csv,
-    generate_csvw,
     generate_data_dictionary,
-    generate_fair_report,
-    generate_frictionless,
-    generate_jsonld,
-    generate_rocrate_zip,
+    generate_fair_report_md,
+    generate_arrive_report_md,
+    generate_prepare_report_md,
 )
 from fair_engine import compute_fair_score, detect_issues
-from uri_suggester import suggest_uris
-from arrive_engine import generate_arrive_zip
-from prepare_engine import generate_prepare_zip
 from template_store import (
     apply_template,
     load_template,
@@ -35,10 +30,11 @@ from template_store import (
     record_corrections,
     save_template,
 )
+from prepare_engine import generate_prepare_zip
+from arrive_engine import generate_arrive_zip
 
 app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 
-from vcg.vcg_router import vcg_router, init_vcg_router  # noqa: E402
 from template_router import template_router, init_template_router  # noqa: E402
 from template_engine import (  # noqa: E402
     conformance_to_issues,
@@ -60,6 +56,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+_MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "32")) * 1024 * 1024
+_ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 
 # In-memory session store (sessions are also persisted to SQLite)
 sessions: Dict[str, Dict[str, Any]] = {}
@@ -139,12 +139,29 @@ def _prepare_exports(dataset_id: str) -> Dict[str, Any]:
             s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"],
             template_validation=s.get("template_validation", []),
         )
-    if "uri_suggestions" not in s:
-        s["uri_suggestions"] = suggest_uris(s["columns"], s["metadata"], s["import_info"])
     return s
 
 
+# ── Error handler ─────────────────────────────────────────────────────────────
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """Suppress stack traces in production."""
+    if _ENVIRONMENT == "production":
+        logger.error("Unhandled error on %s: %s", request.url.path, exc)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "An internal error occurred. Please try again."},
+        )
+    raise exc
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "version": "1.0.0"}
+
 
 @app.post("/api/upload")
 async def upload_csv(file: UploadFile = File(...)):
@@ -152,7 +169,24 @@ async def upload_csv(file: UploadFile = File(...)):
     if not content:
         raise HTTPException(400, "Empty file")
 
+    # Enforce upload size limit
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            413,
+            f"File too large. Maximum allowed size is {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+        )
+
     filename = file.filename or "data.csv"
+
+    # Enforce file type restriction
+    import os as _os
+    ext = _os.path.splitext(filename.lower())[1]
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            415,
+            f"Unsupported file type '{ext}'. Only .csv, .xlsx, and .xls files are accepted.",
+        )
+
     if filename.lower().endswith((".xlsx", ".xls")):
         try:
             import io as _io
@@ -283,7 +317,6 @@ async def update_columns(dataset_id: str, column_updates: List[Dict[str, Any]]):
 
     # Invalidate cached score so it reflects the new column metadata.
     s.pop("fair_score", None)
-    s.pop("uri_suggestions", None)
 
     # Recompute issues after column edits
     s["issues"] = detect_issues(s["import_info"], s["columns"], s["table_structure"])
@@ -352,29 +385,12 @@ async def get_fair_score(dataset_id: str):
     return score
 
 
-@app.get("/api/fair-score/{dataset_id}/llm")
-async def get_llm_fair_score(dataset_id: str):
-    from llm_fair_scorer import run_llm_fair_score
-    s = _require(dataset_id)
-    arrive_data = s.get("metadata", {}).get("arrive")
-    try:
-        result = run_llm_fair_score(
-            s["import_info"], s["columns"], s["metadata"], s["issues"], arrive_data
-        )
-    except RuntimeError as exc:
-        raise HTTPException(400, str(exc))
-    except Exception as exc:
-        logger.error("LLM FAIR score failed: %s", exc)
-        raise HTTPException(503, "LLM assessment temporarily unavailable.")
-    return result
-
-
 # ── HITL (human-in-the-loop) suggestion queue ───────────────────────────────
 
 @app.get("/api/llm/status")
 async def llm_status():
-    from llm_service import llm_enabled
-    return {"enabled": llm_enabled()}
+    from openai_service import is_configured, OPENAI_MODEL
+    return {"enabled": is_configured(), "model": OPENAI_MODEL if is_configured() else None}
 
 
 @app.get("/api/hitl/{dataset_id}/suggestions")
@@ -425,51 +441,6 @@ async def edit_hitl(dataset_id: str, suggestion_id: str, body: Dict[str, Any]):
     return {"suggestion": suggestion}
 
 
-@app.post("/api/llm/{dataset_id}/suggest/columns")
-async def llm_suggest_columns(dataset_id: str, body: Optional[Dict[str, Any]] = None):
-    """Run Haiku on selected columns; results land in the HITL queue as pending."""
-    from llm_column_enricher import suggest_column_metadata, suggestion_to_hitl_payload
-    from llm_service import LLMUnavailable
-    from hitl import add_suggestions
-    s = _require(dataset_id)
-    body = body or {}
-    only_columns = body.get("columns")
-    try:
-        suggestions = suggest_column_metadata(
-            s["columns"], only_columns=only_columns, metadata=s.get("metadata", {}),
-            session=s,
-        )
-    except LLMUnavailable as exc:
-        raise HTTPException(503, str(exc))
-    items = [suggestion_to_hitl_payload(x) for x in suggestions if x]
-    created = add_suggestions(s, items)
-    _save_session(dataset_id, s)
-    return {"created": created, "n_raw": len(suggestions)}
-
-
-@app.post("/api/llm/{dataset_id}/suggest/issue-fixes")
-async def llm_suggest_issue_fixes(dataset_id: str):
-    from llm_issue_fixer import suggest_issue_fixes, fix_to_hitl_payload
-    from llm_service import LLMUnavailable
-    from hitl import add_suggestions
-    s = _require(dataset_id)
-    issues = s.get("issues") or []
-    if not issues:
-        return {"created": [], "n_raw": 0}
-    try:
-        fixes = suggest_issue_fixes(issues, s.get("metadata", {}), s["columns"], session=s)
-    except LLMUnavailable as exc:
-        raise HTTPException(503, str(exc))
-    by_id = {i["id"]: i for i in issues}
-    items = [
-        fix_to_hitl_payload(f, by_id[f["issue_id"]])
-        for f in fixes if f.get("issue_id") in by_id
-    ]
-    created = add_suggestions(s, items)
-    _save_session(dataset_id, s)
-    return {"created": created, "n_raw": len(fixes)}
-
-
 # ── Vocabulary endpoints ────────────────────────────────────────────────────
 
 @app.get("/api/vocabulary/{dataset_id}")
@@ -491,44 +462,14 @@ async def validate_vocabulary(dataset_id: str):
     return {"vocabulary": vocab, "marked_stale": marked}
 
 
-@app.post("/api/llm/{dataset_id}/discover-vocab/from-pdf")
-async def discover_vocab_from_pdf(dataset_id: str, file: UploadFile = File(...)):
-    """Mine a PDF for vocabulary extensions; results queued as HITL schema_extension."""
-    from llm_vocab_discovery import discover_from_pdf, extension_to_hitl_payload
-    from llm_service import LLMUnavailable
-    from hitl import add_suggestions
-    s = _require(dataset_id)
-    content = await file.read()
-    if not content:
-        raise HTTPException(400, "Empty file")
-    filename = file.filename or "paper.pdf"
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "Only PDF files are supported.")
-    try:
-        proposals = discover_from_pdf(s, content, filename)
-    except LLMUnavailable as exc:
-        raise HTTPException(503, str(exc))
-    items = [extension_to_hitl_payload(p) for p in proposals]
-    created = add_suggestions(s, items)
-    _save_session(dataset_id, s)
-    return {"created": created, "n_raw": len(proposals)}
-
-
-@app.get("/api/uris/{dataset_id}")
-async def get_uri_suggestions(dataset_id: str):
-    s = _require(dataset_id)
-    uris = suggest_uris(s["columns"], s["metadata"], s["import_info"])
-    s["uri_suggestions"] = uris
-    return uris
-
-
 # ── Export endpoints ────────────────────────────────────────────────────────
 
 @app.get("/api/export/{dataset_id}/cleaned-csv")
 async def export_cleaned_csv(dataset_id: str):
     s = _prepare_exports(dataset_id)
     content = generate_cleaned_csv(s["df"], s["columns"], s["metadata"])
-    return Response(content, media_type="text/csv",
+    return Response(content.encode("utf-8") if isinstance(content, str) else content,
+                    media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="cleaned_data.csv"'})
 
 
@@ -536,74 +477,41 @@ async def export_cleaned_csv(dataset_id: str):
 async def export_data_dictionary(dataset_id: str):
     s = _prepare_exports(dataset_id)
     content = generate_data_dictionary(s["columns"], s["metadata"])
-    return Response(content, media_type="text/csv",
+    return Response(content.encode("utf-8") if isinstance(content, str) else content,
+                    media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="data_dictionary.csv"'})
 
 
-@app.get("/api/export/{dataset_id}/frictionless")
-async def export_frictionless(dataset_id: str):
+@app.get("/api/export/{dataset_id}/fair-report")
+async def export_fair_report(dataset_id: str):
     s = _prepare_exports(dataset_id)
-    content = generate_frictionless(s["df"], s["columns"], s["metadata"], s["import_info"])
-    return Response(content, media_type="application/json",
-                    headers={"Content-Disposition": 'attachment; filename="datapackage.json"'})
-
-
-@app.get("/api/export/{dataset_id}/csvw")
-async def export_csvw(dataset_id: str):
-    s = _prepare_exports(dataset_id)
-    content = generate_csvw(s["columns"], s["metadata"], s["import_info"])
-    return Response(content, media_type="application/json",
-                    headers={"Content-Disposition": 'attachment; filename="csvw_metadata.json"'})
-
-
-@app.get("/api/export/{dataset_id}/jsonld")
-async def export_jsonld(dataset_id: str):
-    s = _prepare_exports(dataset_id)
-    content = generate_jsonld(s["columns"], s["metadata"], s["import_info"], s["uri_suggestions"])
-    return Response(content, media_type="application/ld+json",
-                    headers={"Content-Disposition": 'attachment; filename="metadata.jsonld"'})
-
-
-@app.get("/api/export/{dataset_id}/report")
-async def export_report(dataset_id: str):
-    s = _prepare_exports(dataset_id)
-    content = generate_fair_report(
-        s["import_info"], s["columns"], s["table_structure"],
-        s["fair_score"], s["metadata"], s["issues"],
-    )
+    content = generate_fair_report_md(s)
     return Response(content, media_type="text/markdown",
                     headers={"Content-Disposition": 'attachment; filename="fair_readiness_report.md"'})
 
 
-@app.get("/api/export/{dataset_id}/rocrate")
-async def export_rocrate(dataset_id: str):
+@app.get("/api/export/{dataset_id}/arrive-report")
+async def export_arrive_report(dataset_id: str):
     s = _prepare_exports(dataset_id)
-    cleaned = generate_cleaned_csv(s["df"], s["columns"], s["metadata"])
-    data_dict = generate_data_dictionary(s["columns"], s["metadata"])
-    frictionless = generate_frictionless(s["df"], s["columns"], s["metadata"], s["import_info"])
-    csvw = generate_csvw(s["columns"], s["metadata"], s["import_info"])
-    jsonld = generate_jsonld(s["columns"], s["metadata"], s["import_info"], s["uri_suggestions"])
-    report = generate_fair_report(
-        s["import_info"], s["columns"], s["table_structure"],
-        s["fair_score"], s["metadata"], s["issues"],
-    )
-    zip_bytes = generate_rocrate_zip(
-        s["original_bytes"], cleaned, data_dict, frictionless, csvw, jsonld, report,
-        s["metadata"], s["import_info"], s["uri_suggestions"],
-    )
-    return Response(zip_bytes, media_type="application/zip",
-                    headers={"Content-Disposition": 'attachment; filename="ro-crate.zip"'})
+    content = generate_arrive_report_md(s)
+    return Response(content, media_type="text/markdown",
+                    headers={"Content-Disposition": 'attachment; filename="arrive_conformance_report.md"'})
+
+
+@app.get("/api/export/{dataset_id}/prepare-report")
+async def export_prepare_report(dataset_id: str):
+    s = _prepare_exports(dataset_id)
+    content = generate_prepare_report_md(s)
+    return Response(content, media_type="text/markdown",
+                    headers={"Content-Disposition": 'attachment; filename="prepare_readiness_report.md"'})
 
 
 @app.get("/api/export/{dataset_id}/arrive")
 async def export_arrive(dataset_id: str):
     s = _prepare_exports(dataset_id)
-    vcg_results = (s.get("vcg") or {}).get("vcg_results") or {}
-    # Strip large binary fields before passing to arrive engine
-    vcg_safe = {k: v for k, v in vcg_results.items() if k not in ("vcg_csv", "diagnostic_plots", "per_endpoint_plots", "stat_report")}
     zip_bytes = generate_arrive_zip(
         s["import_info"], s["columns"], s["metadata"],
-        s["table_structure"], s["issues"], vcg_safe,
+        s["table_structure"], s["issues"], {},
     )
     return Response(zip_bytes, media_type="application/zip",
                     headers={"Content-Disposition": 'attachment; filename="arrive_guidelines.zip"'})
@@ -624,6 +532,18 @@ async def export_prepare(dataset_id: str):
         headers={"Content-Disposition": 'attachment; filename="prepare_study_plan.zip"'},
     )
 
+
+# Removed export formats return 404
+@app.get("/api/export/{dataset_id}/{export_type}")
+async def export_unsupported(dataset_id: str, export_type: str):
+    supported = {"cleaned-csv", "data-dictionary", "fair-report", "arrive-report",
+                 "prepare-report", "arrive", "prepare"}
+    if export_type not in supported:
+        raise HTTPException(404, f"Export type '{export_type}' is not available in this version.")
+    raise HTTPException(500, "Unexpected routing error.")
+
+
+# ── Paper import endpoints ──────────────────────────────────────────────────
 
 @app.post("/api/paper/extract")
 async def extract_paper(file: UploadFile = File(...)):
@@ -653,8 +573,6 @@ async def stream_paper_extract(file: UploadFile = File(...)):
 
     async def generate():
         from paper_extractor import extract_paper_metadata
-        from fastapi.responses import Response as _R  # noqa
-
         yield f"data: {json.dumps({'type': 'status', 'message': 'Sending PDF to Claude…'})}\n\n"
 
         task = _asyncio.create_task(_asyncio.to_thread(extract_paper_metadata, content, filename))
@@ -663,7 +581,6 @@ async def stream_paper_extract(file: UploadFile = File(...)):
             "Analysing paper structure…",
             "Extracting study metadata…",
             "Checking ARRIVE compliance…",
-            "Inferring VCG column hints…",
             "Finalising extraction…",
         ]
         idx = 0
@@ -718,8 +635,189 @@ async def get_stored_paper_extraction(dataset_id: str):
     return stored
 
 
-init_vcg_router(sessions, _save_session, _load_session)
-app.include_router(vcg_router)
+# ── OpenAI settings endpoints ────────────────────────────────────────────────
+
+@app.post("/api/settings/openai-key")
+async def store_openai_key(body: Dict[str, Any]):
+    """Store OpenAI API key in memory only — never persisted to disk or DB."""
+    import openai_service
+    key = (body.get("api_key") or "").strip()
+    if not key:
+        raise HTTPException(400, "api_key field is required and must not be empty.")
+    openai_service.set_key(key)
+    return {"stored": True}
+
+
+@app.get("/api/settings/openai-key/status")
+async def openai_key_status():
+    """Returns whether a key is configured and the model name — never the key itself."""
+    import openai_service
+    return openai_service.get_status()
+
+
+@app.delete("/api/settings/openai-key")
+async def clear_openai_key():
+    """Remove the stored OpenAI API key from memory."""
+    import openai_service
+    openai_service.clear_key()
+    return {"cleared": True}
+
+
+@app.post("/api/settings/openai-key/test")
+async def test_openai_key():
+    """Test the stored OpenAI key with a minimal API call."""
+    import openai_service
+    if not openai_service.is_configured():
+        raise HTTPException(400, "No OpenAI API key is configured. POST /api/settings/openai-key first.")
+    result = openai_service.test_connection()
+    return result
+
+
+# ── AI suggestion endpoints ──────────────────────────────────────────────────
+
+@app.post("/api/ai/suggest-metadata/{dataset_id}")
+async def ai_suggest_metadata(dataset_id: str, request: Request):
+    """Suggest dataset title/description improvements via OpenAI.
+
+    ?preview=true returns what would be sent to OpenAI without calling the API.
+    Never sends raw dataset rows — only title, description, and issue summaries.
+    """
+    import openai_service
+    preview = request.query_params.get("preview", "").lower() in ("1", "true", "yes")
+
+    if not openai_service.is_configured() and not preview:
+        raise HTTPException(400, "OpenAI API key is not configured. Go to Settings to add your key.")
+
+    s = _require(dataset_id)
+    metadata = s.get("metadata", {})
+    issues = s.get("issues", [])
+
+    # Build the preview of what will be sent
+    issue_summary = [
+        {"category": i.get("category", ""), "severity": i.get("severity", ""), "problem": i.get("problem", "")}
+        for i in issues[:10]
+    ]
+    sent_fields = {
+        "title": metadata.get("title"),
+        "description": metadata.get("description"),
+        "issues_shown": len(issue_summary),
+        "issue_summary": issue_summary,
+    }
+
+    if preview:
+        return {
+            "preview": {
+                "sent_fields": sent_fields,
+                "note": "Only dataset title, description, and issue category/severity/problem are sent. Raw data rows are never included.",
+            }
+        }
+
+    try:
+        suggestions = openai_service.suggest_dataset_metadata(
+            metadata.get("title"),
+            metadata.get("description"),
+            issues,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    return {"suggestions": suggestions}
+
+
+@app.post("/api/ai/suggest-columns/{dataset_id}")
+async def ai_suggest_columns(dataset_id: str, request: Request):
+    """Suggest column descriptions via OpenAI.
+
+    Sends only column name, data type, and first 3 sample values.
+    ?preview=true returns what would be sent without calling the API.
+    """
+    import openai_service
+    preview = request.query_params.get("preview", "").lower() in ("1", "true", "yes")
+
+    if not openai_service.is_configured() and not preview:
+        raise HTTPException(400, "OpenAI API key is not configured. Go to Settings to add your key.")
+
+    s = _require(dataset_id)
+    columns = s.get("columns", [])
+
+    # Only send name, type, first 3 sample values — never full rows
+    column_samples = [
+        {
+            "name": col.get("name", ""),
+            "data_type": col.get("data_type", ""),
+            "sample_values": (col.get("sample_values") or [])[:3],
+        }
+        for col in columns
+    ]
+
+    if preview:
+        return {
+            "preview": {
+                "sent_fields": column_samples,
+                "note": "Only column name, data type, and first 3 sample values are sent per column. Full dataset rows are never included.",
+            }
+        }
+
+    try:
+        suggestions = openai_service.suggest_column_descriptions(column_samples)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    return {"suggestions": suggestions}
+
+
+@app.post("/api/ai/suggest-checklist/{dataset_id}")
+async def ai_suggest_checklist(dataset_id: str, request: Request):
+    """Generate a prioritised improvement checklist via OpenAI.
+
+    Sends only FAIR score breakdown and issue categories — never raw data.
+    ?preview=true returns what would be sent without calling the API.
+    """
+    import openai_service
+    preview = request.query_params.get("preview", "").lower() in ("1", "true", "yes")
+
+    if not openai_service.is_configured() and not preview:
+        raise HTTPException(400, "OpenAI API key is not configured. Go to Settings to add your key.")
+
+    s = _require(dataset_id)
+    fair_score = s.get("fair_score") or compute_fair_score(
+        s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"],
+        template_validation=s.get("template_validation", []),
+    )
+    issues = s.get("issues", [])
+    arrive_issues = [i for i in issues if i.get("category") == "template_compliance"
+                     and "arrive" in (i.get("id") or "").lower()]
+    prepare_issues = [i for i in issues if i.get("category") == "template_compliance"
+                      and "prepare" in (i.get("id") or "").lower()]
+
+    score_summary = {
+        "total": fair_score.get("fair_score"),
+        "findable": {"score": fair_score.get("findable", {}).get("score"), "max": fair_score.get("findable", {}).get("max_score")},
+        "accessible": {"score": fair_score.get("accessible", {}).get("score"), "max": fair_score.get("accessible", {}).get("max_score")},
+        "interoperable": {"score": fair_score.get("interoperable", {}).get("score"), "max": fair_score.get("interoperable", {}).get("max_score")},
+        "reusable": {"score": fair_score.get("reusable", {}).get("score"), "max": fair_score.get("reusable", {}).get("max_score")},
+    }
+    arrive_summary = [{"field_id": i.get("id", ""), "severity": i.get("severity", "")} for i in arrive_issues[:10]]
+    prepare_summary = [{"field_id": i.get("id", ""), "severity": i.get("severity", "")} for i in prepare_issues[:10]]
+
+    if preview:
+        return {
+            "preview": {
+                "sent_fields": {
+                    "fair_score_breakdown": score_summary,
+                    "arrive_gaps_shown": len(arrive_summary),
+                    "prepare_gaps_shown": len(prepare_summary),
+                },
+                "note": "Only FAIR score breakdown and issue categories are sent. Raw data rows are never included.",
+            }
+        }
+
+    try:
+        checklist_md = openai_service.suggest_improvement_checklist(
+            fair_score, arrive_issues, prepare_issues
+        )
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    return {"checklist": checklist_md}
+
 
 init_template_router(sessions, _save_session, _load_session)
 app.include_router(template_router)

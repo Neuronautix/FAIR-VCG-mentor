@@ -1,15 +1,14 @@
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 import ColumnProfilePage from './pages/ColumnProfilePage'
 import ExportPage from './pages/ExportPage'
 import FAIRScorePage from './pages/FAIRScorePage'
 import MetadataWizardPage from './pages/MetadataWizardPage'
 import OverviewPage from './pages/OverviewPage'
+import SettingsPage from './pages/SettingsPage'
 import UploadPage from './pages/UploadPage'
-import VCGPage from './pages/VCGPage'
-import VCGWizardPage from './pages/VCGWizardPage'
-import VCGResultsPage from './pages/VCGResultsPage'
 import PaperImportPage from './pages/PaperImportPage'
 import TemplateSelectorPage from './pages/TemplateSelectorPage'
 import TemplateFillPage from './pages/TemplateFillPage'
@@ -43,27 +42,27 @@ const theme = createTheme({
 
 export default function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<UploadPage />} />
-            <Route path="overview" element={<OverviewPage />} />
-            <Route path="columns" element={<ColumnProfilePage />} />
-            <Route path="fair-score" element={<FAIRScorePage />} />
-            <Route path="metadata" element={<MetadataWizardPage />} />
-            <Route path="templates" element={<TemplateSelectorPage />} />
-            <Route path="template-fill" element={<TemplateFillPage />} />
-            <Route path="export" element={<ExportPage />} />
-            <Route path="vcg" element={<VCGPage />} />
-            <Route path="vcg/wizard" element={<VCGWizardPage />} />
-            <Route path="vcg/results" element={<VCGResultsPage />} />
-            <Route path="paper-import" element={<PaperImportPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<UploadPage />} />
+              <Route path="overview" element={<OverviewPage />} />
+              <Route path="columns" element={<ColumnProfilePage />} />
+              <Route path="fair-score" element={<FAIRScorePage />} />
+              <Route path="metadata" element={<MetadataWizardPage />} />
+              <Route path="templates" element={<TemplateSelectorPage />} />
+              <Route path="template-fill" element={<TemplateFillPage />} />
+              <Route path="export" element={<ExportPage />} />
+              <Route path="paper-import" element={<PaperImportPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </ThemeProvider>
+    </ErrorBoundary>
   )
 }

@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import ArticleIcon from '@mui/icons-material/Article'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import ChecklistIcon from '@mui/icons-material/Checklist'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
@@ -40,8 +39,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Upload CSV', path: '/' },
-  { label: 'Paper Import', path: '/paper-import', alwaysEnabled: true },
+  { label: 'Import', path: '/', alwaysEnabled: true },
   { label: 'Overview', path: '/overview' },
   { label: 'Column Profile', path: '/columns' },
   { label: 'FAIR Score', path: '/fair-score' },
@@ -53,7 +51,7 @@ const navItems: NavItem[] = [
 ].map((item, i) => ({
   ...item,
   icon: [
-    <CloudUploadIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
+    <CloudUploadIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
     <TuneIcon />, <RuleIcon />, <ChecklistIcon />, <DownloadIcon />, <SettingsIcon />,
   ][i],
 }))
@@ -62,7 +60,7 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const theme = useTheme()
-  const { datasetId, importInfo, aiConfigured, setAIConfigured, templateId } = useStore()
+  const { datasetId, importInfo, aiConfigured, setAIConfigured, templateId, assessmentOnly } = useStore()
 
   useEffect(() => {
     if (aiConfigured !== null) return
@@ -101,6 +99,14 @@ export default function Layout() {
                 mr: 1,
                 fontSize: 11,
               }}
+              variant="outlined"
+            />
+          )}
+          {assessmentOnly && (
+            <Chip
+              label="ARRIVE/PREPARE mode (no dataset)"
+              size="small"
+              sx={{ color: 'rgba(255,255,255,0.85)', borderColor: 'rgba(255,255,255,0.5)', mr: 1, fontSize: 10 }}
               variant="outlined"
             />
           )}

@@ -137,3 +137,42 @@ def test_ai_preview_works_without_key(client):
     resp = client.post("/api/ai/suggest-metadata/fakeid?preview=true")
     # dataset not found is acceptable since we don't have a real dataset
     assert resp.status_code in (200, 404)
+
+
+def test_llm_status_no_providers(client):
+    """LLM status returns disabled when no provider is configured."""
+    client.delete("/api/settings/openai-key")
+    resp = client.get("/api/llm/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    # Without ANTHROPIC_API_KEY env var and no OpenAI key, both should be False
+    assert data["enabled"] is False
+    assert data["provider"] is None
+
+
+def test_llm_status_with_openai_key(client):
+    """LLM status returns enabled when an OpenAI key is set."""
+    client.post("/api/settings/openai-key", json={"api_key": "sk-test"})
+    resp = client.get("/api/llm/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["enabled"] is True
+    assert data["provider"] == "openai"
+    # Cleanup
+    client.delete("/api/settings/openai-key")
+
+
+def test_assessment_only_start(client):
+    """Assessment-only session can be started without a CSV."""
+    resp = client.post("/api/assessment-only/start", json={"title": "Test study"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "dataset_id" in data
+    assert data["assessment_only"] is True
+
+
+def test_free_text_import_no_provider(client):
+    """Free-text import returns 400 when no AI provider is configured."""
+    client.delete("/api/settings/openai-key")
+    resp = client.post("/api/import/free-text", json={"text": "We will use 10 mice per group."})
+    assert resp.status_code == 400

@@ -437,3 +437,11 @@ export const previewAIChecklist = (id: string) =>
 
 export const getAIChecklist = (id: string): Promise<{ checklist: string }> =>
   api.post(`/ai/suggest-checklist/${id}`).then((r) => r.data)
+
+// ── Assessment-only session ──────────────────────────────────────────────────
+
+export const startAssessmentOnly = (title?: string, description?: string): Promise<{ dataset_id: string; assessment_only: boolean }> =>
+  api.post('/assessment-only/start', { title: title ?? '', description: description ?? '' }).then((r) => r.data)
+
+export const importFreeText = (text: string): Promise<any> =>
+  api.post('/import/free-text', { text }).then((r) => r.data)

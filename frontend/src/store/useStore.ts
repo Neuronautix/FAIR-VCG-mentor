@@ -191,6 +191,7 @@ interface AppState {
   templateConformance: ConformanceEntry[]
   availableTemplates: { builtin: TemplateSummary[]; user: TemplateSummary[] }
   templateCompletion: import('../api/client').TemplateCompletionReport | null
+  assessmentOnly: boolean
 
   setUploadResult: (
     datasetId: string,
@@ -224,6 +225,7 @@ interface AppState {
   setTemplateConformance: (r: ConformanceEntry[]) => void
   setAvailableTemplates: (t: { builtin: TemplateSummary[]; user: TemplateSummary[] }) => void
   setTemplateCompletion: (r: import('../api/client').TemplateCompletionReport | null) => void
+  setAssessmentOnly: (v: boolean) => void
 }
 
 const EMPTY_METRICS: InferenceMetrics = {
@@ -256,6 +258,8 @@ export const useStore = create<AppState>((set) => ({
   templateConformance: [],
   availableTemplates: { builtin: [], user: [] },
   templateCompletion: null,
+
+  assessmentOnly: false,
 
   setUploadResult: (datasetId, importInfo, columns, tableStructure, issues, extras) =>
     set({
@@ -299,6 +303,7 @@ export const useStore = create<AppState>((set) => ({
       templateCandidates: [],
       templateConformance: [],
       templateCompletion: null,
+      assessmentOnly: false,
     }),
 
   setPaperExtraction: (extraction) => set({ paperExtraction: extraction }),
@@ -312,4 +317,5 @@ export const useStore = create<AppState>((set) => ({
   setTemplateConformance: (templateConformance) => set({ templateConformance }),
   setAvailableTemplates: (availableTemplates) => set({ availableTemplates }),
   setTemplateCompletion: (templateCompletion) => set({ templateCompletion }),
+  setAssessmentOnly: (assessmentOnly) => set({ assessmentOnly }),
 }))

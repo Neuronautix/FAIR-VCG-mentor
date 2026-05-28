@@ -315,20 +315,8 @@ _EXTRACT_TOOL = {
 }
 
 
-def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
-    if len(pdf_bytes) > _PDF_MAX_BYTES:
-        raise RuntimeError(
-            f"PDF is {len(pdf_bytes) // (1024*1024):.1f} MB — "
-            f"the Anthropic API limit is 32 MB. Please use a smaller file."
-        )
-
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not configured. "
-            "Set this environment variable to enable LLM-powered paper extraction."
-        )
-
+def _extract_with_anthropic(pdf_bytes: bytes, filename: str, api_key: str) -> Dict[str, Any]:
+    """Extract paper metadata using Anthropic's native PDF input."""
     try:
         import anthropic
     except ImportError:
@@ -375,6 +363,158 @@ def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
     # With tool_choice forced, content[0] is always the tool_use block.
     # .input is already a parsed dict — no JSON parsing needed.
     result = message.content[0].input
+    result["_method"] = "native_pdf"
+    return result
+
+
+def _extract_with_openai(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
+    """Extract paper metadata using OpenAI function calling with pypdf text extraction."""
+    import json
+    import openai_service
+
+    if not openai_service.is_configured():
+        raise RuntimeError("OpenAI API key not configured.")
+
+    text = _extract_text_from_pdf(pdf_bytes)
+    if not text.strip():
+        raise RuntimeError(
+            "Could not extract text from PDF. The file may be scanned or image-only. "
+            "An Anthropic API key supports native PDF layout-aware extraction for such files."
+        )
+
+    try:
+        import openai
+    except ImportError:
+        raise RuntimeError("The 'openai' package is not installed.")
+
+    client = openai.OpenAI(api_key=openai_service._api_key)
+    oai_tool = {
+        "type": "function",
+        "function": {
+            "name": _EXTRACT_TOOL["name"],
+            "description": _EXTRACT_TOOL["description"],
+            "parameters": _EXTRACT_TOOL["input_schema"],
+        },
+    }
+    resp = client.chat.completions.create(
+        model=openai_service.OPENAI_MODEL,
+        max_tokens=4096,
+        tools=[oai_tool],
+        tool_choice={"type": "function", "function": {"name": _EXTRACT_TOOL["name"]}},
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    f"Extract metadata from this scientific paper:\n\n{text[:12000]}"
+                ),
+            },
+        ],
+        temperature=0.1,
+    )
+    for choice in resp.choices:
+        if choice.message.tool_calls:
+            return json.loads(choice.message.tool_calls[0].function.arguments)
+    raise RuntimeError("OpenAI returned no structured extraction result.")
+
+
+def extract_from_text(text: str) -> Dict[str, Any]:
+    """Extract ARRIVE/PREPARE metadata from plain text (e.g. protocol notes).
+
+    Works with both Anthropic and OpenAI providers.
+    """
+    import openai_service
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if api_key:
+        # Use Anthropic path with text as a simple user message
+        try:
+            import anthropic
+        except ImportError:
+            raise RuntimeError("The 'anthropic' package is not installed.")
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model=os.getenv("PAPER_EXTRACTION_MODEL", "claude-haiku-4-5-20251001"),
+            max_tokens=4096,
+            system=[{"type": "text", "text": _SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+            tools=[_EXTRACT_TOOL],
+            tool_choice={"type": "tool", "name": "extract_paper_metadata"},
+            messages=[{"role": "user", "content": f"Extract metadata from this text:\n\n{text[:12000]}"}],
+        )
+        result = message.content[0].input
+        result["_method"] = "text_input"
+    elif openai_service.is_configured():
+        result = _extract_with_openai(text.encode("utf-8"), "text_input.txt")
+        # _extract_with_openai falls back to passing pdf_bytes through pypdf;
+        # for plain text we call OpenAI directly instead
+        import json
+        try:
+            import openai
+        except ImportError:
+            raise RuntimeError("The 'openai' package is not installed.")
+        client = openai.OpenAI(api_key=openai_service._api_key)
+        oai_tool = {
+            "type": "function",
+            "function": {
+                "name": _EXTRACT_TOOL["name"],
+                "description": _EXTRACT_TOOL["description"],
+                "parameters": _EXTRACT_TOOL["input_schema"],
+            },
+        }
+        resp = client.chat.completions.create(
+            model=openai_service.OPENAI_MODEL,
+            max_tokens=4096,
+            tools=[oai_tool],
+            tool_choice={"type": "function", "function": {"name": _EXTRACT_TOOL["name"]}},
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": f"Extract metadata from this text:\n\n{text[:12000]}"},
+            ],
+            temperature=0.1,
+        )
+        result = {}
+        for choice in resp.choices:
+            if choice.message.tool_calls:
+                result = json.loads(choice.message.tool_calls[0].function.arguments)
+                break
+        if not result:
+            raise RuntimeError("OpenAI returned no structured extraction result.")
+        result["_method"] = "text_input"
+    else:
+        raise RuntimeError(
+            "No AI provider configured. Add an OpenAI key in Settings or set ANTHROPIC_API_KEY."
+        )
+
+    result["_filename"] = "text_input"
+    result["_file_size_kb"] = round(len(text.encode()) / 1024)
+    # Defensive default-fill
+    prepare_block = result.get("prepare") or {}
+    for field_id in _PREPARE_FIELDS:
+        entry = prepare_block.get(field_id)
+        if not isinstance(entry, dict) or "value" not in entry or "status" not in entry:
+            prepare_block[field_id] = {"value": None, "status": "missing"}
+    result["prepare"] = prepare_block
+    return result
+
+
+def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
+    if len(pdf_bytes) > _PDF_MAX_BYTES:
+        raise RuntimeError(
+            f"PDF is {len(pdf_bytes) // (1024*1024):.1f} MB — "
+            f"the Anthropic API limit is 32 MB. Please use a smaller file."
+        )
+
+    import openai_service
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if api_key:
+        result = _extract_with_anthropic(pdf_bytes, filename, api_key)
+    elif openai_service.is_configured():
+        result = _extract_with_openai(pdf_bytes, filename)
+    else:
+        raise RuntimeError(
+            "No AI provider configured. Add an OpenAI key in Settings or set ANTHROPIC_API_KEY."
+        )
 
     # Defensive default-fill: ensure every PREPARE field is present even if the
     # model omits one. Same shape used for arrive — missing => {"value": None, "status": "missing"}.
@@ -387,5 +527,6 @@ def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
 
     result["_filename"] = filename
     result["_file_size_kb"] = round(len(pdf_bytes) / 1024)
-    result["_method"] = "native_pdf"
+    if "_method" not in result:
+        result["_method"] = "native_pdf"
     return result

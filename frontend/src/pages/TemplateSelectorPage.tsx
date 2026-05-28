@@ -266,20 +266,70 @@ export default function TemplateSelectorPage() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
         <Box>
           <Typography variant="h5">Standards Templates</Typography>
           <Typography variant="body2" color="text.secondary">
-            Match your dataset against reporting standards (MNMS, ARRIVE, etc.) to surface missing
-            metadata before export.
+            Assess your study against ARRIVE 2.0 reporting standards and PREPARE study planning
+            readiness.
           </Typography>
         </Box>
         {!datasetId && (
           <Button variant="outlined" onClick={() => navigate('/')}>
-            Upload a dataset
+            Import documents
           </Button>
         )}
       </Box>
+
+      {/* Phase framing banner */}
+      <Card sx={{ mb: 3, background: 'linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%)', border: '1px solid #bbdefb' }}>
+        <CardContent sx={{ py: '14px !important' }}>
+          <Grid container spacing={2} alignItems="stretch">
+            <Grid item xs={12} sm={4}>
+              <Box sx={{ p: 1.5, bgcolor: 'rgba(255,255,255,0.7)', borderRadius: 2, height: '100%' }}>
+                <Typography variant="subtitle2" fontWeight={700} color="primary" gutterBottom>
+                  ARRIVE 2.0
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Reporting completeness assessment
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  Did you report everything needed to evaluate your published study?
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Box sx={{ p: 1.5, bgcolor: 'rgba(255,255,255,0.7)', borderRadius: 2, height: '100%' }}>
+                <Typography variant="subtitle2" fontWeight={700} color="secondary" gutterBottom>
+                  PREPARE
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Study planning readiness
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  Did you plan everything needed before running your experiment?
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Box sx={{ p: 1.5, bgcolor: 'rgba(255,255,255,0.85)', borderRadius: 2, border: '1.5px solid #7c4dff', height: '100%' }}>
+                <Stack direction="row" alignItems="center" spacing={0.75} mb={0.5}>
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#7c4dff' }}>
+                    ARRIVE-PREPARE Crosswalk
+                  </Typography>
+                  <Chip label="Recommended" size="small" sx={{ fontSize: 10, bgcolor: '#7c4dff', color: 'white', height: 18 }} />
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                  Both phases together
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  Assess planning AND reporting in one combined review.
+                </Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -405,18 +455,33 @@ export default function TemplateSelectorPage() {
                 </Typography>
               ) : (
                 <Stack spacing={1.5}>
-                  {availableTemplates.builtin.map((tpl) => (
-                    <TemplateRow
-                      key={tpl.id}
-                      tpl={tpl}
-                      candidate={candidateById(tpl.id)}
-                      isActive={templateId === tpl.id}
-                      canApply={!!datasetId}
-                      onApply={() => handleApply(tpl.id)}
-                      onPreview={() => openPreview(tpl.id)}
-                      busy={loading}
-                    />
-                  ))}
+                  {[...availableTemplates.builtin]
+                    .sort((a, b) => {
+                      // Crosswalk template is always first
+                      if (a.id === 'arrive-prepare-crosswalk-v1') return -1
+                      if (b.id === 'arrive-prepare-crosswalk-v1') return 1
+                      return 0
+                    })
+                    .map((tpl) => (
+                      <Box key={tpl.id}>
+                        {tpl.id === 'arrive-prepare-crosswalk-v1' && (
+                          <Chip
+                            label="Recommended for publication readiness"
+                            size="small"
+                            sx={{ mb: 0.75, fontSize: 10, bgcolor: '#7c4dff', color: 'white', height: 20 }}
+                          />
+                        )}
+                        <TemplateRow
+                          tpl={tpl}
+                          candidate={candidateById(tpl.id)}
+                          isActive={templateId === tpl.id}
+                          canApply={!!datasetId}
+                          onApply={() => handleApply(tpl.id)}
+                          onPreview={() => openPreview(tpl.id)}
+                          busy={loading}
+                        />
+                      </Box>
+                    ))}
                 </Stack>
               )}
             </Grid>

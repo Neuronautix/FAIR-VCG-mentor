@@ -8,6 +8,7 @@ import FAIRScorePage from './pages/FAIRScorePage'
 import MetadataWizardPage from './pages/MetadataWizardPage'
 import OverviewPage from './pages/OverviewPage'
 import SettingsPage from './pages/SettingsPage'
+import ImportPage from './pages/ImportPage'
 import UploadPage from './pages/UploadPage'
 import PaperImportPage from './pages/PaperImportPage'
 import TemplateSelectorPage from './pages/TemplateSelectorPage'
@@ -48,7 +49,8 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Layout />}>
-              <Route index element={<UploadPage />} />
+              <Route index element={<ImportPage />} />
+              <Route path="upload" element={<UploadPage />} />
               <Route path="overview" element={<OverviewPage />} />
               <Route path="columns" element={<ColumnProfilePage />} />
               <Route path="fair-score" element={<FAIRScorePage />} />

@@ -109,7 +109,14 @@ def _load_session(dataset_id: str) -> Optional[Dict[str, Any]]:
         return None
     session = json.loads(row[0])
     original_bytes = row[1]
-    session["original_bytes"] = original_bytes
+    session["original_bytes"] = original_bytes or b""
+    # Assessment-only sessions have no CSV bytes — skip df reconstruction.
+    if session.get("import_info", {}).get("assessment_only"):
+        session["df"] = pd.DataFrame()
+        return session
+    if not original_bytes:
+        logger.error("No original_bytes for dataset %s", dataset_id)
+        return None
     filename = session.get("import_info", {}).get("filename", "data.csv")
     try:
         profile_result = profile_csv(original_bytes, filename)
@@ -389,8 +396,14 @@ async def get_fair_score(dataset_id: str):
 
 @app.get("/api/llm/status")
 async def llm_status():
-    from openai_service import is_configured, OPENAI_MODEL
-    return {"enabled": is_configured(), "model": OPENAI_MODEL if is_configured() else None}
+    import openai_service
+    anthropic_available = bool(os.getenv("ANTHROPIC_API_KEY"))
+    openai_available = openai_service.is_configured()
+    return {
+        "enabled": anthropic_available or openai_available,
+        "provider": "anthropic" if anthropic_available else ("openai" if openai_available else None),
+        "model": openai_service.OPENAI_MODEL if openai_available else None,
+    }
 
 
 @app.get("/api/hitl/{dataset_id}/suggestions")
@@ -633,6 +646,91 @@ async def get_stored_paper_extraction(dataset_id: str):
     if not stored:
         raise HTTPException(404, "No paper extraction stored for this dataset.")
     return stored
+
+
+# ── Free-text protocol import ────────────────────────────────────────────────
+
+@app.post("/api/import/free-text")
+async def import_free_text(body: Dict[str, Any]):
+    """Extract PREPARE/ARRIVE metadata from free text using available AI provider.
+
+    Accepts plain text protocol notes or study plans. Never sends raw dataset rows.
+    """
+    import llm_service
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+    if len(text) > 20000:
+        raise HTTPException(400, "Text too long (max 20,000 characters)")
+
+    if not llm_service.llm_enabled():
+        raise HTTPException(400, "No AI provider configured. Add an OpenAI key in Settings.")
+
+    from paper_extractor import extract_from_text
+    try:
+        result = extract_from_text(text)
+    except RuntimeError as exc:
+        raise HTTPException(500, str(exc))
+    return result
+
+
+# ── Assessment-only session (no CSV required) ────────────────────────────────
+
+@app.post("/api/assessment-only/start")
+async def start_assessment_only(body: Dict[str, Any]):
+    """Start an ARRIVE/PREPARE assessment session without a dataset.
+
+    Returns a dataset_id that can be used to fill ARRIVE/PREPARE templates and
+    generate reports without uploading a CSV file.
+    """
+    dataset_id = str(uuid.uuid4())
+    session: Dict[str, Any] = {
+        "dataset_id": dataset_id,
+        "import_info": {
+            "filename": body.get("title") or "No dataset",
+            "n_rows": 0,
+            "n_columns": 0,
+            "encoding": None,
+            "delimiter": None,
+            "has_header": True,
+            "empty_columns": [],
+            "duplicate_columns": [],
+            "malformed_rows": [],
+            "assessment_only": True,
+        },
+        "columns": [],
+        "table_structure": {
+            "table_shape": "assessment_only",
+            "row_represents": "n/a",
+            "primary_entity": "n/a",
+            "secondary_entity": None,
+            "detected_identifiers": [],
+            "detected_measurements": [],
+            "detected_categoricals": [],
+            "detected_time_vars": [],
+        },
+        "issues": [],
+        "metadata": {
+            "title": body.get("title") or "",
+            "description": body.get("description") or "",
+            "base_uri": "https://your-lab.org",
+        },
+        "original_bytes": b"",
+        "template_id": None,
+        "template_candidates": [],
+        "template_validation": [],
+        "template_signature": None,
+        "template_applied": 0,
+        "inference_metrics": {
+            "total_updates": 0,
+            "type_corrections": 0,
+            "label_corrections": 0,
+            "unit_corrections": 0,
+        },
+    }
+    sessions[dataset_id] = session
+    _save_session(dataset_id, session)
+    return {"dataset_id": dataset_id, "assessment_only": True}
 
 
 # ── OpenAI settings endpoints ────────────────────────────────────────────────

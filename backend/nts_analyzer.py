@@ -182,36 +182,40 @@ def _find_matches(
     pages: List[Tuple[int, str]],
     patterns: List[Tuple[re.Pattern, str]],
 ) -> List[Dict]:
-    """Search all pages for pattern matches, deduplicate, and return match dicts.
+    """Search all pages for ALL pattern matches and return one dict per occurrence.
 
-    Each dict has keys: matched_text, context, page, tier.
-    Context is 150 characters before and after the match (newlines replaced with spaces).
-    Deduplication is by lowercased matched_text.
+    Deduplication is per-page by character span: if two patterns both match the
+    same text position (e.g. r'\\bARRIVE\\s+2\\.0\\b' and r'\\bARRIVE\\b' both
+    hitting "ARRIVE 2.0"), only the first (more specific) match is kept.
+    Every occurrence on every page is otherwise reported — no global deduplication.
+
+    Each returned dict has: matched_text, context, page, tier.
     """
     results: List[Dict] = []
-    seen_lower: set = set()
 
     for page_num, text in pages:
+        # Track covered (start, end) spans on this page to avoid double-counting
+        # overlapping pattern hits at the same character position.
+        covered: List[Tuple[int, int]] = []
+
         for pattern, tier in patterns:
             for match in pattern.finditer(text):
-                matched_text = match.group(0)
-                lower_key = matched_text.lower()
-                if lower_key in seen_lower:
+                s, e = match.start(), match.end()
+                # Skip if this span overlaps any already-captured span on this page.
+                if any(not (e <= cs or s >= ce) for cs, ce in covered):
                     continue
-                seen_lower.add(lower_key)
+                covered.append((s, e))
 
-                start = max(0, match.start() - 150)
-                end = min(len(text), match.end() + 150)
-                context = text[start:end].replace("\n", " ")
+                ctx_start = max(0, s - 150)
+                ctx_end = min(len(text), e + 150)
+                context = text[ctx_start:ctx_end].replace("\n", " ")
 
-                results.append(
-                    {
-                        "matched_text": matched_text,
-                        "context": context,
-                        "page": page_num,
-                        "tier": tier,
-                    }
-                )
+                results.append({
+                    "matched_text": match.group(0),
+                    "context": context,
+                    "page": page_num,
+                    "tier": tier,
+                })
 
     return results
 
@@ -219,10 +223,11 @@ def _find_matches(
 def detect_citations(pages: List[Tuple[int, str]]) -> Dict:
     """Run citation detection for ARRIVE and PREPARE patterns.
 
+    Returns every occurrence of every matching pattern across all pages.
     Returns:
         {
-            "arrive": {"cited": bool, "evidence": [...]},
-            "prepare": {"cited": bool, "evidence": [...]}
+            "arrive": {"cited": bool, "total_occurrences": int, "evidence": [...]},
+            "prepare": {"cited": bool, "total_occurrences": int, "evidence": [...]}
         }
     """
     arrive_matches = _find_matches(pages, _ARRIVE_PATTERNS)
@@ -231,10 +236,12 @@ def detect_citations(pages: List[Tuple[int, str]]) -> Dict:
     return {
         "arrive": {
             "cited": len(arrive_matches) > 0,
+            "total_occurrences": len(arrive_matches),
             "evidence": arrive_matches,
         },
         "prepare": {
             "cited": len(prepare_matches) > 0,
+            "total_occurrences": len(prepare_matches),
             "evidence": prepare_matches,
         },
     }

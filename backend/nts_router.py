@@ -105,9 +105,9 @@ async def export_csv(batch_id: str):
         "analyzed_at",
         "classification",
         "arrive_cited",
+        "arrive_occurrences",
         "prepare_cited",
-        "arrive_evidence_count",
-        "prepare_evidence_count",
+        "prepare_occurrences",
         "arrive_first_match",
         "prepare_first_match",
         "layer1_error",
@@ -130,29 +130,27 @@ async def export_csv(batch_id: str):
         layer2 = result.get("layer2")
 
         arrive_cited = ""
-        arrive_evidence_count = 0
+        arrive_occurrences = 0
         arrive_first_match = ""
         prepare_cited = ""
-        prepare_evidence_count = 0
+        prepare_occurrences = 0
         prepare_first_match = ""
         layer1_error = ""
 
         if layer1 is not None:
             arrive_block = layer1.get("arrive", {})
             arrive_cited = arrive_block.get("cited", "")
+            arrive_occurrences = arrive_block.get("total_occurrences", len(arrive_block.get("evidence", [])))
             arrive_evidence = arrive_block.get("evidence", [])
-            arrive_evidence_count = len(arrive_evidence)
             if arrive_evidence:
-                context = arrive_evidence[0].get("context", "")
-                arrive_first_match = context[:100]
+                arrive_first_match = arrive_evidence[0].get("context", "")[:100]
 
             prepare_block = layer1.get("prepare", {})
             prepare_cited = prepare_block.get("cited", "")
+            prepare_occurrences = prepare_block.get("total_occurrences", len(prepare_block.get("evidence", [])))
             prepare_evidence = prepare_block.get("evidence", [])
-            prepare_evidence_count = len(prepare_evidence)
             if prepare_evidence:
-                context = prepare_evidence[0].get("context", "")
-                prepare_first_match = context[:100]
+                prepare_first_match = prepare_evidence[0].get("context", "")[:100]
 
             layer1_error = layer1.get("error", "")
 
@@ -161,9 +159,9 @@ async def export_csv(batch_id: str):
             "analyzed_at": result.get("analyzed_at", ""),
             "classification": result.get("classification", ""),
             "arrive_cited": arrive_cited,
+            "arrive_occurrences": arrive_occurrences,
             "prepare_cited": prepare_cited,
-            "arrive_evidence_count": arrive_evidence_count,
-            "prepare_evidence_count": prepare_evidence_count,
+            "prepare_occurrences": prepare_occurrences,
             "arrive_first_match": arrive_first_match,
             "prepare_first_match": prepare_first_match,
             "layer1_error": layer1_error,

@@ -33,6 +33,7 @@ interface CitationEvidence {
 
 interface CitationResult {
   cited: boolean
+  total_occurrences: number
   evidence: CitationEvidence[]
 }
 
@@ -188,6 +189,11 @@ function CitationEvidenceList({
           color={result.cited ? 'success' : 'default'}
           size="small"
         />
+        {result.cited && (
+          <Typography variant="caption" color="text.secondary">
+            {result.total_occurrences} occurrence{result.total_occurrences !== 1 ? 's' : ''}
+          </Typography>
+        )}
       </Box>
       {result.evidence.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
@@ -623,7 +629,7 @@ export default function NTSAnalyzerPage() {
                           {arriveCitation != null ? (
                             <Box>
                               <Chip
-                                label={arriveCitation.cited ? 'Cited' : 'Not cited'}
+                                label={arriveCitation.cited ? `Cited (${arriveCitation.total_occurrences}×)` : 'Not cited'}
                                 color={arriveCitation.cited ? 'success' : 'default'}
                                 size="small"
                               />
@@ -651,7 +657,7 @@ export default function NTSAnalyzerPage() {
                           {prepareCitation != null ? (
                             <Box>
                               <Chip
-                                label={prepareCitation.cited ? 'Cited' : 'Not cited'}
+                                label={prepareCitation.cited ? `Cited (${prepareCitation.total_occurrences}×)` : 'Not cited'}
                                 color={prepareCitation.cited ? 'success' : 'default'}
                                 size="small"
                               />

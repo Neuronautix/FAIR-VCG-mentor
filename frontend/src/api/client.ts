@@ -442,6 +442,29 @@ export const llmSuggestTemplate = (
     })
     .then((r) => r.data)
 
+// ── NTS Analyser ───────────────────────────────────────────────────────────
+
+export const analyzeNTS = (file: File): Promise<any> => {
+  const form = new FormData()
+  form.append('file', file)
+  return fetch('/api/nts/analyze', { method: 'POST', body: form }).then(async (res) => {
+    if (!res.ok) throw new Error(await res.text())
+    return res.json()
+  })
+}
+
+export const analyzeNTSBatch = (files: File[]): Promise<any> => {
+  const form = new FormData()
+  for (const f of files) form.append('files', f)
+  return fetch('/api/nts/analyze-batch', { method: 'POST', body: form }).then(async (res) => {
+    if (!res.ok) throw new Error(await res.text())
+    return res.json()
+  })
+}
+
+export const ntsExportUrl = (batchId: string, format: 'csv' | 'json') =>
+  `/api/nts/export/${batchId}/${format}`
+
 export const extractTemplateFromDocument = (
   datasetId: string,
   file: File,

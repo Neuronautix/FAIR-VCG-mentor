@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import ArticleIcon from '@mui/icons-material/Article'
+import FindInPageIcon from '@mui/icons-material/FindInPage'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import ChecklistIcon from '@mui/icons-material/Checklist'
@@ -44,6 +45,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Upload CSV', path: '/' },
+  { label: 'NTS Analyser', path: '/nts-analyzer', alwaysEnabled: true },
   { label: 'Paper Import', path: '/paper-import', alwaysEnabled: true },
   { label: 'Overview', path: '/overview' },
   { label: 'Column Profile', path: '/columns' },
@@ -57,8 +59,9 @@ const navItems: NavItem[] = [
 ].map((item, i) => ({
   ...item,
   icon: [
-    <CloudUploadIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
-    <TuneIcon />, <RuleIcon />, <ChecklistIcon />, <ScienceIcon />, <DownloadIcon />, <BarChartIcon />,
+    <CloudUploadIcon />, <FindInPageIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />,
+    <AssessmentIcon />, <TuneIcon />, <RuleIcon />, <ChecklistIcon />, <ScienceIcon />,
+    <DownloadIcon />, <BarChartIcon />,
   ][i],
 }))
 

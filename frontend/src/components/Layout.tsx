@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import GitHubIcon from '@mui/icons-material/GitHub'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import ChecklistIcon from '@mui/icons-material/Checklist'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
@@ -64,9 +65,9 @@ export default function Layout() {
 
   useEffect(() => {
     if (aiConfigured !== null) return
-    fetch('/api/settings/openai-key/status')
+    fetch('/api/llm/status')
       .then((r) => r.json())
-      .then((data) => setAIConfigured(data.configured ?? false))
+      .then((data) => setAIConfigured(data.enabled ?? false))
       .catch(() => setAIConfigured(false))
   }, [aiConfigured, setAIConfigured])
 
@@ -195,22 +196,62 @@ export default function Layout() {
           sx={{
             mt: 6,
             py: 2,
-            textAlign: 'center',
             borderTop: '1px solid',
             borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1.5,
+            flexWrap: 'wrap',
           }}
         >
+          <Box
+            component="a"
+            href="https://www.neuronautix.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{ display: 'flex', alignItems: 'center' }}
+          >
+            <Box
+              component="img"
+              src="/neuronautix_logo.png"
+              alt="Neuronautix"
+              sx={{ height: 28 }}
+            />
+          </Box>
           <Typography variant="caption" color="text.secondary">
             Made with{' '}
-            <Box component="span" sx={{ color: '#e53935' }}>
-              ♥
-            </Box>
+            <Box component="span" sx={{ color: '#e53935' }}>♥</Box>
             {' '}by{' '}
-            <Box component="span" fontWeight={600} color="text.primary">
+            <Box
+              component="a"
+              href="https://www.neuronautix.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ fontWeight: 600, color: 'text.primary', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+            >
               Neuronautix
             </Box>
-            {' '}(Damien Huzard)
+            {' '}·{' '}
+            <Box
+              component="a"
+              href="https://dhuzard.github.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ color: 'text.secondary', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+            >
+              Damien Huzard
+            </Box>
           </Typography>
+          <Box
+            component="a"
+            href="https://github.com/Neuronautix/"
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
+          >
+            <GitHubIcon sx={{ fontSize: 18 }} />
+          </Box>
         </Box>
       </Box>
     </Box>

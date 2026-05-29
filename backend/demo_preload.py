@@ -52,7 +52,7 @@ DEMO_METADATA: dict = {
         "mechanical itch hypersensitivity (alloknesis), C-LTMR function, and TAFA4 expression. "
         "Note: values are representative example data for demo purposes."
     ),
-    "keywords": "autism, ASD, Shank3, alloknesis, mechanical itch, C-LTMR, TAFA4, somatosensory",
+    "keywords": ["autism", "ASD", "Shank3", "alloknesis", "mechanical itch", "C-LTMR", "TAFA4", "somatosensory"],
     "license": "CC BY 4.0",
     "version": "1.0.0",
     "language": "en",

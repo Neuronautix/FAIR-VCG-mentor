@@ -40,16 +40,17 @@ _RETRYABLE_STATUS = (408, 429, 500, 502, 503, 504, 529)
 
 def llm_enabled() -> bool:
     """True if ANY LLM provider is available."""
-    import openai_service  # imported here to avoid circular import at module load
-    return bool(os.getenv("ANTHROPIC_API_KEY")) or openai_service.is_configured()
+    import openai_service, anthropic_service
+    return anthropic_service.is_configured() or openai_service.is_configured()
 
 
 def _anthropic_client():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    import anthropic_service
+    api_key = anthropic_service.get_key()
     if not api_key:
         raise LLMUnavailable(
-            "ANTHROPIC_API_KEY is not configured. Set this environment "
-            "variable to enable Haiku-powered features."
+            "Anthropic API key is not configured. Add it in Settings or set "
+            "the ANTHROPIC_API_KEY environment variable."
         )
     try:
         import anthropic
@@ -209,9 +210,9 @@ def call_haiku(
 
     Raises LLMUnavailable on auth/network failure after retries are exhausted.
     """
-    import openai_service  # imported here to avoid circular import
+    import openai_service, anthropic_service  # imported here to avoid circular import
 
-    if os.getenv("ANTHROPIC_API_KEY"):
+    if anthropic_service.is_configured():
         return _call_anthropic(
             system_prompt=system_prompt,
             tool=tool,

@@ -396,13 +396,16 @@ async def get_fair_score(dataset_id: str):
 
 @app.get("/api/llm/status")
 async def llm_status():
-    import openai_service
-    anthropic_available = bool(os.getenv("ANTHROPIC_API_KEY"))
+    import openai_service, anthropic_service
+    anthropic_available = anthropic_service.is_configured()
     openai_available = openai_service.is_configured()
     return {
         "enabled": anthropic_available or openai_available,
         "provider": "anthropic" if anthropic_available else ("openai" if openai_available else None),
-        "model": openai_service.OPENAI_MODEL if openai_available else None,
+        "model": (
+            anthropic_service.ANTHROPIC_MODEL if anthropic_available
+            else (openai_service.OPENAI_MODEL if openai_available else None)
+        ),
     }
 
 
@@ -838,6 +841,44 @@ async def test_openai_key():
     if not openai_service.is_configured():
         raise HTTPException(400, "No OpenAI API key is configured. POST /api/settings/openai-key first.")
     result = openai_service.test_connection()
+    return result
+
+
+# ── Anthropic settings endpoints ─────────────────────────────────────────────
+
+@app.post("/api/settings/anthropic-key")
+async def store_anthropic_key(body: Dict[str, Any]):
+    """Store Anthropic API key in memory only — never persisted to disk or DB."""
+    import anthropic_service
+    key = (body.get("api_key") or "").strip()
+    if not key:
+        raise HTTPException(400, "api_key is required.")
+    anthropic_service.set_key(key)
+    return {"stored": True}
+
+
+@app.get("/api/settings/anthropic-key/status")
+async def anthropic_key_status():
+    """Returns whether an Anthropic key is configured — never the key itself."""
+    import anthropic_service
+    return anthropic_service.get_status()
+
+
+@app.delete("/api/settings/anthropic-key")
+async def clear_anthropic_key():
+    """Remove the stored Anthropic API key from memory."""
+    import anthropic_service
+    anthropic_service.clear_key()
+    return {"cleared": True}
+
+
+@app.post("/api/settings/anthropic-key/test")
+async def test_anthropic_key():
+    """Test the stored Anthropic key with a minimal API call."""
+    import anthropic_service
+    if not anthropic_service.is_configured():
+        raise HTTPException(400, "No Anthropic API key is configured.")
+    result = anthropic_service.test_connection()
     return result
 
 

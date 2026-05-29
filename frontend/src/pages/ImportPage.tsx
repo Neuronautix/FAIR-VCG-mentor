@@ -588,7 +588,7 @@ export default function ImportPage() {
                     placeholder="Paste protocol notes, study plan, or any relevant text here…"
                     value={freeText}
                     onChange={(e) => setFreeText(e.target.value)}
-                    disabled={freeTextLoading || !aiConfigured}
+                    disabled={freeTextLoading}
                     inputProps={{ maxLength: 20000 }}
                   />
                   {!aiConfigured && (

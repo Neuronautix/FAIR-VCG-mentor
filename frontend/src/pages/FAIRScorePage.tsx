@@ -121,7 +121,7 @@ export default function FAIRScorePage() {
 
       <HITLPanel
         title="AI-suggested fixes — Human review required"
-        emptyHint="Use the Settings page to configure an OpenAI API key and unlock AI suggestions."
+        emptyHint="No AI-suggested fixes yet. Use the 'Get Improvement Checklist' button below to generate suggestions."
         onApplied={() => {
           setFairScore(null)
           load()

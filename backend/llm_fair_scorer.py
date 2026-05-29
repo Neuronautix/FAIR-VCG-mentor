@@ -139,11 +139,12 @@ def run_llm_fair_score(
     Returns a dict with findable/accessible/interoperable/reusable verdicts +
     commentary, an overall_assessment, and a top_priority action.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    import anthropic_service
+    api_key = anthropic_service.get_key()
     if not api_key:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY is not configured. "
-            "Set this environment variable to enable LLM-powered FAIR assessment."
+            "Anthropic API key is not configured. Add it in Settings or set "
+            "the ANTHROPIC_API_KEY environment variable."
         )
 
     try:

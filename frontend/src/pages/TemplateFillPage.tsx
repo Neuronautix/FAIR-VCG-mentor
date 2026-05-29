@@ -253,6 +253,7 @@ export default function TemplateFillPage() {
   // Suggestions
   const [pendingSuggestions, setPendingSuggestions] = useState<PendingSuggestion[]>([])
   const [suggestionsOpen, setSuggestionsOpen] = useState(true)
+  const [sectionProgressOpen, setSectionProgressOpen] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -684,9 +685,13 @@ export default function TemplateFillPage() {
       {/* Section Progress */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Section Progress
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: sectionProgressOpen ? 2 : 0 }}>
+            <Typography variant="h6">Section Progress</Typography>
+            <IconButton size="small" onClick={() => setSectionProgressOpen((o) => !o)}>
+              {sectionProgressOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
+          <Collapse in={sectionProgressOpen}>
           <Grid container spacing={3}>
             {[
               { label: 'ARRIVE 2.0', sections: arriveSections, color: 'info' as const },
@@ -735,6 +740,7 @@ export default function TemplateFillPage() {
               </Grid>
             ))}
           </Grid>
+          </Collapse>
         </CardContent>
       </Card>
 
@@ -956,8 +962,8 @@ export default function TemplateFillPage() {
           {sortedFields.length === 0 ? (
             <Alert severity="success">No fields match this filter.</Alert>
           ) : (
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
+            <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 420px)', overflowY: 'auto' }}>
+              <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ width: 32 }} />

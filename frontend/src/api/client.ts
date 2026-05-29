@@ -191,7 +191,7 @@ export interface HITLSuggestion {
 }
 
 export const getLLMStatus = (): Promise<{ enabled: boolean }> =>
-  api.get('/settings/openai-key/status').then((r) => ({ enabled: r.data.configured ?? false }))
+  api.get('/llm/status').then((r) => ({ enabled: r.data.enabled ?? false }))
 
 export const listHITLSuggestions = (
   id: string,
@@ -411,6 +411,20 @@ export const clearOpenAIKey = (): Promise<{ cleared: boolean }> =>
 
 export const testOpenAIKey = (): Promise<{ ok: boolean; response?: string; error?: string }> =>
   api.post('/settings/openai-key/test').then((r) => r.data)
+
+// ── Anthropic settings ───────────────────────────────────────────────────────
+
+export const getAnthropicKeyStatus = (): Promise<{ configured: boolean; model: string }> =>
+  api.get('/settings/anthropic-key/status').then((r) => r.data)
+
+export const storeAnthropicKey = (apiKey: string): Promise<{ stored: boolean }> =>
+  api.post('/settings/anthropic-key', { api_key: apiKey }).then((r) => r.data)
+
+export const clearAnthropicKey = (): Promise<{ cleared: boolean }> =>
+  api.delete('/settings/anthropic-key').then((r) => r.data)
+
+export const testAnthropicKey = (): Promise<{ ok: boolean; response?: string; error?: string }> =>
+  api.post('/settings/anthropic-key/test').then((r) => r.data)
 
 // ── AI suggestion endpoints ─────────────────────────────────────────────────
 

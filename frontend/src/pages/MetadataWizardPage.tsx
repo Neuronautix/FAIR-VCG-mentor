@@ -139,6 +139,9 @@ export default function MetadataWizardPage() {
           const fetched = r.metadata
           setForm((prev) => {
             const merged = { ...prev, ...fetched }
+            if (typeof merged.keywords === 'string') {
+              merged.keywords = (merged.keywords as string).split(',').map((k) => k.trim()).filter(Boolean)
+            }
 
             if (paperExtraction) {
               const dm = paperExtraction.dataset_metadata

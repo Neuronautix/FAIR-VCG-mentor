@@ -417,7 +417,12 @@ export default function ImportPage() {
       setAssessmentOnly(false)
       navigate('/template-fill')
     } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? err?.message ?? 'Demo load failed.'
+      const msg =
+        err?.response?.data?.detail ??
+        (err?.response?.status === 500
+          ? 'Demo load failed. In dev mode, make sure the FastAPI backend is running on http://localhost:8000.'
+          : err?.message) ??
+        'Demo load failed.'
       setDemoError(msg)
     } finally {
       setDemoLoading(false)

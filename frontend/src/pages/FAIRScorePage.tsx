@@ -18,6 +18,8 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Stack,
+  Chip,
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
@@ -36,6 +38,7 @@ export default function FAIRScorePage() {
   const {
     datasetId,
     fairScore,
+    llmFairAnalysis,
     setFairScore,
     setHITLSuggestions,
     aiConfigured,
@@ -100,7 +103,7 @@ export default function FAIRScorePage() {
   }
 
   if (!datasetId) {
-    return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>
+    return <Alert severity="info">No assessment loaded. Import research documents or start a session first.</Alert>
   }
 
   return (
@@ -148,6 +151,43 @@ export default function FAIRScorePage() {
           </Grid>
 
           <Grid item xs={12} md={7}>
+            {llmFairAnalysis && (
+              <Card sx={{ mb: 2, border: '1.5px solid #7c4dff' }}>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    LLM FAIR Analysis
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    {llmFairAnalysis.overall_assessment}
+                  </Typography>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Top priority: {llmFairAnalysis.top_priority}
+                  </Alert>
+                  <Stack spacing={1}>
+                    {(['findable', 'accessible', 'interoperable', 'reusable'] as const).map((dim) => (
+                      <Box key={dim} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                        <Chip
+                          label={`${dim}: ${llmFairAnalysis[dim].verdict}`}
+                          size="small"
+                          color={
+                            llmFairAnalysis[dim].verdict === 'good'
+                              ? 'success'
+                              : llmFairAnalysis[dim].verdict === 'adequate'
+                                ? 'warning'
+                                : 'error'
+                          }
+                          sx={{ textTransform: 'capitalize', minWidth: 130 }}
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                          {llmFairAnalysis[dim].commentary}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            )}
+
             <Card sx={{ mb: 2 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
@@ -258,8 +298,8 @@ export default function FAIRScorePage() {
       )}
 
       <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
-        <Button variant="outlined" onClick={() => navigate('/columns')}>
-          Back to Columns
+        <Button variant="outlined" onClick={() => navigate('/templates')}>
+          Back to Templates
         </Button>
         <Button
           variant="contained"

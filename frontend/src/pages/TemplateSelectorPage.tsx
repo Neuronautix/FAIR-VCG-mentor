@@ -1,5 +1,6 @@
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CloseIcon from '@mui/icons-material/Close'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import {
   Alert,
@@ -43,6 +44,7 @@ import {
   getTemplateSuggestions,
   getTemplateValidation,
   listTemplates,
+  runLLMFAIRAnalysis,
   unassignTemplate,
   uploadTemplate,
 } from '../api/client'
@@ -93,7 +95,8 @@ export default function TemplateSelectorPage() {
     setTemplateConformance,
     setAvailableTemplates,
     setColumns,
-    setIssues,
+    setFairScore,
+    setLLMFAIRAnalysis,
   } = useStore()
 
   const [loading, setLoading] = useState(false)
@@ -110,6 +113,7 @@ export default function TemplateSelectorPage() {
   const [linkmlSave, setLinkmlSave] = useState(false)
   const [linkmlBusy, setLinkmlBusy] = useState(false)
   const [linkmlPreview, setLinkmlPreview] = useState<string | null>(null)
+  const [fairBusy, setFairBusy] = useState(false)
 
   const refreshAll = async () => {
     if (!datasetId) {
@@ -193,6 +197,23 @@ export default function TemplateSelectorPage() {
       setError('Failed to remove template.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRunFairAnalysis = async () => {
+    if (!datasetId || !templateId) return
+    setFairBusy(true)
+    setError(null)
+    try {
+      const result = await runLLMFAIRAnalysis(datasetId)
+      setFairScore(result.fair_score)
+      setLLMFAIRAnalysis(result.analysis)
+      setToast('LLM FAIR analysis complete.')
+      navigate('/fair-score')
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'LLM FAIR analysis failed. Configure an Anthropic key in Settings and try again.')
+    } finally {
+      setFairBusy(false)
     }
   }
 
@@ -375,9 +396,19 @@ export default function TemplateSelectorPage() {
                   </Box>
                 )}
               </Box>
-              <Button color="error" variant="outlined" onClick={handleUnassign} disabled={loading}>
-                Remove
-              </Button>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="contained"
+                  startIcon={fairBusy ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+                  onClick={handleRunFairAnalysis}
+                  disabled={loading || fairBusy}
+                >
+                  Run LLM FAIR analysis
+                </Button>
+                <Button color="error" variant="outlined" onClick={handleUnassign} disabled={loading || fairBusy}>
+                  Remove
+                </Button>
+              </Stack>
             </Box>
           ) : (
             <Alert severity="info">No template assigned.</Alert>

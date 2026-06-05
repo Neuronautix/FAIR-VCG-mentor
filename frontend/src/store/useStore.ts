@@ -87,21 +87,41 @@ export interface FAIRScore {
   main_recommendations: string[]
 }
 
+export interface LLMFAIRAnalysisDimension {
+  verdict: 'good' | 'adequate' | 'weak'
+  commentary: string
+}
+
+export interface LLMFAIRAnalysis {
+  findable: LLMFAIRAnalysisDimension
+  accessible: LLMFAIRAnalysisDimension
+  interoperable: LLMFAIRAnalysisDimension
+  reusable: LLMFAIRAnalysisDimension
+  overall_assessment: string
+  top_priority: string
+}
+
 export interface DatasetMetadata {
   title?: string
   description?: string
   creator?: string
   institution?: string
   contact_email?: string
+  repository_url?: string
+  persistent_identifier?: string
   date_created?: string
   version?: string
   license?: string
   access_conditions?: string
+  reuse_conditions?: string
   species?: string
   study_type?: string
   protocol_reference?: string
   funding_source?: string
+  provenance_notes?: string
   keywords?: string[]
+  ontology_terms?: string[]
+  data_dictionary_reference?: string
   row_represents?: string
   primary_identifier?: string
   base_uri?: string
@@ -175,6 +195,7 @@ interface AppState {
   tableStructure: TableStructure | null
   issues: Issue[]
   fairScore: FAIRScore | null
+  llmFairAnalysis: LLMFAIRAnalysis | null
   metadata: DatasetMetadata
   lowConfidenceColumns: LowConfidenceColumn[]
   templateApplied: number
@@ -209,6 +230,7 @@ interface AppState {
   setColumns: (columns: ColumnProfile[]) => void
   setIssues: (issues: Issue[]) => void
   setFairScore: (score: FAIRScore | null) => void
+  setLLMFAIRAnalysis: (analysis: LLMFAIRAnalysis | null) => void
   setMetadata: (metadata: DatasetMetadata) => void
   setLowConfidenceColumns: (cols: LowConfidenceColumn[]) => void
   setInferenceMetrics: (metrics: InferenceMetrics) => void
@@ -242,6 +264,7 @@ export const useStore = create<AppState>((set) => ({
   tableStructure: null,
   issues: [],
   fairScore: null,
+  llmFairAnalysis: null,
   metadata: { base_uri: 'https://your-lab.org' },
   lowConfidenceColumns: [],
   templateApplied: 0,
@@ -269,6 +292,7 @@ export const useStore = create<AppState>((set) => ({
       tableStructure,
       issues,
       fairScore: null,
+      llmFairAnalysis: null,
       lowConfidenceColumns: extras?.lowConfidenceColumns ?? [],
       templateApplied: extras?.templateApplied ?? 0,
       inferenceMetrics: EMPTY_METRICS,
@@ -280,6 +304,7 @@ export const useStore = create<AppState>((set) => ({
   setColumns: (columns) => set({ columns }),
   setIssues: (issues) => set({ issues }),
   setFairScore: (fairScore) => set({ fairScore }),
+  setLLMFAIRAnalysis: (llmFairAnalysis) => set({ llmFairAnalysis }),
   setMetadata: (metadata) => set((s) => ({ metadata: { ...s.metadata, ...metadata } })),
   setLowConfidenceColumns: (cols) => set({ lowConfidenceColumns: cols }),
   setInferenceMetrics: (metrics) => set({ inferenceMetrics: metrics }),
@@ -292,6 +317,7 @@ export const useStore = create<AppState>((set) => ({
       tableStructure: null,
       issues: [],
       fairScore: null,
+      llmFairAnalysis: null,
       metadata: { base_uri: 'https://your-lab.org' },
       lowConfidenceColumns: [],
       templateApplied: 0,

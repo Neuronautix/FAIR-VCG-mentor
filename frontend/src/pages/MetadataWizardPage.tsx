@@ -183,7 +183,7 @@ export default function MetadataWizardPage() {
   }, [datasetId, paperExtraction]) // re-run when extraction arrives after page is already mounted
 
   if (!datasetId) {
-    return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>
+    return <Alert severity="info">No assessment loaded. Import research documents or start a session first.</Alert>
   }
 
   const f = (field: keyof DatasetMetadata) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -396,6 +396,26 @@ export default function MetadataWizardPage() {
                   <Grid item xs={12} sm={6}>
                     <TextField label="Contact email" fullWidth size="small" type="email" value={form.contact_email ?? ''} onChange={f('contact_email')} />
                   </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Repository URL"
+                      fullWidth
+                      size="small"
+                      value={form.repository_url ?? ''}
+                      onChange={f('repository_url')}
+                      placeholder="https://doi.org/... or repository landing page"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Persistent identifier"
+                      fullWidth
+                      size="small"
+                      value={form.persistent_identifier ?? ''}
+                      onChange={f('persistent_identifier')}
+                      placeholder="DOI, accession, ARK, Handle, or internal ID"
+                    />
+                  </Grid>
                   <Grid item xs={12} sm={3}>
                     <TextField label="Date created" fullWidth size="small" type="date" InputLabelProps={{ shrink: true }} value={form.date_created ?? ''} onChange={f('date_created')} />
                   </Grid>
@@ -441,6 +461,18 @@ export default function MetadataWizardPage() {
                       placeholder="mouse, open field, anxiety, pharmacology"
                     />
                   </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Reuse conditions"
+                      fullWidth
+                      size="small"
+                      multiline
+                      rows={2}
+                      value={form.reuse_conditions ?? ''}
+                      onChange={f('reuse_conditions')}
+                      placeholder="Citation, attribution, data-use agreement, embargo, or ethical constraints."
+                    />
+                  </Grid>
                 </Grid>
               </Section>
 
@@ -476,6 +508,45 @@ export default function MetadataWizardPage() {
                     <TextField
                       label={<FieldLabel text="Funding source" fromPaper={fp('funding_source')} />}
                       fullWidth size="small" value={form.funding_source ?? ''} onChange={f('funding_source')}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Provenance notes"
+                      fullWidth
+                      size="small"
+                      multiline
+                      rows={2}
+                      value={form.provenance_notes ?? ''}
+                      onChange={f('provenance_notes')}
+                      placeholder="Who collected the data, when, with which instrument, batch, or processing workflow."
+                    />
+                  </Grid>
+                </Grid>
+              </Section>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Section title="Interoperability">
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Ontology terms (comma-separated)"
+                      fullWidth
+                      size="small"
+                      value={form.ontology_terms?.join(', ') ?? ''}
+                      onChange={(e) => setForm((p) => ({ ...p, ontology_terms: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) }))}
+                      placeholder="NCBITaxon:10090, OBI:0000070, EFO:000..."
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Data dictionary reference"
+                      fullWidth
+                      size="small"
+                      value={form.data_dictionary_reference ?? ''}
+                      onChange={f('data_dictionary_reference')}
+                      placeholder="URL, DOI, or file name for the data dictionary / CSVW metadata."
                     />
                   </Grid>
                 </Grid>

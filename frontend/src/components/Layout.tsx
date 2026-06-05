@@ -41,19 +41,19 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Import', path: '/', alwaysEnabled: true },
-  { label: 'Overview', path: '/overview' },
-  { label: 'Column Profile', path: '/columns' },
+  { label: 'Templates', path: '/templates', alwaysEnabled: true },
   { label: 'FAIR Score', path: '/fair-score' },
   { label: 'Metadata Wizard', path: '/metadata' },
-  { label: 'Templates', path: '/templates', alwaysEnabled: true },
   { label: 'Template Fill', path: '/template-fill', requiresTemplate: true },
+  { label: 'CSV Overview', path: '/overview' },
+  { label: 'Column Profile', path: '/columns' },
   { label: 'Export', path: '/export' },
   { label: 'Settings', path: '/settings', alwaysEnabled: true },
 ].map((item, i) => ({
   ...item,
   icon: [
-    <CloudUploadIcon />, <InfoIcon />, <TableChartIcon />, <AssessmentIcon />,
-    <TuneIcon />, <RuleIcon />, <ChecklistIcon />, <DownloadIcon />, <SettingsIcon />,
+    <CloudUploadIcon />, <RuleIcon />, <AssessmentIcon />, <TuneIcon />,
+    <ChecklistIcon />, <InfoIcon />, <TableChartIcon />, <DownloadIcon />, <SettingsIcon />,
   ][i],
 }))
 

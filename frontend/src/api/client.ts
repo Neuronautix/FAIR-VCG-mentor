@@ -6,6 +6,7 @@ import type {
   ImportInfo,
   InferenceMetrics,
   Issue,
+  LLMFAIRAnalysis,
   LowConfidenceColumn,
   TableStructure,
 } from '../store/useStore'
@@ -70,6 +71,9 @@ export const saveMetadata = (id: string, metadata: DatasetMetadata) =>
 
 export const getFairScore = (id: string): Promise<FAIRScore> =>
   api.get<FAIRScore>(`/fair-score/${id}`).then((r) => r.data)
+
+export const runLLMFAIRAnalysis = (id: string): Promise<{ fair_score: FAIRScore; analysis: LLMFAIRAnalysis }> =>
+  api.post<{ fair_score: FAIRScore; analysis: LLMFAIRAnalysis }>(`/ai/fair-analysis/${id}`).then((r) => r.data)
 
 export const exportUrl = (id: string, type: string) => `/api/export/${id}/${type}`
 

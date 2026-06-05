@@ -63,9 +63,9 @@ def compute_fair_score(
     f = {
         'Dataset title present': has('title'),
         'Dataset description present': has('description'),
-        'Dataset identifier / URI present': has('base_uri') and has('title'),
+        'Dataset identifier / URI present': (has('base_uri') and has('title')) or has('persistent_identifier') or has('repository_url'),
         'Creator or contact present': has('creator') or has('contact_email'),
-        'Keywords or ontology terms present': has('keywords'),
+        'Keywords or ontology terms present': has('keywords') or has('ontology_terms'),
     }
     f_score = sum(5 for v in f.values() if v)
     f_weak = (
@@ -79,9 +79,9 @@ def compute_fair_score(
     # ── Accessible (20 pts, 5 each) ────────────────────────────────────────
     a = {
         'License defined': has('license'),
-        'Access conditions stated': has('access_conditions'),
+        'Access conditions stated': has('access_conditions') or has('repository_url'),
         'File format open (CSV)': True,
-        'Contact or repository present': has('contact_email') or has('institution'),
+        'Contact or repository present': has('contact_email') or has('institution') or has('repository_url'),
     }
     a_score = sum(5 for v in a.values() if v)
     a_weak = (
@@ -96,9 +96,9 @@ def compute_fair_score(
     i = {
         'Column metadata present': has_col_descriptions,
         'Units defined for measurements': has_col_units and bool(measurements),
-        'Controlled vocabularies used': has_controlled_vocab,
-        'External ontology or URI mapping': has_uri_mapping,
-        'JSON-LD or CSVW export ready': has('title') and has_col_descriptions,
+        'Controlled vocabularies used': has_controlled_vocab or has('ontology_terms'),
+        'External ontology or URI mapping': has_uri_mapping or has('ontology_terms') or has('base_uri'),
+        'JSON-LD or CSVW export ready': (has('title') and has_col_descriptions) or has('data_dictionary_reference'),
         'Stable identifiers for entities': bool(identifiers),
     }
     i_score = sum(5 for v in i.values() if v)
@@ -114,8 +114,8 @@ def compute_fair_score(
     template_conformance = _template_conformance_score(template_validation)
     r = {
         'Protocol or method described': has('protocol_reference'),
-        'Provenance captured': has('creator') and has('date_created'),
-        'Data dictionary present': has_col_descriptions,
+        'Provenance captured': (has('creator') and has('date_created')) or has('provenance_notes'),
+        'Data dictionary present': has_col_descriptions or has('data_dictionary_reference'),
         'Missing values documented': all(
             c.get('missing_values', 0) == 0 or c.get('user_description')
             for c in columns
@@ -149,7 +149,7 @@ def compute_fair_score(
     if measurements and not i['Units defined for measurements']:
         recs.append('Add units for all quantitative variables.')
     if not i['Controlled vocabularies used']:
-        recs.append('Define allowed values for categorical columns (e.g. sex: male / female / unknown).')
+        recs.append('Define allowed values for categorical columns or add relevant ontology terms.')
     if not i['External ontology or URI mapping']:
         recs.append('Map key columns to ontology terms or internal URIs.')
     if not r['Protocol or method described']:
@@ -157,7 +157,7 @@ def compute_fair_score(
     if not has_col_descriptions:
         recs.append('Add column descriptions to create a data dictionary.')
     if not r['Provenance captured']:
-        recs.append('Record provenance: creator name and date of data collection.')
+        recs.append('Record provenance: creator/date or a concise provenance note.')
     if template_conformance.get('recommendation'):
         recs.append(template_conformance['recommendation'])
 

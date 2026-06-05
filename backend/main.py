@@ -392,6 +392,38 @@ async def get_fair_score(dataset_id: str):
     return score
 
 
+@app.post("/api/ai/fair-analysis/{dataset_id}")
+async def ai_fair_analysis(dataset_id: str):
+    """Run qualitative LLM review of the computed FAIR score context.
+
+    This complements the transparent rule-based FAIR score by checking whether
+    the metadata and column descriptions are meaningful enough for reuse.
+    """
+    s = _require(dataset_id)
+    score = compute_fair_score(
+        s["import_info"], s["columns"], s["table_structure"], s["metadata"], s["issues"],
+        template_validation=s.get("template_validation", []),
+    )
+    s["fair_score"] = score
+
+    arrive_data = (s.get("paper_extraction") or {}).get("arrive")
+    try:
+        from llm_fair_scorer import run_llm_fair_score
+        analysis = run_llm_fair_score(
+            s["import_info"],
+            s["columns"],
+            s["metadata"],
+            s["issues"],
+            arrive_data=arrive_data,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+
+    s["llm_fair_analysis"] = analysis
+    _save_session(dataset_id, s)
+    return {"fair_score": score, "analysis": analysis}
+
+
 # ── HITL (human-in-the-loop) suggestion queue ───────────────────────────────
 
 @app.get("/api/llm/status")

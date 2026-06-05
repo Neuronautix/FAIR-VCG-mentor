@@ -111,7 +111,9 @@ export default function HITLPanel({
     try {
       const res = await approveHITLSuggestion(datasetId, s.id)
       setHITLSuggestions(hitlSuggestions.map((x) => (x.id === s.id ? res.suggestion : x)))
-      onApplied?.(res.suggestion)
+      if (res.result?.applied) {
+        onApplied?.(res.suggestion)
+      }
     } finally {
       setBusyId(null)
     }

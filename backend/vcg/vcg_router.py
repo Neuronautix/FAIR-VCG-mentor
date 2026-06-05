@@ -320,6 +320,15 @@ async def generate(dataset_id: str):
     if s["vcg"]["vcg_status"] == "running":
         return {"vcg_status": "running", "message": "Already running"}
 
+    from vcg.vcg_wizard import validate_wizard_payload
+    errors = validate_wizard_payload(s["vcg"].get("column_roles", {}), s["columns"], s["df"])
+    if errors:
+        msg = "; ".join(e.get("message", "") for e in errors if e.get("message"))
+        s["vcg"]["vcg_status"] = "failed"
+        s["vcg"]["vcg_error"] = msg
+        _persist(dataset_id, s)
+        raise HTTPException(400, msg)
+
     s["vcg"]["vcg_status"] = "running"
     s["vcg"]["vcg_error"] = None
     _persist(dataset_id, s)

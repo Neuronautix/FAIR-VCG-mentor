@@ -763,6 +763,20 @@ def _column_header_for_template_field(col: RequiredColumn) -> str:
     return col.name_patterns[0] if col.name_patterns else col.id
 
 
+def _slug_header(value: Any, fallback: str) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        raw = fallback
+    raw = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
+    return raw or fallback
+
+
+def _append_unique(items: List[str], value: Any, fallback: str = "") -> None:
+    header = _slug_header(value, fallback)
+    if header and header not in items:
+        items.append(header)
+
+
 def build_csv_field_options(tpl: "Template", extraction: Dict[str, Any]) -> List[Dict[str, Any]]:
     vcg_hints = extraction.get("vcg_hints", {})
     hint_cols = list(vcg_hints.get("outcome_columns") or []) + list(vcg_hints.get("covariate_columns") or [])
@@ -938,7 +952,7 @@ def generate_experiment_csv(
     extraction: Dict[str, Any],
     include_field_ids: Optional[List[str]] = None,
 ) -> str:
-    """Generate a blank experiment CSV whose headers match the template columns + paper hints."""
+    """Generate a realistic FAIR/VCG-ready CSV scaffold from a template and paper hints."""
     import csv as _csv
     import io as _io
 
@@ -950,20 +964,47 @@ def generate_experiment_csv(
         wanted = {fid for fid in include_field_ids if isinstance(fid, str) and fid}
         all_cols = [c for c in all_cols if c.id in wanted]
 
-    if all_cols:
-        col_names = [
-            _column_header_for_template_field(c)
-            for c in all_cols
-        ]
-    else:
-        # No template columns — build from vcg_hints
-        col_names = []
-        if vcg_hints.get("treatment_column_name"):
-            col_names.append(vcg_hints["treatment_column_name"])
-        col_names += [c for c in (vcg_hints.get("outcome_columns") or []) if c not in col_names]
-        col_names += [c for c in (vcg_hints.get("covariate_columns") or []) if c not in col_names]
-        if not col_names:
-            col_names = ["subject_id", "group", "outcome"]
+    col_names: List[str] = []
+    role_by_header: Dict[str, Optional[str]] = {}
+
+    for col in all_cols:
+        header = _slug_header(_column_header_for_template_field(col), col.id)
+        if header not in col_names:
+            col_names.append(header)
+            role_by_header[header] = col.role
+
+    # A paper-only workflow may not have a dataset yet, so make sure the CSV is
+    # immediately usable for VCG generation even when the matched reporting
+    # template is mostly metadata-focused.
+    _append_unique(col_names, "subject_id", "subject_id")
+    role_by_header.setdefault("subject_id", "subject_id")
+
+    treatment_header = _slug_header(vcg_hints.get("treatment_column_name"), "group")
+    _append_unique(col_names, treatment_header, "group")
+    role_by_header.setdefault(treatment_header, "treatment")
+
+    if meta.get("species"):
+        _append_unique(col_names, "species", "species")
+        role_by_header.setdefault("species", "covariate")
+
+    for hint in vcg_hints.get("covariate_columns") or []:
+        header = _slug_header(hint, "covariate")
+        _append_unique(col_names, header, "covariate")
+        role_by_header.setdefault(header, "covariate")
+
+    outcome_hints = list(vcg_hints.get("outcome_columns") or [])
+    if not outcome_hints:
+        outcome_hints = ["primary_outcome"]
+    for hint in outcome_hints:
+        header = _slug_header(hint, "outcome")
+        _append_unique(col_names, header, "outcome")
+        role_by_header.setdefault(header, "outcome")
+
+    # These fields make the CSV easier to reuse, audit, and import into the
+    # metadata wizard without turning the file into a non-standard commented CSV.
+    for header in ["outcome_unit", "timepoint", "experimental_unit", "source_paper_doi", "notes"]:
+        _append_unique(col_names, header, header)
+        role_by_header.setdefault(header, "metadata")
 
     # Locate treatment column by name hint or role
     treatment_col_hint = vcg_hints.get("treatment_column_name") or ""
@@ -1000,20 +1041,55 @@ def generate_experiment_csv(
 
     control_label = vcg_hints.get("control_group_label") or "Control"
     treatment_label = vcg_hints.get("treatment_group_label") or "Treatment"
-    n_control = min(int(vcg_hints.get("n_control") or 3), 10)
-    n_treatment = min(int(vcg_hints.get("n_treatment") or 3), 10)
+    n_control = min(max(int(vcg_hints.get("n_control") or 6), 6), 10)
+    n_treatment = min(max(int(vcg_hints.get("n_treatment") or 6), 6), 10)
+
+    doi_val = meta.get("protocol_reference") or ""
+    if isinstance(doi_val, list):
+        doi_val = ", ".join(str(v) for v in doi_val)
 
     rows = []
     counter = 1
     for label, n in [(control_label, n_control), (treatment_label, n_treatment)]:
-        for _ in range(n):
+        for within_group_idx in range(n):
             row = [""] * len(col_names)
             if subject_idx is not None:
-                row[subject_idx] = str(counter)
+                row[subject_idx] = f"S{counter:03d}"
             if treatment_idx is not None:
                 row[treatment_idx] = label
             if species_idx is not None and species_val:
                 row[species_idx] = species_val
+            for i, name in enumerate(col_names):
+                role = role_by_header.get(name)
+                if role == "outcome":
+                    # Plausible numeric placeholders, separated slightly by group so
+                    # users can see the expected shape without treating values as real.
+                    base = 10.0 + within_group_idx * 0.4
+                    if label == treatment_label:
+                        base += 1.2
+                    row[i] = f"{base:.2f}"
+                elif role == "covariate" and not row[i]:
+                    lname = name.lower()
+                    if "sex" in lname:
+                        row[i] = "female" if counter % 2 else "male"
+                    elif "age" in lname:
+                        row[i] = "10"
+                    elif "weight" in lname or "body_mass" in lname:
+                        row[i] = f"{22.0 + (counter % 5) * 0.7:.1f}"
+                    elif "strain" in lname:
+                        row[i] = "C57BL/6"
+                    else:
+                        row[i] = "record_value"
+                elif name == "outcome_unit":
+                    row[i] = "replace_with_unit"
+                elif name == "timepoint":
+                    row[i] = "baseline" if within_group_idx == 0 else "endpoint"
+                elif name == "experimental_unit":
+                    row[i] = "animal"
+                elif name == "source_paper_doi":
+                    row[i] = str(doi_val)
+                elif name == "notes":
+                    row[i] = "example row - replace with observed data"
             rows.append(row)
             counter += 1
 

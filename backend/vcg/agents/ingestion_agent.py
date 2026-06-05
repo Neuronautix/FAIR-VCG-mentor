@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Any, Optional
 
+from vcg.group_values import group_mask, normalize_group_value, visible_group_values
+
 
 class DataIngestionAgent:
     """Validates data suitability for VCG generation."""
@@ -155,21 +157,24 @@ class DataIngestionAgent:
                 },
             }
 
-        col_vals = df[treatment_col].astype(str)
+        series = df[treatment_col]
+        col_vals = series.astype(str)
+        control_value = normalize_group_value(control_value, series)
 
         # Check control_value exists
         if not control_value:
             blocking_issues.append(
                 "control_value is not specified. Cannot identify the control group."
             )
-        elif control_value not in col_vals.values:
+        elif not group_mask(series, control_value).any():
             blocking_issues.append(
-                f"control_value '{control_value}' was not found in column '{treatment_col}'."
+                f"control_value '{control_value}' was not found in column '{treatment_col}'. "
+                f"Available values: {visible_group_values(series, 10)}"
             )
 
         # Identify control and treatment subsets
-        if control_value and control_value in col_vals.values:
-            control_mask = col_vals == str(control_value)
+        if control_value and group_mask(series, control_value).any():
+            control_mask = group_mask(series, control_value)
             control_df = df[control_mask]
             treatment_df = df[~control_mask]
             n_control = len(control_df)
@@ -247,8 +252,8 @@ class DataIngestionAgent:
         )
 
         # Run deep suitability gate on the actual control subset
-        if control_value and control_value in col_vals.values and valid_outcome_cols:
-            control_mask = col_vals == str(control_value)
+        if control_value and group_mask(series, control_value).any() and valid_outcome_cols:
+            control_mask = group_mask(series, control_value)
             _control_df_for_suitability = df[control_mask]
             suitability = self._check_suitability(_control_df_for_suitability, valid_outcome_cols)
         else:

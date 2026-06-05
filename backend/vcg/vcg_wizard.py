@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 
 from vcg.constants import CONTROL_KEYWORDS as _CONTROL_KEYWORDS
+from vcg.group_values import MISSING_GROUP_VALUE, group_mask, normalize_group_value, visible_group_values
 
 
 def infer_column_roles(columns: List[Dict], table_structure: Dict, metadata: Dict) -> dict:
@@ -161,30 +162,45 @@ def validate_wizard_payload(
             "message": f"Column '{treatment_col}' does not exist in the dataset.",
         })
     else:
-        col_vals = df[treatment_col].dropna().astype(str).unique().tolist()
+        series = df[treatment_col]
+        col_vals = [str(v) for v in series.dropna().astype(str).unique().tolist()]
 
-        if treatment_value is not None and treatment_value not in col_vals:
+        treatment_value = normalize_group_value(treatment_value, series)
+        control_value = normalize_group_value(control_value, series)
+
+        if (
+            treatment_value is not None
+            and treatment_value != MISSING_GROUP_VALUE
+            and treatment_value not in col_vals
+        ):
             errors.append({
                 "field": "treatment_value",
                 "message": (
                     f"treatment_value '{treatment_value}' was not found in column "
-                    f"'{treatment_col}'. Available values: {col_vals[:10]}"
+                    f"'{treatment_col}'. Available values: {visible_group_values(series, 10)}"
                 ),
             })
 
-        if control_value is not None and control_value not in col_vals:
+        if (
+            control_value is not None
+            and control_value != MISSING_GROUP_VALUE
+            and control_value not in col_vals
+        ):
             errors.append({
                 "field": "control_value",
                 "message": (
                     f"control_value '{control_value}' was not found in column "
-                    f"'{treatment_col}'. Available values: {col_vals[:10]}"
+                    f"'{treatment_col}'. Available values: {visible_group_values(series, 10)}"
                 ),
             })
 
-        if control_value is None:
+        if control_value is None or not group_mask(series, control_value).any():
             errors.append({
                 "field": "control_value",
-                "message": "control_value is required to identify the control group.",
+                "message": (
+                    "control_value is required to identify the control group. "
+                    f"Available values: {visible_group_values(series, 10)}"
+                ),
             })
 
     if not outcome_cols:

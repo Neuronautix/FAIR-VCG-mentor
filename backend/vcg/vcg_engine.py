@@ -10,6 +10,7 @@ from vcg.agents.standardization_agent import DataStandardizationAgent
 from vcg.agents.vcg_bootstrap import BootstrapVCGAgent
 from vcg.agents.vcg_synthetic import SyntheticVCGAgent
 from vcg.agents.stats_agent import StatsAgent
+from vcg.group_values import group_mask, visible_group_values
 from vcg.utils.covariate_balance import compute_balance_report
 from vcg.vcg_report import generate_vcg_report
 
@@ -260,12 +261,12 @@ def run_vcg_pipeline(
 
         # Extract real control group
         if treatment_col and control_value and treatment_col in df.columns:
-            real_control_df = df[df[treatment_col].astype(str) == str(control_value)].copy()
+            real_control_df = df[group_mask(df[treatment_col], control_value)].copy()
         else:
             real_control_df = df.copy()
 
         if real_control_df.empty:
-            unique_vals = df[treatment_col].astype(str).unique().tolist()[:10] if treatment_col in df.columns else []
+            unique_vals = visible_group_values(df[treatment_col], 10) if treatment_col in df.columns else []
             raise ValueError(
                 f"No rows matched control value '{control_value}' in column '{treatment_col}'. "
                 f"Values present: {unique_vals}. "

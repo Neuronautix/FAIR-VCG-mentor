@@ -3,7 +3,10 @@ import logging
 import os
 from typing import Any, Dict
 
+from env_loader import load_local_env
+
 logger = logging.getLogger(__name__)
+load_local_env()
 
 # 32 MB — Anthropic's hard limit for native PDF input
 _PDF_MAX_BYTES = 32 * 1024 * 1024

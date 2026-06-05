@@ -116,10 +116,11 @@ export default function VCGPage() {
           clearInterval(pollRef.current!)
           pollRef.current = null
           setVCGStatus('failed')
-          setErrorMsg('VCG generation failed. Please reconfigure and try again.')
+          const reason = statusData.vcg_error || 'VCG generation failed. Please reconfigure and try again.'
+          setErrorMsg(reason)
           addChatMessage({
             role: 'agent',
-            content: 'VCG generation failed. Please check your configuration and try again.',
+            content: `VCG generation failed: ${reason}`,
             timestamp: new Date().toISOString(),
           })
         }
@@ -155,10 +156,11 @@ export default function VCGPage() {
         await startVCGGeneration(datasetId)
         startPolling(datasetId)
       }
-    } catch {
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail ?? err?.message ?? 'Sorry, something went wrong. Please try again.'
       addChatMessage({
         role: 'agent',
-        content: 'Sorry, something went wrong. Please try again.',
+        content: detail,
         timestamp: new Date().toISOString(),
       })
     } finally {
@@ -174,8 +176,19 @@ export default function VCGPage() {
       content: 'Configuration approved. Starting VCG generation…',
       timestamp: new Date().toISOString(),
     })
-    await startVCGGeneration(datasetId)
-    startPolling(datasetId)
+    try {
+      await startVCGGeneration(datasetId)
+      startPolling(datasetId)
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail ?? err?.message ?? 'VCG generation failed to start.'
+      setVCGStatus('failed')
+      setErrorMsg(detail)
+      addChatMessage({
+        role: 'agent',
+        content: `VCG generation could not start: ${detail}`,
+        timestamp: new Date().toISOString(),
+      })
+    }
   }
 
   if (!datasetId) {

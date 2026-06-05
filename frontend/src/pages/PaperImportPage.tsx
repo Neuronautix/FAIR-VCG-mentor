@@ -248,8 +248,8 @@ function VCGHintsCard({ hints }: { hints: PaperExtraction['vcg_hints'] }) {
           </Typography>
         )}
         <Alert severity="info" sx={{ mt: 2, fontSize: 12 }}>
-          These are suggestions based on the paper text. The VCG wizard lets you confirm or
-          override each column assignment when you have your CSV loaded.
+          These are suggestions based on the paper text. Use the generated CSV scaffold
+          as a realistic, reusable starting point for VCG-ready experimental data.
         </Alert>
       </CardContent>
     </Card>
@@ -658,7 +658,7 @@ function TemplateSuggestionsCard({
                         </Button>
                       </span>
                     </Tooltip>
-                    <Tooltip title="Download a blank CSV with the right column headers — fill it in with your experimental results and import it directly">
+                    <Tooltip title="Download a realistic FAIR/VCG-ready CSV scaffold with suggested columns and example rows — replace examples with observed data and import it directly">
                       <Button
                         size="small"
                         variant="contained"
@@ -668,7 +668,7 @@ function TemplateSuggestionsCard({
                         startIcon={downloadingCsvId === c.id ? <CircularProgress size={12} /> : <DownloadIcon sx={{ fontSize: 14 }} />}
                         sx={{ fontSize: 12, whiteSpace: 'nowrap' }}
                       >
-                        CSV Fields…
+                        Build CSV…
                       </Button>
                     </Tooltip>
                     <Tooltip title="Download a starter YAML schema — upload to Templates to reuse this configuration for future experiments">
@@ -711,7 +711,7 @@ function TemplateSuggestionsCard({
           fullWidth
           maxWidth="sm"
         >
-          <DialogTitle>Select template fields for CSV schema</DialogTitle>
+          <DialogTitle>Build a FAIR/VCG-ready CSV scaffold</DialogTitle>
           <DialogContent dividers>
             {error && (
               <Alert severity="warning" sx={{ mb: 1.5, fontSize: 12 }}>
@@ -721,7 +721,9 @@ function TemplateSuggestionsCard({
             {csvPickerCandidate && (
               <Stack spacing={1}>
                 <Typography variant="body2" color="text.secondary">
-                  Choose the template fields to include as CSV columns.
+                  Choose the reporting-template fields to include. VCG-critical columns,
+                  paper-derived outcomes, covariates, and example control/treatment rows
+                  are included in the exported CSV.
                 </Typography>
                 {csvPickerCandidate.csv_fields.map((field) => (
                   <Box
@@ -768,7 +770,7 @@ function TemplateSuggestionsCard({
                   : <DownloadIcon sx={{ fontSize: 14 }} />
               }
             >
-              Export CSV
+              Download CSV
             </Button>
           </DialogActions>
         </Dialog>
@@ -884,7 +886,7 @@ export default function PaperImportPage() {
         <Box>
           <Typography variant="h5">Paper Import</Typography>
           <Typography variant="body2" color="text.secondary">
-            Upload a publication PDF to extract metadata and pre-fill your FAIR schema and VCG configuration
+            Upload a publication PDF to extract metadata and build a reusable FAIR/VCG-ready CSV scaffold
           </Typography>
         </Box>
       </Stack>
@@ -1008,8 +1010,9 @@ export default function PaperImportPage() {
 
           {!datasetId && (
             <Alert severity="info" sx={{ mb: 2 }}>
-              No CSV dataset is loaded yet. The extraction is stored in this session — upload
-              your CSV and then return here to apply it.
+              No CSV dataset is loaded yet. That is fine: choose a suggested reporting
+              template below and download a FAIR/VCG-ready CSV scaffold derived from this
+              paper. Replace the example values with observed data, then import the CSV.
             </Alert>
           )}
 

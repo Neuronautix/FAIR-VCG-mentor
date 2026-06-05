@@ -13,6 +13,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
+from env_loader import load_local_env
 from csv_profiler import profile_csv
 from entity_detector import detect_entity_structure
 from export_engine import (
@@ -35,6 +36,8 @@ from template_store import (
     record_corrections,
     save_template,
 )
+
+load_local_env()
 
 app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 

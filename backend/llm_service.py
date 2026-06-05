@@ -21,7 +21,10 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 
+from env_loader import load_local_env
+
 logger = logging.getLogger(__name__)
+load_local_env()
 
 
 class LLMUnavailable(RuntimeError):

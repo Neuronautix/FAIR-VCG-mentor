@@ -67,6 +67,23 @@ export default function VCGResultsPage() {
   }, [])
 
   useEffect(() => {
+    if (!datasetId) return
+    let cancelled = false
+    getVCGStatus(datasetId)
+      .then(async (statusData) => {
+        if (cancelled) return
+        const status: string = statusData.vcg_status ?? statusData.status ?? statusData
+        setVCGStatus(status as any)
+        if (status === 'done') {
+          const results = await getVCGResults(datasetId)
+          if (!cancelled) setVCGResults(results)
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [datasetId, setVCGResults, setVCGStatus])
+
+  useEffect(() => {
     if (vcgStatus === 'running' && datasetId) {
       // Cycle loading text
       const textInterval = setInterval(() => {
@@ -106,6 +123,15 @@ export default function VCGResultsPage() {
       }
     }
   }, [vcgStatus, datasetId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (vcgStatus !== 'done' || !datasetId || vcgResults) return
+    let cancelled = false
+    getVCGResults(datasetId)
+      .then((results) => { if (!cancelled) setVCGResults(results) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [vcgStatus, datasetId, vcgResults, setVCGResults])
 
   // Redirect to /vcg if no status at all
   if (!vcgStatus) {
@@ -156,7 +182,7 @@ export default function VCGResultsPage() {
             </Button>
           }
         >
-          VCG generation failed. Please reconfigure and try again.
+          VCG generation failed. Please reconfigure and try again from the VCG page.
         </Alert>
       </Box>
     )

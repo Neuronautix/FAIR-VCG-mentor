@@ -31,6 +31,7 @@ from typing import Any, Dict, List
 
 from llm_service import LLMUnavailable, call_haiku, validate_columns_exist
 from vcg.constants import CONTROL_KEYWORDS
+from vcg.group_values import MISSING_GROUP_LABEL, MISSING_GROUP_VALUE, group_mask, normalize_group_value, visible_group_values
 from vocabulary import enum_array, enum_or_null, ensure_vocabulary, schema_prompt_block
 
 logger = logging.getLogger(__name__)
@@ -195,11 +196,22 @@ def _enforce_grounding(
 
     treatment_col = roles.get("treatment_col")
     if treatment_col and df is not None and treatment_col in df.columns:
-        actual_vals = {str(v) for v in df[treatment_col].dropna().astype(str).unique().tolist()}
+        series = df[treatment_col]
+        actual_vals = {str(v) for v in series.dropna().astype(str).unique().tolist()}
         cv = roles.get("control_value")
         tv = roles.get("treatment_value")
-        roles["control_value"] = str(cv) if (cv is not None and str(cv) in actual_vals) else None
-        roles["treatment_value"] = str(tv) if (tv is not None and str(tv) in actual_vals) else None
+        cv_norm = normalize_group_value(cv, series)
+        tv_norm = normalize_group_value(tv, series)
+        roles["control_value"] = (
+            cv_norm
+            if cv_norm == MISSING_GROUP_VALUE or (cv_norm is not None and str(cv_norm) in actual_vals)
+            else None
+        )
+        roles["treatment_value"] = (
+            tv_norm
+            if tv_norm == MISSING_GROUP_VALUE or (tv_norm is not None and str(tv_norm) in actual_vals)
+            else None
+        )
     else:
         roles["control_value"] = None
         roles["treatment_value"] = None
@@ -208,11 +220,23 @@ def _enforce_grounding(
     return raw
 
 
+def _available_treatment_values(session: Dict[str, Any], treatment_col: Any) -> List[str]:
+    df = session.get("df")
+    if not treatment_col or df is None or treatment_col not in df.columns:
+        return []
+    return visible_group_values(df[treatment_col])
+
+
 def _build_summary_markdown(roles: Dict[str, Any], cfg: Dict[str, Any]) -> str:
+    def fmt_group(value: Any) -> str:
+        if value == MISSING_GROUP_VALUE:
+            return MISSING_GROUP_LABEL
+        return str(value) if value else "_not set_"
+
     rows = [
         f"| Treatment column | `{roles.get('treatment_col') or '_not set_'}` |",
-        f"| Control group | `{roles.get('control_value') or '_not set_'}` |",
-        f"| Treatment group | `{roles.get('treatment_value') or '_not set_'}` |",
+        f"| Control group | `{fmt_group(roles.get('control_value'))}` |",
+        f"| Treatment group | `{fmt_group(roles.get('treatment_value'))}` |",
         f"| Outcomes | {', '.join(f'`{c}`' for c in roles.get('outcome_cols', [])) or '_none_'} |",
         f"| Covariates | {', '.join(f'`{c}`' for c in roles.get('covariate_cols', [])) or '_none_'} |",
         f"| Subjects to generate | {cfg.get('n_synthetic')} |",
@@ -281,10 +305,13 @@ def llm_turn(session: Dict[str, Any], user_message: str | None) -> Dict[str, Any
     if roles.get("treatment_col") and not roles.get("control_value"):
         df = session.get("df")
         if df is not None and roles["treatment_col"] in df.columns:
-            for v in df[roles["treatment_col"]].dropna().astype(str).unique().tolist():
+            series = df[roles["treatment_col"]]
+            for v in series.dropna().astype(str).unique().tolist():
                 if any(k in v.lower() for k in CONTROL_KEYWORDS):
                     roles["control_value"] = v
                     break
+            if not roles.get("control_value") and group_mask(series, MISSING_GROUP_VALUE).any():
+                roles["control_value"] = MISSING_GROUP_VALUE
 
     hitl_suggestion = None
     if ready:
@@ -293,8 +320,21 @@ def llm_turn(session: Dict[str, Any], user_message: str | None) -> Dict[str, Any
         missing = _missing_required(roles)
         if missing:
             ready = False
-            msg_text += (
-                "\n\nI still need: " + ", ".join(f"`{m}`" for m in missing) + "."
+            values = _available_treatment_values(session, roles.get("treatment_col"))
+            value_hint = (
+                "\n\nAvailable treatment/group values are: "
+                + ", ".join(f"`{v}`" for v in values)
+                + "."
+                if values
+                else ""
+            )
+            msg_text = (
+                "I cannot finish the VCG configuration yet because the structured "
+                "configuration is missing: "
+                + ", ".join(f"`{m}`" for m in missing)
+                + "."
+                + value_hint
+                + "\n\nPlease tell me the exact control group value as it appears in the CSV."
             )
         else:
             summary = _build_summary_markdown(roles, raw["vcg_config"])

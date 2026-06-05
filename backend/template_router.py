@@ -146,7 +146,7 @@ async def paper_template_suggestions(request: Request):
 
 @template_router.post("/api/templates/paper/generate-csv")
 async def generate_experiment_csv_endpoint(request: Request):
-    """Generate a blank experiment CSV pre-populated with template columns + paper hints."""
+    """Generate a FAIR/VCG-ready experiment CSV scaffold from template columns + paper hints."""
     body = await request.json()
     tid = body.get("template_id")
     extraction = body.get("extraction") or {}

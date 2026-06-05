@@ -212,20 +212,37 @@ def _dry_run_validate(
         else:
             roles = payload.get("column_roles", {})
             treatment_col = roles.get("treatment_col")
-            if treatment_col and treatment_col not in df.columns:
+            if not treatment_col:
+                errors.append("treatment_col is required.")
+            elif treatment_col not in df.columns:
                 errors.append(f"treatment_col '{treatment_col}' is not a real column.")
             elif treatment_col:
-                vals = {str(v) for v in df[treatment_col].dropna().unique().tolist()}
+                from vcg.group_values import MISSING_GROUP_VALUE, group_mask, normalize_group_value, visible_group_values
+                series = df[treatment_col]
+                vals = {str(v) for v in series.dropna().unique().tolist()}
                 cv = roles.get("control_value")
-                if cv is not None and str(cv) not in vals:
+                cv_norm = normalize_group_value(cv, series)
+                if cv_norm is None:
+                    shown = visible_group_values(series, 10)
+                    errors.append(
+                        f"control_value is required. Available values in '{treatment_col}': {shown}"
+                    )
+                elif cv_norm != MISSING_GROUP_VALUE and str(cv_norm) not in vals:
                     errors.append(
                         f"control_value '{cv}' was not found in '{treatment_col}'."
                     )
+                elif not group_mask(series, cv_norm).any():
+                    errors.append(
+                        f"control_value '{cv}' matched no rows in '{treatment_col}'."
+                    )
                 tv = roles.get("treatment_value")
-                if tv is not None and str(tv) not in vals:
+                tv_norm = normalize_group_value(tv, series)
+                if tv_norm is not None and tv_norm != MISSING_GROUP_VALUE and str(tv_norm) not in vals:
                     errors.append(
                         f"treatment_value '{tv}' was not found in '{treatment_col}'."
                     )
+            if not roles.get("outcome_cols"):
+                errors.append("At least one outcome column is required.")
             for c in roles.get("outcome_cols", []):
                 if c not in col_names:
                     errors.append(f"outcome_cols entry '{c}' is not a real column.")

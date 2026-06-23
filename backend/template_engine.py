@@ -72,6 +72,8 @@ META_SCHEMA: Dict[str, Any] = {
                 "id": {"type": "string"},
                 "arrive_section": {"type": "string"},
                 "prepare_section": {"type": "string"},
+                "eqipd_section": {"type": "string"},
+                "guidance": {"type": "string"},
                 "crosswalk": {"type": "array", "items": {"type": "string"}},
                 "severity": {"enum": ["high", "medium", "low"]},
             },
@@ -98,6 +100,8 @@ class RequiredMetadata:
     id: str
     arrive_section: Optional[str] = None
     prepare_section: Optional[str] = None
+    eqipd_section: Optional[str] = None
+    guidance: Optional[str] = None
     crosswalk: List[str] = field(default_factory=list)
     severity: str = "medium"
 
@@ -174,10 +178,15 @@ def _build_column(d: Dict[str, Any], default_required: bool) -> RequiredColumn:
 
 
 def _build_metadata(d: Dict[str, Any]) -> RequiredMetadata:
+    guidance = d.get("guidance")
+    if isinstance(guidance, str):
+        guidance = guidance.strip() or None
     return RequiredMetadata(
         id=d["id"],
         arrive_section=d.get("arrive_section"),
         prepare_section=d.get("prepare_section"),
+        eqipd_section=d.get("eqipd_section"),
+        guidance=guidance,
         crosswalk=list(d.get("crosswalk") or []),
         severity=d.get("severity", "medium"),
     )
@@ -489,6 +498,7 @@ def validate_against_template(
             "section": section,
             "arrive_section": field_spec.arrive_section,
             "prepare_section": None,
+            "eqipd_section": None,
             "field_id": field_spec.id,
             "status": status,
             "satisfied_by": satisfied_by,
@@ -508,9 +518,10 @@ def validate_against_template(
         field_satisfied[meta.id] = status == "satisfied"
         report.append({
             "standard": standard,
-            "section": meta.arrive_section or meta.prepare_section or "",
+            "section": meta.arrive_section or meta.prepare_section or meta.eqipd_section or "",
             "arrive_section": meta.arrive_section,
             "prepare_section": meta.prepare_section,
+            "eqipd_section": meta.eqipd_section,
             "field_id": meta.id,
             "status": status,
             "satisfied_by": satisfied_by,

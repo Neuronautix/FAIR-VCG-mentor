@@ -35,6 +35,7 @@ FAIR-vcg-mentor/
 │   │   ├── namo-nam-assay-v1.yaml  # NAMO NAM dose-response / functional assay (hand-crafted)
 │   │   ├── prepare-v1.yaml                  # PREPARE 15-topic planning checklist (Smith et al. 2018)
 │   │   ├── arrive-prepare-crosswalk-v1.yaml # ARRIVE 2.0 + PREPARE combined (conforms_to both)
+│   │   ├── eqipd-v1.yaml                     # EQIPD Quality System — 18 Core Requirements (LLM-fillable)
 │   │   └── user/             # User-uploaded custom templates
 │   └── vcg/
 │       ├── __init__.py
@@ -195,6 +196,8 @@ Downstream effects (when template assigned):
 **Templates conform to a hierarchical model.** `mnms-v1` declares `conforms_to: [arrive-v2]` and inherits ARRIVE's `required_metadata`. MNMS columns annotated with `arrive_section` satisfy specific ARRIVE fields automatically, so the conformance report cross-walks column presence against the reporting standard.
 
 **ARRIVE + PREPARE crosswalk.** `arrive-prepare-crosswalk-v1` declares `conforms_to: [arrive-v2, prepare-v1]` and inherits the full required-metadata sets of both parents. `RequiredMetadata` entries support two additional keys: `prepare_section` (Optional[str], the PREPARE topic label) and `crosswalk` (List[str], sibling field_ids that satisfy this entry when filled). Conformance entries produced by `validate_against_template` carry both `arrive_section` and `prepare_section` keys (either may be None) alongside the legacy `section` field. When any field_id listed in an entry's `crosswalk` is already satisfied, the engine flips that entry to `status: satisfied` and records `satisfied_by: {"metadata": <other_field_id>, "via_crosswalk": True}`. Crosswalks are directional — only entries that *declare* a crosswalk list are auto-satisfied; the reverse direction is not inferred.
+
+**EQIPD Quality System.** `eqipd-v1` is a standalone (no `conforms_to`) quality-system template: 18 Core Requirements modelled as `required_metadata`, each tagged with `eqipd_section` (one of the 7 EQIPD categories) and `guidance` (Optional[str], the verbatim Core Requirement text + a short drafting hint). It has no `required_columns` — it is filled entirely through the **Template Fill workspace**. `RequiredMetadata` therefore supports two further additive keys: `eqipd_section` and `guidance`. Conformance entries from `validate_against_template` now carry an `eqipd_section` key (None for non-EQIPD fields) and the legacy `section` falls back to `arrive_section → prepare_section → eqipd_section`. In the completion report, `build_completion_report` emits an `eqipd` section `kind` and uses `guidance` as the per-field `prompt` when there is no PREPARE planning prompt; `fields_to_llm_prompt` forwards `eqipd_section` + `guidance` to the model so `/template/llm-suggest` drafts grounded values for each requirement. The LLM-suggest system prompt is standard-agnostic (names the assigned template). EQIPD requires the LLM (`ANTHROPIC_API_KEY` / `llm_enabled()`); without a key the workspace still loads and fields can be filled manually.
 
 **Two compliance tiers per template:**
 - **Column-level** (`required_columns`): the CSV must contain matching columns.
@@ -486,5 +489,5 @@ docker-compose up --build
 - Templates are loaded once at app startup. New user uploads via `POST /api/templates` must call `load_templates()` again (or invalidate cache) to be picked up by `suggest_templates`.
 - `wizard-prefill` returns `template_locked: list[str]` and optionally `clustering_warning: str` when a template is assigned. The frontend reads these field names exactly; do not rename.
 - `vcg_results["template_analyses"]` is appended only when the assigned template declares `predefined_analyses`. Each entry has `{id, type, status, description, result, error}`.
-- `prepare_section`, `crosswalk`, and `satisfied_by.via_crosswalk` are additive — never remove these fields from conformance entries; frontend reads them by name.
+- `prepare_section`, `eqipd_section`, `crosswalk`, and `satisfied_by.via_crosswalk` are additive — never remove these fields from conformance entries; frontend reads them by name. `RequiredMetadata.guidance` is the inline drafting hint used by the completion report and LLM-suggest; PREPARE fields use the `prepare_` prefix, EQIPD fields use the `eqipd_` prefix.
 - PREPARE field_ids use the `prepare_` prefix (e.g. `prepare_humane_endpoints`). ARRIVE field_ids do not. Don't unify them — the engine distinguishes them by id.

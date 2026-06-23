@@ -495,13 +495,16 @@ async def template_llm_suggest(dataset_id: str, request: Request):
         },
     }
     system_prompt = (
-        "You are drafting candidate metadata values for a research-reporting "
-        "standard (ARRIVE 2.0 and/or PREPARE). Use the provided context "
-        "(existing metadata, paper summary, related sibling fields) to write "
-        "concise drafts. Every value MUST be at most two sentences and must "
-        "be grounded in the context — if there is no supporting information, "
-        "return an empty string with a low confidence score and explain why "
-        "in the rationale. Confidence is a number between 0 and 1."
+        f"You are drafting candidate metadata values for the '{tpl.name}' "
+        "research-reporting or quality standard (such as ARRIVE 2.0, PREPARE, "
+        "or the EQIPD Quality System). Each field carries a 'guidance' or "
+        "'prepare_prompt' describing exactly what it asks for — follow it. "
+        "Use the provided context (existing metadata, paper summary, related "
+        "sibling fields) to write concise drafts. Every value MUST be at most "
+        "two sentences and must be grounded in the context — if there is no "
+        "supporting information, return an empty string with a low confidence "
+        "score and explain why in the rationale. Confidence is a number "
+        "between 0 and 1."
     )
 
     # Batched prompts: chunk candidate ids into groups of _LLM_BATCH_SIZE.
@@ -608,6 +611,7 @@ async def template_extract_from_document(dataset_id: str, file: UploadFile = Fil
             "source": rec.get("source"),
             "arrive_section": rec.get("arrive_section"),
             "prepare_section": rec.get("prepare_section"),
+            "eqipd_section": rec.get("eqipd_section"),
             "severity": rec.get("severity"),
             "rationale": f"Extracted from supplementary document ({file.filename}).",
             "confidence": 0.7,

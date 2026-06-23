@@ -13,6 +13,7 @@ import VCGResultsPage from './pages/VCGResultsPage'
 import PaperImportPage from './pages/PaperImportPage'
 import TemplateSelectorPage from './pages/TemplateSelectorPage'
 import TemplateFillPage from './pages/TemplateFillPage'
+import NTSAnalyzerPage from './pages/NTSAnalyzerPage'
 
 const theme = createTheme({
   palette: {
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="vcg/wizard" element={<VCGWizardPage />} />
             <Route path="vcg/results" element={<VCGResultsPage />} />
             <Route path="paper-import" element={<PaperImportPage />} />
+            <Route path="nts-analyzer" element={<NTSAnalyzerPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

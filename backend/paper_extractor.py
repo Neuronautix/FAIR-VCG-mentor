@@ -312,59 +312,31 @@ def extract_paper_metadata(pdf_bytes: bytes, filename: str) -> Dict[str, Any]:
             f"the Anthropic API limit is 32 MB. Please use a smaller file."
         )
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not configured. "
-            "Set this environment variable to enable LLM-powered paper extraction."
-        )
+    from llm_service import call_haiku
 
-    try:
-        import anthropic
-    except ImportError:
-        raise RuntimeError(
-            "The 'anthropic' package is not installed. "
-            "Add it to requirements.txt and reinstall dependencies."
-        )
-
-    client = anthropic.Anthropic(api_key=api_key)
     pdf_b64 = base64.standard_b64encode(pdf_bytes).decode()
+    user_content = [
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": pdf_b64,
+            },
+        },
+        {"type": "text", "text": "Extract metadata from this scientific paper."},
+    ]
 
-    message = client.messages.create(
-        model=os.getenv("PAPER_EXTRACTION_MODEL", "claude-haiku-4-5-20251001"),
+    # Provider-agnostic: under the local (openai) provider the document block is
+    # converted to text locally inside call_haiku; under anthropic it is sent as
+    # a native PDF block.
+    result = call_haiku(
+        system_prompt=_SYSTEM_PROMPT,
+        tool=_EXTRACT_TOOL,
+        user_message=user_content,
+        model_env="PAPER_EXTRACTION_MODEL",
         max_tokens=4096,
-        # Cache the static system prompt — saves input tokens on repeated calls within
-        # the same server process (ephemeral cache TTL is ~5 min).
-        system=[
-            {
-                "type": "text",
-                "text": _SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        tools=[_EXTRACT_TOOL],
-        tool_choice={"type": "tool", "name": "extract_paper_metadata"},
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "application/pdf",
-                            "data": pdf_b64,
-                        },
-                    },
-                    {"type": "text", "text": "Extract metadata from this scientific paper."},
-                ],
-            }
-        ],
     )
-
-    # With tool_choice forced, content[0] is always the tool_use block.
-    # .input is already a parsed dict — no JSON parsing needed.
-    result = message.content[0].input
 
     # Defensive default-fill: ensure every PREPARE field is present even if the
     # model omits one. Same shape used for arrive — missing => {"value": None, "status": "missing"}.

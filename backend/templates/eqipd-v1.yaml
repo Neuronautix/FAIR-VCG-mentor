@@ -5,7 +5,7 @@ description: >
   The EQIPD (European Quality In Preclinical Data) Quality System is a flexible,
   research-led framework of 18 minimal Core Requirements grouped into 7 categories
   (Research team, Quality culture, Data integrity, Research processes, Continuous
-  performance, Sustainability). Unlike GLP, EQIPD is designed for academic and
+  improvement, Sustainability). Unlike GLP, EQIPD is designed for academic and
   discovery research units: it specifies WHAT must be in place without prescribing
   HOW. This template captures each Core Requirement as a dataset-/unit-level
   metadata field so that the Template Fill workspace (paper, document, or LLM
@@ -139,9 +139,9 @@ required_metadata:
       and maintained to be fit for purpose.
     severity: medium
 
-  # ── Continuous performance ─────────────────────────────────────────────────
+  # ── Continuous improvement ────────────────────────────────────────────────
   - id: eqipd_risk_assessment
-    eqipd_section: "Continuous performance"
+    eqipd_section: "Continuous improvement"
     crosswalk:
       - prepare_risk_assessment
     guidance: >
@@ -150,14 +150,14 @@ required_metadata:
       the risk assessment for this work and the mitigations adopted.
     severity: high
   - id: eqipd_incident_management
-    eqipd_section: "Continuous performance"
+    eqipd_section: "Continuous improvement"
     guidance: >
       Core Requirement 16 — Critical incidents and errors during study conduct must be
       analysed and appropriately managed. Describe how critical incidents and errors
       are captured, analysed and acted upon.
     severity: medium
   - id: eqipd_performance_monitoring
-    eqipd_section: "Continuous performance"
+    eqipd_section: "Continuous improvement"
     guidance: >
       Core Requirement 17 — An approach must be in place to monitor the performance of
       the EQIPD Quality System, and address identified issues. Describe how the Quality

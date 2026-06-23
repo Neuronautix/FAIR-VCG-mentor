@@ -61,7 +61,7 @@ Interactive API documentation (OpenAPI / Swagger) is at [http://localhost:8000/d
 - Seven standards-compliant export formats (see table below).
 
 **Template / reporting-standard layer**
-- Built-in templates for ARRIVE 2.0 (reporting standard, dataset-level metadata), MNMS for DVC cages (CSV column schema conforming to ARRIVE), and NAMO NAM assays (dose-response / functional-assay schema for organoid / organ-on-chip data).
+- Built-in templates for ARRIVE 2.0 (reporting standard, dataset-level metadata), MNMS for DVC cages (CSV column schema conforming to ARRIVE), NAMO NAM assays (dose-response / functional-assay schema for organoid / organ-on-chip data), PREPARE planning guidance, and the EQIPD Quality System (18 Core Requirements for preclinical research units).
 - Hierarchical conformance: child templates declare `conforms_to:` and inherit parent requirements. Column-level matches automatically satisfy reporting-standard sections.
 - Auto-assignment on upload at score ≥ 0.9 (0.7 × column match + 0.3 × metadata match). Below that, ranked suggestions are surfaced.
 - Conformance report cross-walks present columns against required reporting-standard sections; missing fields degrade the FAIR R score (0/1/3/5 pts) without blocking VCG generation.
@@ -183,7 +183,7 @@ FAIR-vcg-mentor/
 │   ├── template_engine.py    # Template loader, matcher, validator, conformance reporting
 │   ├── template_router.py    # FastAPI router — /api/templates/* endpoints
 │   ├── linkml_import.py      # LinkML schema → starter template converter
-│   ├── templates/            # arrive-v2, mnms-v1, namo-nam-assay-v1, plus user/
+│   ├── templates/            # arrive-v2, mnms-v1, namo-nam-assay-v1, prepare-v1, eqipd-v1, plus user/
 │   └── vcg/
 │       ├── vcg_router.py     # FastAPI router — all /api/vcg/* endpoints
 │       ├── orchestrator.py   # Rule-based chat engine (finite-state machine)

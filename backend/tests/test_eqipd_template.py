@@ -30,7 +30,7 @@ EXPECTED_SECTIONS = {
     "Quality culture": 3,
     "Data integrity": 4,
     "Research processes": 5,
-    "Continuous performance": 3,
+    "Continuous improvement": 3,
     "Sustainability": 1,
 }
 EXPECTED_TOTAL = sum(EXPECTED_SECTIONS.values())  # 18

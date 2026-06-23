@@ -39,8 +39,19 @@ def suggest_uris(
         for col in columns
     }
 
+    # KG-derived ontology IRI suggestions for recognised biological values
+    # (e.g. species → NCBITaxon, tissue → UBERON). Additive + best-effort: a KG
+    # failure must never break the (offline) URI suggestion.
+    ontology_suggestions: Dict[str, Any] = {}
+    try:
+        from knowledge.retriever import suggest_iris
+        ontology_suggestions = suggest_iris(columns)
+    except Exception:
+        ontology_suggestions = {}
+
     return {
         'dataset_slug': dataset_slug,
         'dataset_level': dataset_level,
         'column_uris': column_uris,
+        'ontology_suggestions': ontology_suggestions,
     }

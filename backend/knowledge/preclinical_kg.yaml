@@ -1,0 +1,160 @@
+# Preclinical metadata knowledge graph (curated, derived).
+#
+# Normalised from the precliniverse "Open Science Dataset Registration Wizard"
+# schema (see sources/precliniverse_schema_v3.json for the pinned origin and
+# attribution). This file is the runtime KG: ontology-bound entity concepts,
+# their FAIR-VCG semantic type, IRI scheme, keyword/value hooks, and embedded
+# controlled values. The retriever injects matched subgraphs into LLM grounding
+# and proposes ontology IRIs for recognised values. Fully offline; online IRI
+# resolution via `resolver` endpoints is opt-in (ENABLE_ONLINE_ENRICHMENT).
+version: 1.0.0
+source:
+  title: Open Science Dataset Registration Wizard
+  project: precliniverse/Dynamic_Metadata_form
+  schema_version: 3.0.0
+  url: https://github.com/precliniverse/Dynamic_Metadata_form
+
+# Ontology / identifier schemes: IRI base for offline minting + optional resolver.
+schemes:
+  NCBITaxon: {label: NCBI Taxonomy, iri_base: "http://purl.obolibrary.org/obo/NCBITaxon_", resolver: ols_ncbitaxon}
+  EFO: {label: Experimental Factor Ontology, iri_base: "http://www.ebi.ac.uk/efo/EFO_", resolver: ols_efo}
+  ChEBI: {label: Chemical Entities of Biological Interest, iri_base: "http://purl.obolibrary.org/obo/CHEBI_", resolver: ols_chebi}
+  DOID: {label: Human Disease Ontology, iri_base: "http://purl.obolibrary.org/obo/DOID_", resolver: ols_doid}
+  UBERON: {label: Uberon cross-species anatomy, iri_base: "http://purl.obolibrary.org/obo/UBERON_", resolver: ols_uberon}
+  PATO: {label: Phenotype And Trait Ontology, iri_base: "http://purl.obolibrary.org/obo/PATO_", resolver: null}
+  ORCID: {label: ORCID, iri_base: "https://orcid.org/", resolver: orcid}
+  ROR: {label: Research Organization Registry, iri_base: "https://ror.org/", resolver: ror}
+  CRediT: {label: CRediT contributor roles, iri_base: "https://credit.niso.org/contributor-roles/", resolver: null}
+
+# Entity concepts the KG can recognise in a dataset column.
+# match: keywords -> column name substrings; examples/value_set -> sample values.
+concepts:
+  - id: organism
+    label: Model organism / species
+    semantic_type: biological_descriptor
+    scheme: NCBITaxon
+    keywords: [species, organism, taxon, animal_model, model_organism]
+    examples: [Mus musculus, Rattus norvegicus, mouse, rat, zebrafish]
+    value_set: organism_presets
+  - id: strain
+    label: Genetic background / strain or line
+    semantic_type: biological_descriptor
+    scheme: EFO
+    keywords: [strain, background, genetic_background, line, substrain]
+    examples: ["C57BL/6J", "BALB/c", Wistar, "Sprague-Dawley", "129S1"]
+  - id: sex
+    label: Biological sex
+    semantic_type: biological_descriptor
+    scheme: PATO
+    keywords: [sex, gender]
+    value_set: sex_values
+  - id: gene
+    label: Gene
+    semantic_type: biological_descriptor
+    scheme: NCBITaxon
+    keywords: [gene, gene_symbol, locus, genotype]
+    examples: [Apoe, Trp53, Bdnf, "MGI:88057"]
+  - id: allele
+    label: Allele / mutation
+    semantic_type: biological_descriptor
+    scheme: EFO
+    keywords: [allele, mutation, variant, transgene]
+    examples: [Trp53tm1Tyj, knockout, "knock-in", "rs123456"]
+  - id: molecule
+    label: Molecule / chemical / drug treatment
+    semantic_type: experimental_condition
+    scheme: ChEBI
+    keywords: [compound, molecule, drug, chemical, treatment, dose, vehicle, agent, inhibitor]
+    examples: [Tamoxifen, Doxycycline, Metformin, vehicle, saline, DMSO]
+  - id: diet
+    label: Diet / feeding regimen
+    semantic_type: experimental_condition
+    scheme: EFO
+    keywords: [diet, feeding, feed, caloric, nutrition, regimen, chow]
+    examples: ["high fat diet", "caloric restriction", "western diet", "standard chow"]
+  - id: disease
+    label: Disease model
+    semantic_type: biological_descriptor
+    scheme: DOID
+    keywords: [disease, model, pathology, condition, indication]
+    examples: ["Alzheimer disease", "type 2 diabetes mellitus", obesity, glioblastoma]
+  - id: anatomy
+    label: Tissue / organ / anatomical structure
+    semantic_type: biological_descriptor
+    scheme: UBERON
+    keywords: [tissue, organ, anatomy, region, structure]
+    examples: [brain, hippocampus, liver, heart, kidney, cortex, plasma, serum]
+  - id: creator
+    label: Creator / contributor (person)
+    semantic_type: metadata_field
+    scheme: ORCID
+    keywords: [author, creator, contributor, investigator, operator, orcid, experimenter]
+    examples: []
+  - id: organization
+    label: Institution / publisher / affiliation
+    semantic_type: metadata_field
+    scheme: ROR
+    keywords: [institution, affiliation, organization, publisher, lab, laboratory, facility, center, ror]
+    examples: []
+  - id: related_identifier
+    label: Related identifier (DOI / PMID / URL)
+    semantic_type: identifier
+    scheme: null
+    keywords: [doi, pmid, reference, related_identifier, citation, accession, url, identifier]
+    examples: ["10.1038/", "PMID:", "https://"]
+  - id: publication_date
+    label: Publication / collection date or year
+    semantic_type: time_variable
+    scheme: null
+    keywords: [date, year, publication_year, timepoint, collected, created]
+    examples: []
+  - id: resource_type
+    label: Resource type
+    semantic_type: metadata_field
+    scheme: null
+    keywords: [resource_type, datatype, resource]
+    value_set: resource_types
+  - id: credit_role
+    label: Contributor role (CRediT)
+    semantic_type: metadata_field
+    scheme: CRediT
+    keywords: [role, credit, contribution]
+    value_set: credit_roles
+
+# Controlled value lists (with IRIs where known) — from the source vocabularies.
+values:
+  organism_presets:
+    - {label: Mus musculus, synonyms: [mouse], iri: "http://purl.obolibrary.org/obo/NCBITaxon_10090"}
+    - {label: Rattus norvegicus, synonyms: [rat], iri: "http://purl.obolibrary.org/obo/NCBITaxon_10116"}
+    - {label: Mesocricetus auratus, synonyms: [golden hamster, hamster], iri: "http://purl.obolibrary.org/obo/NCBITaxon_10036"}
+    - {label: Danio rerio, synonyms: [zebrafish], iri: "http://purl.obolibrary.org/obo/NCBITaxon_7955"}
+    - {label: Oryzias latipes, synonyms: [medaka], iri: "http://purl.obolibrary.org/obo/NCBITaxon_8090"}
+    - {label: Drosophila melanogaster, synonyms: [fruit fly, drosophila], iri: "http://purl.obolibrary.org/obo/NCBITaxon_7227"}
+    - {label: Caenorhabditis elegans, synonyms: [c. elegans, c elegans], iri: "http://purl.obolibrary.org/obo/NCBITaxon_6239"}
+    - {label: Xenopus tropicalis, synonyms: [xenopus], iri: "http://purl.obolibrary.org/obo/NCBITaxon_8364"}
+    - {label: Macaca mulatta, synonyms: [rhesus macaque, rhesus], iri: "http://purl.obolibrary.org/obo/NCBITaxon_9544"}
+    - {label: Macaca fascicularis, synonyms: [cynomolgus macaque, cynomolgus], iri: "http://purl.obolibrary.org/obo/NCBITaxon_9541"}
+    - {label: Callithrix jacchus, synonyms: [marmoset], iri: "http://purl.obolibrary.org/obo/NCBITaxon_9483"}
+    - {label: Papio anubis, synonyms: [baboon], iri: "http://purl.obolibrary.org/obo/NCBITaxon_9555"}
+    - {label: Chlorocebus sabaeus, synonyms: [vervet], iri: "http://purl.obolibrary.org/obo/NCBITaxon_60711"}
+    - {label: Oryctolagus cuniculus, synonyms: [rabbit], iri: "http://purl.obolibrary.org/obo/NCBITaxon_9986"}
+    - {label: Ochotona princeps, synonyms: [pika], iri: "http://purl.obolibrary.org/obo/NCBITaxon_9978"}
+  sex_values:
+    - {label: male, synonyms: [m], iri: "http://purl.obolibrary.org/obo/PATO_0000384"}
+    - {label: female, synonyms: [f], iri: "http://purl.obolibrary.org/obo/PATO_0000383"}
+  resource_types:
+    - {label: Dataset}
+    - {label: Collection}
+    - {label: Image}
+    - {label: Text}
+    - {label: Software}
+    - {label: PhysicalObject}
+    - {label: Model}
+    - {label: Workflow}
+  credit_roles:
+    - {label: Conceptualization, iri: "https://credit.niso.org/contributor-roles/conceptualization/"}
+    - {label: Data Curation, iri: "https://credit.niso.org/contributor-roles/data-curation/"}
+    - {label: Formal Analysis, iri: "https://credit.niso.org/contributor-roles/formal-analysis/"}
+    - {label: Investigation, iri: "https://credit.niso.org/contributor-roles/investigation/"}
+    - {label: Methodology, iri: "https://credit.niso.org/contributor-roles/methodology/"}
+    - {label: Writing - Original Draft, iri: "https://credit.niso.org/contributor-roles/writing-original-draft/"}

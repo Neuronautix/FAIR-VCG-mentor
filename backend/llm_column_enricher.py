@@ -135,13 +135,24 @@ def suggest_column_metadata(
         ]
     )
 
+    # Ground the model in the validated session vocabulary plus the preclinical
+    # knowledge graph (species/strain/molecule/tissue → semantic type + ontology).
+    extra_blocks = [{"text": schema_prompt_block(session)}]
+    try:
+        from knowledge.retriever import grounding_block
+        kg_text = grounding_block(target)
+        if kg_text:
+            extra_blocks.append({"text": kg_text})
+    except Exception:
+        pass
+
     raw = call_haiku(
         system_prompt=SYSTEM_PROMPT,
         tool=_build_tool(vocab),
         user_message=user_msg,
         model_env="COLUMN_ENRICHER_MODEL",
         max_tokens=2048,
-        extra_system_blocks=[{"text": schema_prompt_block(session)}],
+        extra_system_blocks=extra_blocks,
     )
 
     real_names = [c["name"] for c in columns]

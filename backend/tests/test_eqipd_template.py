@@ -20,6 +20,7 @@ from template_completion import (  # noqa: E402
 )
 from template_engine import (  # noqa: E402
     load_templates,
+    suggest_from_paper_extraction,
     validate_against_template,
 )
 
@@ -109,3 +110,101 @@ def test_llm_prompt_payload_includes_guidance(eqipd_tpl):
     for p in payloads:
         assert p["eqipd_section"] in EXPECTED_SECTIONS
         assert p["guidance"] and p["guidance"].strip()
+
+
+# ── Cross-standard crosswalk auto-satisfaction ───────────────────────────────
+
+# EQIPD requirement → an ARRIVE/PREPARE field (declared in eqipd-v1 crosswalks)
+# whose presence in shared session metadata should auto-satisfy it.
+CROSSWALK_CASES = {
+    "eqipd_legislation_compliance": "ethics_statement",
+    "eqipd_knowledge_claim_declaration": "prepare_clear_hypothesis",
+    "eqipd_personnel_training": "personnel_training",
+    "eqipd_protocols_available": "procedures_description",
+    "eqipd_risk_assessment": "prepare_risk_assessment",
+}
+
+
+def test_eqipd_autosatisfies_from_other_standard_metadata(eqipd_tpl):
+    """Filling an ARRIVE/PREPARE field in shared metadata auto-satisfies the
+    EQIPD requirement that crosswalks to it — even though those fields are not
+    declared in the standalone EQIPD template."""
+    metadata = {sibling: f"value for {sibling}" for sibling in CROSSWALK_CASES.values()}
+    report = _conformance(eqipd_tpl, metadata)
+    by_id = {e["field_id"]: e for e in report}
+
+    for eqipd_id, sibling in CROSSWALK_CASES.items():
+        entry = by_id[eqipd_id]
+        assert entry["status"] == "satisfied", f"{eqipd_id} should be satisfied"
+        assert entry["satisfied_by"] == {"metadata": sibling, "via_crosswalk": True}
+
+    # Completion report reflects the crosswalk + borrows the sibling's value.
+    completion = build_completion_report(eqipd_tpl, metadata, [], None, report)
+    cfields = {f["field_id"]: f for f in completion["fields"]}
+    f = cfields["eqipd_personnel_training"]
+    assert f["via_crosswalk"] is True
+    assert f["satisfied_by_field"] == "personnel_training"
+    assert f["value"] == "value for personnel_training"
+    assert f["source"] == "crosswalk"
+
+
+def test_eqipd_non_crosswalked_fields_stay_missing(eqipd_tpl):
+    """Requirements without a crosswalk are unaffected by sibling metadata."""
+    metadata = {"personnel_training": "Annual GLP refresher completed."}
+    report = _conformance(eqipd_tpl, metadata)
+    by_id = {e["field_id"]: e for e in report}
+    assert by_id["eqipd_personnel_training"]["status"] == "satisfied"
+    # A data-integrity requirement has no honest crosswalk → still missing.
+    assert by_id["eqipd_data_storage_security"]["status"] == "missing"
+
+
+# ── Paper-based auto-suggestion ──────────────────────────────────────────────
+
+
+def _eqipd_in(candidates):
+    return next((c for c in candidates if c["id"] == "eqipd-v1"), None)
+
+
+def test_eqipd_suggested_for_preclinical_paper(eqipd_tpl):
+    """EQIPD surfaces as a candidate for an in vivo paper, ranked below a true
+    reporting template (ARRIVE), and never auto-assigns (no required columns)."""
+    extraction = {
+        "arrive": {
+            "study_design": {"value": "Randomised controlled", "status": "found"},
+            "outcome_measures": {"value": "Tumour volume", "status": "found"},
+        },
+        "dataset_metadata": {
+            "species": "Mus musculus",
+            "keywords": ["reproducibility", "data integrity"],
+        },
+        "vcg_hints": {},
+    }
+    templates = load_templates(force=True)
+    candidates = suggest_from_paper_extraction(extraction, templates)
+    eqipd = _eqipd_in(candidates)
+    assert eqipd is not None, "EQIPD should be suggested for a preclinical paper"
+    assert eqipd["score"] > 0
+    arrive = next((c for c in candidates if c["id"] == "arrive-v2"), None)
+    assert arrive is not None
+    assert arrive["score"] >= eqipd["score"], "ARRIVE should outrank EQIPD here"
+
+
+def test_eqipd_quality_keywords_boost_score(eqipd_tpl):
+    """Explicit quality-system keywords raise EQIPD's score vs a bare paper."""
+    base = {
+        "arrive": {},
+        "dataset_metadata": {"species": "Rattus norvegicus", "keywords": []},
+        "vcg_hints": {},
+    }
+    boosted = {
+        "arrive": {},
+        "dataset_metadata": {
+            "species": "Rattus norvegicus",
+            "keywords": ["quality assurance", "SOP", "audit trail"],
+        },
+        "vcg_hints": {},
+    }
+    templates = load_templates(force=True)
+    base_score = _eqipd_in(suggest_from_paper_extraction(base, templates))["score"]
+    boosted_score = _eqipd_in(suggest_from_paper_extraction(boosted, templates))["score"]
+    assert boosted_score > base_score

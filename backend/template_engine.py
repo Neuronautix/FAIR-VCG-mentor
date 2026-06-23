@@ -543,7 +543,14 @@ def validate_against_template(
         if entry is None or entry["status"] == "satisfied":
             continue
         for other_id in meta.crosswalk:
-            if field_satisfied.get(other_id):
+            # A crosswalk target counts as satisfied either when it is a
+            # sibling field in this template that got satisfied, OR when it
+            # has a non-empty value in the dataset metadata. The latter lets a
+            # standalone standard (e.g. EQIPD) auto-satisfy from fields that
+            # belong to another standard the user already filled (ARRIVE /
+            # PREPARE), since session metadata is shared across templates.
+            crosswalk_value = metadata_dict.get(other_id)
+            if field_satisfied.get(other_id) or crosswalk_value not in (None, "", [], {}):
                 entry["status"] = "satisfied"
                 entry["satisfied_by"] = {
                     "metadata": other_id,
@@ -882,6 +889,25 @@ def _score_template_from_paper(
             reasons.append(f"cage/DVC keywords: {', '.join(matched[:2])}")
         if is_in_vivo:
             score += 0.1
+    elif "eqipd" in tid_lower:
+        # EQIPD is a unit-level quality system applicable to essentially any
+        # preclinical study, so it surfaces as a (low-ranked) candidate for any
+        # in vivo paper, with a boost when explicit quality/rigour signals are
+        # present. It has no required_columns, so it never auto-assigns on
+        # upload and never outranks a true reporting template here.
+        quality_kws = [
+            "quality", "rigou", "rigor", "reproducib", "robust", "sop",
+            "standard operating", "data integrity", "good research practice",
+            "glp", "audit", "eqipd", "preclinical", "quality assurance",
+            "quality control",
+        ]
+        matched = [k for k in keywords if any(qk in k for qk in quality_kws)]
+        if matched:
+            score += 0.4
+            reasons.append(f"quality-system keywords: {', '.join(matched[:2])}")
+        if is_in_vivo:
+            score += 0.15
+            reasons.append("preclinical in vivo study (EQIPD Quality System applicable)")
     elif "namo" in tid_lower:
         nam_kws = ["nam", "in vitro", "assay", "dose-response", "dose response",
                    "ic50", "cell line", "organoid", "microphysiological"]

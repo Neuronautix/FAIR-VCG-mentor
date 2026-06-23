@@ -47,6 +47,9 @@ required_metadata:
     severity: medium
   - id: eqipd_legislation_compliance
     eqipd_section: "Quality culture"
+    crosswalk:
+      - ethics_statement
+      - prepare_legislation_compliance
     guidance: >
       Core Requirement 4 — All activities must comply with relevant legislation and
       policies. Identify the applicable legislation/policies and how compliance is
@@ -93,6 +96,8 @@ required_metadata:
   # ── Research processes ─────────────────────────────────────────────────────
   - id: eqipd_knowledge_claim_declaration
     eqipd_section: "Research processes"
+    crosswalk:
+      - prepare_clear_hypothesis
     guidance: >
       Core Requirement 10 — Investigator must declare in advance whether a study is
       intended to inform a formal knowledge claim. State whether this study is
@@ -101,6 +106,9 @@ required_metadata:
   - id: eqipd_personnel_training
     eqipd_section: "Research processes"
     arrive_section: Personnel
+    crosswalk:
+      - personnel_training
+      - prepare_staff_competence
     guidance: >
       Core Requirement 11 — All personnel involved in research must have adequate
       training and competence to perform assigned tasks. Describe the training and
@@ -109,6 +117,8 @@ required_metadata:
   - id: eqipd_protocols_available
     eqipd_section: "Research processes"
     arrive_section: Experimental procedures
+    crosswalk:
+      - procedures_description
     guidance: >
       Core Requirement 12 — Protocols for experimental methods must be available.
       Identify where the protocols/SOPs for the experimental methods are documented
@@ -132,6 +142,8 @@ required_metadata:
   # ── Continuous performance ─────────────────────────────────────────────────
   - id: eqipd_risk_assessment
     eqipd_section: "Continuous performance"
+    crosswalk:
+      - prepare_risk_assessment
     guidance: >
       Core Requirement 15 — Risk assessment must be performed to identify factors
       affecting the generation, processing and reporting of research data. Summarise

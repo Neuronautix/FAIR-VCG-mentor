@@ -1010,38 +1010,43 @@ def generate_experiment_csv(
             col_names.append(header)
             role_by_header[header] = col.role
 
-    # A paper-only workflow may not have a dataset yet, so make sure the CSV is
-    # immediately usable for VCG generation even when the matched reporting
-    # template is mostly metadata-focused.
-    _append_unique(col_names, "subject_id", "subject_id")
-    role_by_header.setdefault("subject_id", "subject_id")
+    # When the caller explicitly selects a subset of template fields
+    # (include_field_ids), honour that selection exactly and skip the VCG
+    # scaffold columns below. The scaffold only makes sense for the default
+    # "give me a ready-to-use CSV" path where no specific fields were requested.
+    if include_field_ids is None:
+        # A paper-only workflow may not have a dataset yet, so make sure the CSV is
+        # immediately usable for VCG generation even when the matched reporting
+        # template is mostly metadata-focused.
+        _append_unique(col_names, "subject_id", "subject_id")
+        role_by_header.setdefault("subject_id", "subject_id")
 
-    treatment_header = _slug_header(vcg_hints.get("treatment_column_name"), "group")
-    _append_unique(col_names, treatment_header, "group")
-    role_by_header.setdefault(treatment_header, "treatment")
+        treatment_header = _slug_header(vcg_hints.get("treatment_column_name"), "group")
+        _append_unique(col_names, treatment_header, "group")
+        role_by_header.setdefault(treatment_header, "treatment")
 
-    if meta.get("species"):
-        _append_unique(col_names, "species", "species")
-        role_by_header.setdefault("species", "covariate")
+        if meta.get("species"):
+            _append_unique(col_names, "species", "species")
+            role_by_header.setdefault("species", "covariate")
 
-    for hint in vcg_hints.get("covariate_columns") or []:
-        header = _slug_header(hint, "covariate")
-        _append_unique(col_names, header, "covariate")
-        role_by_header.setdefault(header, "covariate")
+        for hint in vcg_hints.get("covariate_columns") or []:
+            header = _slug_header(hint, "covariate")
+            _append_unique(col_names, header, "covariate")
+            role_by_header.setdefault(header, "covariate")
 
-    outcome_hints = list(vcg_hints.get("outcome_columns") or [])
-    if not outcome_hints:
-        outcome_hints = ["primary_outcome"]
-    for hint in outcome_hints:
-        header = _slug_header(hint, "outcome")
-        _append_unique(col_names, header, "outcome")
-        role_by_header.setdefault(header, "outcome")
+        outcome_hints = list(vcg_hints.get("outcome_columns") or [])
+        if not outcome_hints:
+            outcome_hints = ["primary_outcome"]
+        for hint in outcome_hints:
+            header = _slug_header(hint, "outcome")
+            _append_unique(col_names, header, "outcome")
+            role_by_header.setdefault(header, "outcome")
 
-    # These fields make the CSV easier to reuse, audit, and import into the
-    # metadata wizard without turning the file into a non-standard commented CSV.
-    for header in ["outcome_unit", "timepoint", "experimental_unit", "source_paper_doi", "notes"]:
-        _append_unique(col_names, header, header)
-        role_by_header.setdefault(header, "metadata")
+        # These fields make the CSV easier to reuse, audit, and import into the
+        # metadata wizard without turning the file into a non-standard commented CSV.
+        for header in ["outcome_unit", "timepoint", "experimental_unit", "source_paper_doi", "notes"]:
+            _append_unique(col_names, header, header)
+            role_by_header.setdefault(header, "metadata")
 
     # Locate treatment column by name hint or role
     treatment_col_hint = vcg_hints.get("treatment_column_name") or ""

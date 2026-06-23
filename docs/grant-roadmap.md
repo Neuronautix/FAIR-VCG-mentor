@@ -46,10 +46,10 @@ dissemination package.
 | Milestone | Status | Where |
 |-----------|--------|-------|
 | **B** — provider-agnostic LLM layer | ✅ merged | PR #15 (provider switch, structured-output local path, local PDF→text, `provider_info()`, CrossRef gated) |
-| **B** — local deployment (docker `local-llm` profile, setup docs, live-endpoint smoke) | 🛠 in progress | branch `claude/grant-local-llm-deploy` |
-| **C** — masked-metadata validation harness + scorecard | 🔍 in review | PR #16 (`backend/eval/`; deterministic baseline: 100% raw / 54.5% blind, 0% hallucination) |
-| **A** — preclinical metadata knowledge graph + grounding | 🔍 in review | PR #17 (`backend/knowledge/`, from the precliniverse schema; grounding + offline ontology IRIs) |
-| **A↔C bridge** — KG-grounded eval predictor (quantifies blind-mode lift) | 🛠 in progress | branch `claude/grant-kg-eval` |
+| **B** — local deployment (docker `local-llm` profile, setup docs, live-endpoint smoke) | 🔍 in review | PR #18 |
+| **C** — masked-metadata validation harness + scorecard | ✅ merged | PR #16 (`backend/eval/`; deterministic baseline: 100% raw / 54.5% blind, 0% hallucination) |
+| **A** — preclinical metadata knowledge graph + grounding | ✅ merged | PR #17 (`backend/knowledge/`, from the precliniverse schema; grounding + offline ontology IRIs) |
+| **A↔C bridge** — KG-grounded eval predictor (quantifies blind-mode lift) | 🔍 in review | PR #19 — **+50 pp blind-mode accuracy (0.25 → 0.75) on the synthetic set, 0% hallucination** |
 | **D** — integration tests on academic datasets | ⏳ not started | needs a real (anonymisable) UNIL dataset + a live local endpoint |
 | **E** — proof-of-concept VCG report (one use case) | ⏳ not started | runs the existing VCG engine on the curated historical-control dataset |
 | **F** — dissemination package | ⏳ not started | bundles the local-llm profile + scorecard + workshop material |

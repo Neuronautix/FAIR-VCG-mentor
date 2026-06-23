@@ -371,6 +371,7 @@ export interface TemplateCompletionField {
   label: string
   arrive_section: string | null
   prepare_section: string | null
+  eqipd_section: string | null
   severity: 'high' | 'medium' | 'low'
   status: 'satisfied' | 'partial' | 'missing'
   via_crosswalk: boolean
@@ -398,7 +399,7 @@ export interface TemplateCompletionSeverityRow {
 
 export interface TemplateCompletionSection {
   label: string
-  kind: 'arrive' | 'prepare'
+  kind: 'arrive' | 'prepare' | 'eqipd'
   total: number
   satisfied: number
   fields: string[]

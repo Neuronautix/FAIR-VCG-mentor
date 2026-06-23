@@ -72,6 +72,8 @@ META_SCHEMA: Dict[str, Any] = {
                 "id": {"type": "string"},
                 "arrive_section": {"type": "string"},
                 "prepare_section": {"type": "string"},
+                "eqipd_section": {"type": "string"},
+                "guidance": {"type": "string"},
                 "crosswalk": {"type": "array", "items": {"type": "string"}},
                 "severity": {"enum": ["high", "medium", "low"]},
             },
@@ -98,6 +100,8 @@ class RequiredMetadata:
     id: str
     arrive_section: Optional[str] = None
     prepare_section: Optional[str] = None
+    eqipd_section: Optional[str] = None
+    guidance: Optional[str] = None
     crosswalk: List[str] = field(default_factory=list)
     severity: str = "medium"
 
@@ -174,10 +178,15 @@ def _build_column(d: Dict[str, Any], default_required: bool) -> RequiredColumn:
 
 
 def _build_metadata(d: Dict[str, Any]) -> RequiredMetadata:
+    guidance = d.get("guidance")
+    if isinstance(guidance, str):
+        guidance = guidance.strip() or None
     return RequiredMetadata(
         id=d["id"],
         arrive_section=d.get("arrive_section"),
         prepare_section=d.get("prepare_section"),
+        eqipd_section=d.get("eqipd_section"),
+        guidance=guidance,
         crosswalk=list(d.get("crosswalk") or []),
         severity=d.get("severity", "medium"),
     )
@@ -489,6 +498,7 @@ def validate_against_template(
             "section": section,
             "arrive_section": field_spec.arrive_section,
             "prepare_section": None,
+            "eqipd_section": None,
             "field_id": field_spec.id,
             "status": status,
             "satisfied_by": satisfied_by,
@@ -508,9 +518,10 @@ def validate_against_template(
         field_satisfied[meta.id] = status == "satisfied"
         report.append({
             "standard": standard,
-            "section": meta.arrive_section or meta.prepare_section or "",
+            "section": meta.arrive_section or meta.prepare_section or meta.eqipd_section or "",
             "arrive_section": meta.arrive_section,
             "prepare_section": meta.prepare_section,
+            "eqipd_section": meta.eqipd_section,
             "field_id": meta.id,
             "status": status,
             "satisfied_by": satisfied_by,
@@ -532,7 +543,14 @@ def validate_against_template(
         if entry is None or entry["status"] == "satisfied":
             continue
         for other_id in meta.crosswalk:
-            if field_satisfied.get(other_id):
+            # A crosswalk target counts as satisfied either when it is a
+            # sibling field in this template that got satisfied, OR when it
+            # has a non-empty value in the dataset metadata. The latter lets a
+            # standalone standard (e.g. EQIPD) auto-satisfy from fields that
+            # belong to another standard the user already filled (ARRIVE /
+            # PREPARE), since session metadata is shared across templates.
+            crosswalk_value = metadata_dict.get(other_id)
+            if field_satisfied.get(other_id) or crosswalk_value not in (None, "", [], {}):
                 entry["status"] = "satisfied"
                 entry["satisfied_by"] = {
                     "metadata": other_id,
@@ -871,6 +889,25 @@ def _score_template_from_paper(
             reasons.append(f"cage/DVC keywords: {', '.join(matched[:2])}")
         if is_in_vivo:
             score += 0.1
+    elif "eqipd" in tid_lower:
+        # EQIPD is a unit-level quality system applicable to essentially any
+        # preclinical study, so it surfaces as a (low-ranked) candidate for any
+        # in vivo paper, with a boost when explicit quality/rigour signals are
+        # present. It has no required_columns, so it never auto-assigns on
+        # upload and never outranks a true reporting template here.
+        quality_kws = [
+            "quality", "rigou", "rigor", "reproducib", "robust", "sop",
+            "standard operating", "data integrity", "good research practice",
+            "glp", "audit", "eqipd", "preclinical", "quality assurance",
+            "quality control",
+        ]
+        matched = [k for k in keywords if any(qk in k for qk in quality_kws)]
+        if matched:
+            score += 0.4
+            reasons.append(f"quality-system keywords: {', '.join(matched[:2])}")
+        if is_in_vivo:
+            score += 0.15
+            reasons.append("preclinical in vivo study (EQIPD Quality System applicable)")
     elif "namo" in tid_lower:
         nam_kws = ["nam", "in vitro", "assay", "dose-response", "dose response",
                    "ic50", "cell line", "organoid", "microphysiological"]
@@ -973,38 +1010,43 @@ def generate_experiment_csv(
             col_names.append(header)
             role_by_header[header] = col.role
 
-    # A paper-only workflow may not have a dataset yet, so make sure the CSV is
-    # immediately usable for VCG generation even when the matched reporting
-    # template is mostly metadata-focused.
-    _append_unique(col_names, "subject_id", "subject_id")
-    role_by_header.setdefault("subject_id", "subject_id")
+    # When the caller explicitly selects a subset of template fields
+    # (include_field_ids), honour that selection exactly and skip the VCG
+    # scaffold columns below. The scaffold only makes sense for the default
+    # "give me a ready-to-use CSV" path where no specific fields were requested.
+    if include_field_ids is None:
+        # A paper-only workflow may not have a dataset yet, so make sure the CSV is
+        # immediately usable for VCG generation even when the matched reporting
+        # template is mostly metadata-focused.
+        _append_unique(col_names, "subject_id", "subject_id")
+        role_by_header.setdefault("subject_id", "subject_id")
 
-    treatment_header = _slug_header(vcg_hints.get("treatment_column_name"), "group")
-    _append_unique(col_names, treatment_header, "group")
-    role_by_header.setdefault(treatment_header, "treatment")
+        treatment_header = _slug_header(vcg_hints.get("treatment_column_name"), "group")
+        _append_unique(col_names, treatment_header, "group")
+        role_by_header.setdefault(treatment_header, "treatment")
 
-    if meta.get("species"):
-        _append_unique(col_names, "species", "species")
-        role_by_header.setdefault("species", "covariate")
+        if meta.get("species"):
+            _append_unique(col_names, "species", "species")
+            role_by_header.setdefault("species", "covariate")
 
-    for hint in vcg_hints.get("covariate_columns") or []:
-        header = _slug_header(hint, "covariate")
-        _append_unique(col_names, header, "covariate")
-        role_by_header.setdefault(header, "covariate")
+        for hint in vcg_hints.get("covariate_columns") or []:
+            header = _slug_header(hint, "covariate")
+            _append_unique(col_names, header, "covariate")
+            role_by_header.setdefault(header, "covariate")
 
-    outcome_hints = list(vcg_hints.get("outcome_columns") or [])
-    if not outcome_hints:
-        outcome_hints = ["primary_outcome"]
-    for hint in outcome_hints:
-        header = _slug_header(hint, "outcome")
-        _append_unique(col_names, header, "outcome")
-        role_by_header.setdefault(header, "outcome")
+        outcome_hints = list(vcg_hints.get("outcome_columns") or [])
+        if not outcome_hints:
+            outcome_hints = ["primary_outcome"]
+        for hint in outcome_hints:
+            header = _slug_header(hint, "outcome")
+            _append_unique(col_names, header, "outcome")
+            role_by_header.setdefault(header, "outcome")
 
-    # These fields make the CSV easier to reuse, audit, and import into the
-    # metadata wizard without turning the file into a non-standard commented CSV.
-    for header in ["outcome_unit", "timepoint", "experimental_unit", "source_paper_doi", "notes"]:
-        _append_unique(col_names, header, header)
-        role_by_header.setdefault(header, "metadata")
+        # These fields make the CSV easier to reuse, audit, and import into the
+        # metadata wizard without turning the file into a non-standard commented CSV.
+        for header in ["outcome_unit", "timepoint", "experimental_unit", "source_paper_doi", "notes"]:
+            _append_unique(col_names, header, header)
+            role_by_header.setdefault(header, "metadata")
 
     # Locate treatment column by name hint or role
     treatment_col_hint = vcg_hints.get("treatment_column_name") or ""

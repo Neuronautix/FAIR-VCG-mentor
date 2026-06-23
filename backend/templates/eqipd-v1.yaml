@@ -1,0 +1,178 @@
+id: eqipd-v1
+name: EQIPD Quality System
+version: 1.0.0
+description: >
+  The EQIPD (European Quality In Preclinical Data) Quality System is a flexible,
+  research-led framework of 18 minimal Core Requirements grouped into 7 categories
+  (Research team, Quality culture, Data integrity, Research processes, Continuous
+  performance, Sustainability). Unlike GLP, EQIPD is designed for academic and
+  discovery research units: it specifies WHAT must be in place without prescribing
+  HOW. This template captures each Core Requirement as a dataset-/unit-level
+  metadata field so that the Template Fill workspace (paper, document, or LLM
+  assistance) can help an investigator declare how their unit satisfies it.
+  Reference: Vollert et al., "The EQIPD framework for rigor in the design,
+  conduct, analysis and documentation of animal and non-animal laboratory
+  experiments" (2024).
+identifier: https://quality-preclinical-data.eu/
+ontology:
+  iri: https://quality-preclinical-data.eu/eqipd/
+  prefix: eqipd
+
+required_columns: []
+optional_columns: []
+
+required_metadata:
+  # ── Research team ──────────────────────────────────────────────────────────
+  - id: eqipd_process_owner
+    eqipd_section: "Research team"
+    guidance: >
+      Core Requirement 1 — Process owner for the Quality System must be identified.
+      Name the person accountable for maintaining and improving the unit's Quality
+      System, and describe how that ownership is recorded.
+    severity: medium
+  - id: eqipd_communication_process
+    eqipd_section: "Research team"
+    guidance: >
+      Core Requirement 2 — Communication process must be in place. Describe how
+      quality-relevant information (decisions, changes, issues) is communicated
+      within the research unit.
+    severity: medium
+
+  # ── Quality culture ────────────────────────────────────────────────────────
+  - id: eqipd_quality_objectives
+    eqipd_section: "Quality culture"
+    guidance: >
+      Core Requirement 3 — The research unit must have defined quality objectives.
+      State the unit's quality objectives and how progress against them is reviewed.
+    severity: medium
+  - id: eqipd_legislation_compliance
+    eqipd_section: "Quality culture"
+    crosswalk:
+      - ethics_statement
+      - prepare_legislation_compliance
+    guidance: >
+      Core Requirement 4 — All activities must comply with relevant legislation and
+      policies. Identify the applicable legislation/policies and how compliance is
+      assured.
+    severity: high
+  - id: eqipd_misconduct_procedure
+    eqipd_section: "Quality culture"
+    guidance: >
+      Core Requirement 5 — The research unit must have a procedure to act upon
+      concerns of potential misconduct. Describe the procedure for raising and
+      handling concerns about potential research misconduct.
+    severity: medium
+
+  # ── Data integrity ─────────────────────────────────────────────────────────
+  - id: eqipd_data_record_documentation
+    eqipd_section: "Data integrity"
+    guidance: >
+      Core Requirement 6 — Generation, handling and changes to data records must be
+      documented. Explain how the creation, processing and modification of data
+      records is documented (audit trail, versioning, lab notebooks).
+    severity: high
+  - id: eqipd_data_storage_security
+    eqipd_section: "Data integrity"
+    guidance: >
+      Core Requirement 7 — Data storage must be secured at least for as long as
+      required by legal, contractual or other obligations or business needs. Describe
+      where and how long data are stored, and the security/retention controls used.
+    severity: high
+  - id: eqipd_outcome_traceability
+    eqipd_section: "Data integrity"
+    guidance: >
+      Core Requirement 8 — Reported research outcomes must be traceable to
+      experimental data. Describe how reported results can be traced back to the raw
+      experimental data they are derived from.
+    severity: high
+  - id: eqipd_repetition_disclosure
+    eqipd_section: "Data integrity"
+    guidance: >
+      Core Requirement 9 — Reported data must disclose all repetitions of a study, an
+      experiment, or a test regardless of the outcome. Describe how all replicates and
+      repeated experiments (including failed/negative ones) are recorded and disclosed.
+    severity: high
+
+  # ── Research processes ─────────────────────────────────────────────────────
+  - id: eqipd_knowledge_claim_declaration
+    eqipd_section: "Research processes"
+    crosswalk:
+      - prepare_clear_hypothesis
+    guidance: >
+      Core Requirement 10 — Investigator must declare in advance whether a study is
+      intended to inform a formal knowledge claim. State whether this study is
+      exploratory or confirmatory and how that intent was declared before the work.
+    severity: high
+  - id: eqipd_personnel_training
+    eqipd_section: "Research processes"
+    arrive_section: Personnel
+    crosswalk:
+      - personnel_training
+      - prepare_staff_competence
+    guidance: >
+      Core Requirement 11 — All personnel involved in research must have adequate
+      training and competence to perform assigned tasks. Describe the training and
+      competence records for personnel performing the procedures.
+    severity: high
+  - id: eqipd_protocols_available
+    eqipd_section: "Research processes"
+    arrive_section: Experimental procedures
+    crosswalk:
+      - procedures_description
+    guidance: >
+      Core Requirement 12 — Protocols for experimental methods must be available.
+      Identify where the protocols/SOPs for the experimental methods are documented
+      and accessible.
+    severity: high
+  - id: eqipd_sample_material_handling
+    eqipd_section: "Research processes"
+    guidance: >
+      Core Requirement 13 — Adequate handling and storage of samples and materials
+      must be ensured. Describe how samples, reagents and materials are handled,
+      labelled and stored.
+    severity: medium
+  - id: eqipd_equipment_suitability
+    eqipd_section: "Research processes"
+    guidance: >
+      Core Requirement 14 — Research equipment and tools must be suitable for intended
+      use and ensure data integrity. Describe how equipment is qualified, calibrated
+      and maintained to be fit for purpose.
+    severity: medium
+
+  # ── Continuous performance ─────────────────────────────────────────────────
+  - id: eqipd_risk_assessment
+    eqipd_section: "Continuous performance"
+    crosswalk:
+      - prepare_risk_assessment
+    guidance: >
+      Core Requirement 15 — Risk assessment must be performed to identify factors
+      affecting the generation, processing and reporting of research data. Summarise
+      the risk assessment for this work and the mitigations adopted.
+    severity: high
+  - id: eqipd_incident_management
+    eqipd_section: "Continuous performance"
+    guidance: >
+      Core Requirement 16 — Critical incidents and errors during study conduct must be
+      analysed and appropriately managed. Describe how critical incidents and errors
+      are captured, analysed and acted upon.
+    severity: medium
+  - id: eqipd_performance_monitoring
+    eqipd_section: "Continuous performance"
+    guidance: >
+      Core Requirement 17 — An approach must be in place to monitor the performance of
+      the EQIPD Quality System, and address identified issues. Describe how the Quality
+      System itself is monitored and improved (audits, reviews, corrective actions).
+    severity: medium
+
+  # ── Sustainability ─────────────────────────────────────────────────────────
+  - id: eqipd_sustainability_resources
+    eqipd_section: "Sustainability"
+    guidance: >
+      Core Requirement 18 — Resources for sustaining the EQIPD Quality System must be
+      available. Describe the resources (people, time, budget, tools) committed to
+      keeping the Quality System running.
+    severity: medium
+
+fair_bonus:
+  dimension: R
+  max_points: 5

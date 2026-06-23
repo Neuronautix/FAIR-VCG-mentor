@@ -161,7 +161,8 @@ function StatusIcon({ field }: { field: TemplateCompletionField }) {
 function SectionChips({ field }: { field: TemplateCompletionField }) {
   const hasArrive = !!field.arrive_section
   const hasPrepare = !!field.prepare_section
-  if (!hasArrive && !hasPrepare) {
+  const hasEqipd = !!field.eqipd_section
+  if (!hasArrive && !hasPrepare && !hasEqipd) {
     return (
       <Typography variant="caption" color="text.secondary">
         —
@@ -170,6 +171,14 @@ function SectionChips({ field }: { field: TemplateCompletionField }) {
   }
   return (
     <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', minWidth: 0 }}>
+      {hasEqipd && (
+        <Chip
+          label={`EQIPD: ${field.eqipd_section}`}
+          size="small"
+          color="success"
+          sx={SECTION_CHIP_SX}
+        />
+      )}
       {hasPrepare && (
         <Chip
           label={`PREPARE: ${field.prepare_section}`}
@@ -327,9 +336,9 @@ export default function TemplateFillPage() {
       if (sortKey === 'status') {
         return STATUS_RANK[a.status] - STATUS_RANK[b.status]
       }
-      // section: arrive first, then prepare, then label
-      const aSec = a.arrive_section ?? a.prepare_section ?? '~'
-      const bSec = b.arrive_section ?? b.prepare_section ?? '~'
+      // section: arrive first, then prepare, then eqipd, then label
+      const aSec = a.arrive_section ?? a.prepare_section ?? a.eqipd_section ?? '~'
+      const bSec = b.arrive_section ?? b.prepare_section ?? b.eqipd_section ?? '~'
       const aKind = a.arrive_section ? 0 : 1
       const bKind = b.arrive_section ? 0 : 1
       if (aKind !== bKind) return aKind - bKind
@@ -345,6 +354,10 @@ export default function TemplateFillPage() {
   )
   const prepareSections = useMemo(
     () => templateCompletion?.by_section.filter((s) => s.kind === 'prepare') ?? [],
+    [templateCompletion],
+  )
+  const eqipdSections = useMemo(
+    () => templateCompletion?.by_section.filter((s) => s.kind === 'eqipd') ?? [],
     [templateCompletion],
   )
 
@@ -717,6 +730,9 @@ export default function TemplateFillPage() {
             {[
               { label: 'ARRIVE 2.0', sections: arriveSections, color: 'info' as const },
               { label: 'PREPARE', sections: prepareSections, color: 'warning' as const },
+              ...(eqipdSections.length > 0
+                ? [{ label: 'EQIPD', sections: eqipdSections, color: 'success' as const }]
+                : []),
             ].map((group) => (
               <Grid item xs={12} md={6} key={group.label}>
                 <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>

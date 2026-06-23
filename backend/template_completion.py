@@ -227,7 +227,10 @@ def build_completion_report(
 
         prompt: Optional[str] = None
         if status != "satisfied":
-            prompt = PREPARE_PROMPTS.get(fid)
+            # PREPARE fields carry their planning prompt from the canonical
+            # prompts table; other standards (e.g. EQIPD) carry the Core
+            # Requirement text inline on the metadata spec as ``guidance``.
+            prompt = PREPARE_PROMPTS.get(fid) or meta_spec.guidance
 
         paper_hint: Optional[str] = None
         if status != "satisfied":
@@ -238,6 +241,7 @@ def build_completion_report(
             "label": fid.replace("_", " ").title(),
             "arrive_section": meta_spec.arrive_section,
             "prepare_section": meta_spec.prepare_section,
+            "eqipd_section": meta_spec.eqipd_section,
             "severity": meta_spec.severity,
             "status": status,
             "via_crosswalk": via_crosswalk,
@@ -276,6 +280,7 @@ def build_completion_report(
         for kind, label in (
             ("arrive", meta_spec.arrive_section),
             ("prepare", meta_spec.prepare_section),
+            ("eqipd", meta_spec.eqipd_section),
         ):
             if not label:
                 continue
@@ -361,6 +366,7 @@ def fill_from_paper_extraction(
             "source": source,
             "arrive_section": req.arrive_section,
             "prepare_section": req.prepare_section,
+            "eqipd_section": req.eqipd_section,
             "severity": req.severity,
         })
 
@@ -425,8 +431,12 @@ def fields_to_llm_prompt(
             "label": fid.replace("_", " ").title(),
             "arrive_section": req.arrive_section,
             "prepare_section": req.prepare_section,
+            "eqipd_section": req.eqipd_section,
             "severity": req.severity,
             "prepare_prompt": PREPARE_PROMPTS.get(fid),
+            # Inline guidance (e.g. an EQIPD Core Requirement) gives the model
+            # the field's intent when there is no PREPARE planning prompt.
+            "guidance": req.guidance,
             "context_keys": context_keys,
             "existing_values": existing_values,
             "paper_hint": paper_hint,

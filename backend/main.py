@@ -377,8 +377,8 @@ async def get_llm_fair_score(dataset_id: str):
 
 @app.get("/api/llm/status")
 async def llm_status():
-    from llm_service import llm_enabled
-    return {"enabled": llm_enabled()}
+    from llm_service import provider_info
+    return provider_info()
 
 
 @app.get("/api/hitl/{dataset_id}/suggestions")
@@ -692,8 +692,21 @@ async def stream_paper_extract(file: UploadFile = File(...)):
     )
 
 
+def _online_enrichment_enabled() -> bool:
+    """CrossRef DOI lookup is the only non-LLM outbound call; it is OFF by default
+    so the app runs fully offline. Set ENABLE_ONLINE_ENRICHMENT=true to opt in."""
+    return (os.getenv("ENABLE_ONLINE_ENRICHMENT") or "").strip().lower() in ("1", "true", "yes", "on")
+
+
 @app.post("/api/paper/doi")
 async def fetch_paper_by_doi(body: Dict[str, Any]):
+    if not _online_enrichment_enabled():
+        raise HTTPException(
+            503,
+            "Online DOI lookup (CrossRef) is disabled. This deployment runs "
+            "offline by default; set ENABLE_ONLINE_ENRICHMENT=true to enable it, "
+            "or upload the paper PDF instead.",
+        )
     from doi_fetcher import fetch_doi_metadata
     doi = (body.get("doi") or "").strip()
     if not doi:

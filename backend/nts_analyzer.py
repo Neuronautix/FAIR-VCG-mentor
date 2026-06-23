@@ -271,65 +271,37 @@ def _extract_metadata_llm(pdf_bytes: bytes, filename: str) -> Dict:
     Raises RuntimeError if ANTHROPIC_API_KEY is not set, anthropic is not installed,
     or the PDF exceeds the size limit.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not configured. "
-            "Set this environment variable to enable LLM-powered NTS analysis."
-        )
-
-    try:
-        import anthropic
-    except ImportError:
-        raise RuntimeError(
-            "The 'anthropic' package is not installed. "
-            "Add it to requirements.txt and reinstall dependencies."
-        )
+    from llm_service import call_haiku
 
     if len(pdf_bytes) > _PDF_MAX_BYTES:
         raise RuntimeError(
             f"PDF is {len(pdf_bytes) / (1024 * 1024):.1f} MB — "
-            f"the Anthropic API limit is 32 MB. Please use a smaller file."
+            f"the API limit is 32 MB. Please use a smaller file."
         )
 
-    client = anthropic.Anthropic(api_key=api_key)
     pdf_b64 = base64.standard_b64encode(pdf_bytes).decode()
+    user_content = [
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": pdf_b64,
+            },
+        },
+        {
+            "type": "text",
+            "text": "Extract all metadata from this Non-Technical Summary document.",
+        },
+    ]
 
-    message = client.messages.create(
-        model=os.getenv("PAPER_EXTRACTION_MODEL", "claude-haiku-4-5-20251001"),
+    result: Dict = call_haiku(
+        system_prompt=_NTS_SYSTEM_PROMPT,
+        tool=_NTS_TOOL,
+        user_message=user_content,
+        model_env="PAPER_EXTRACTION_MODEL",
         max_tokens=8192,
-        system=[
-            {
-                "type": "text",
-                "text": _NTS_SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        tool_choice={"type": "tool", "name": "extract_nts_metadata"},
-        tools=[_NTS_TOOL],
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "application/pdf",
-                            "data": pdf_b64,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": "Extract all metadata from this Non-Technical Summary document.",
-                    },
-                ],
-            }
-        ],
     )
-
-    # With tool_choice forced, content[0] is always the tool_use block.
-    result: Dict = message.content[0].input
 
     # Build a lookup from field_id → (arrive_fid, prepare_fid) for programmatic addition
     registry_lookup: Dict[str, Tuple[Optional[str], Optional[str]]] = {
@@ -417,7 +389,9 @@ def analyze_nts(pdf_bytes: bytes, filename: str, use_llm: bool = True) -> Dict:
     result["classification"] = _classify(citation_result)
 
     # --- Layer 2: LLM metadata extraction (optional) ---
-    if use_llm and os.getenv("ANTHROPIC_API_KEY"):
+    from llm_service import llm_enabled
+
+    if use_llm and llm_enabled():
         try:
             result["layer2"] = _extract_metadata_llm(pdf_bytes, filename)
             result["layer2_available"] = True
@@ -428,9 +402,9 @@ def analyze_nts(pdf_bytes: bytes, filename: str, use_llm: bool = True) -> Dict:
             result["layer2"] = None
             result["layer2_available"] = False
     else:
-        if use_llm and not os.getenv("ANTHROPIC_API_KEY"):
+        if use_llm and not llm_enabled():
             logger.info(
-                "Skipping NTS Layer 2 for '%s': ANTHROPIC_API_KEY not set.", filename
+                "Skipping NTS Layer 2 for '%s': no LLM provider configured.", filename
             )
 
     return result

@@ -3,7 +3,7 @@
 
 # Changes by scope
 
-_88 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
+_90 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 
 ## `merge` (18)
 
@@ -45,8 +45,9 @@ _88 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 - [`ae0a2c5`](commit-ledger.md#ae0a2c5--feat-vcg-complete-vcg-pipeline-orchestrator-engine-report-router-and-frontend-pages) feat(vcg): complete VCG pipeline — orchestrator, engine, report, router, and frontend pages <sub>(2026-05-01)</sub>
 - [`80aaf82`](commit-ledger.md#80aaf82--initial-implementation-of-fair-csv-mentor) Initial implementation of FAIR CSV Mentor <sub>(2026-04-30)</sub>
 
-## `docs` (13)
+## `docs` (14)
 
+- [`422fb83`](commit-ledger.md#422fb83--docs-record-fastapi-compat-shadow-diagnosis-refresh-wiki) docs: record FastAPI _compat shadow diagnosis + refresh wiki <sub>(2026-06-24)</sub>
 - [`3a5ec36`](commit-ledger.md#3a5ec36--docs-refresh-commit-knowledge-base-study-corpus-port) docs: refresh commit knowledge base (Study Corpus port) <sub>(2026-06-24)</sub>
 - [`a8ea2f5`](commit-ledger.md#a8ea2f5--docs-add-regenerable-commit-knowledge-base-wiki-generator) docs: add regenerable commit knowledge base (wiki) + generator <sub>(2026-06-24)</sub>
 - [`7069c36`](commit-ledger.md#7069c36--docs-update-grant-roadmap-todo-for-d-e-f-frontend-surfacing) docs: update grant roadmap + TODO for D/E/F + frontend surfacing <sub>(2026-06-24)</sub>
@@ -93,6 +94,12 @@ _88 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 - [`bf480b1`](commit-ledger.md#bf480b1--frontend-vcgwizard-paper-hints-columnprofile-paper-match-badges) frontend: VCGWizard paper hints + ColumnProfile paper match badges <sub>(2026-05-13)</sub>
 - [`fa7b288`](commit-ledger.md#fa7b288--frontend-invalidate-score-on-column-save-add-pagination-improve-upload-errors) frontend: invalidate score on column save, add pagination, improve upload errors <sub>(2026-05-01)</sub>
 
+## `config` (3)
+
+- [`c050e4c`](commit-ledger.md#c050e4c--config-add-sessionstart-hook-to-auto-repair-fastapi-install) config: add SessionStart hook to auto-repair FastAPI install <sub>(2026-06-24)</sub>
+- [`c802dd3`](commit-ledger.md#c802dd3--config-add-one-command-local-llm-deployment-live-smoke-check) config: add one-command local-LLM deployment + live smoke check <sub>(2026-06-23)</sub>
+- [`4a16585`](commit-ledger.md#4a16585--config-ignore-backend-sessions-db-runtime-file) config: ignore backend/sessions.db (runtime file) <sub>(2026-05-01)</sub>
+
 ## `fix` (3)
 
 - [`f237351`](commit-ledger.md#f237351--fix-report-all-arrive-prepare-occurrences-not-just-first-unique-match) fix: report all ARRIVE/PREPARE occurrences, not just first unique match <sub>(2026-05-29)</sub>
@@ -103,11 +110,6 @@ _88 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 
 - [`77f158b`](commit-ledger.md#77f158b--backend-add-provider-agnostic-llm-layer-grant-roadmap-milestone-b) backend: add provider-agnostic LLM layer + grant roadmap (Milestone B) <sub>(2026-06-23)</sub>
 - [`6f7c18e`](commit-ledger.md#6f7c18e--backend-tool-use-paper-extraction-llm-fair-scorer-endpoint) backend: tool_use paper extraction + LLM FAIR scorer endpoint <sub>(2026-05-13)</sub>
-
-## `config` (2)
-
-- [`c802dd3`](commit-ledger.md#c802dd3--config-add-one-command-local-llm-deployment-live-smoke-check) config: add one-command local-LLM deployment + live smoke check <sub>(2026-06-23)</sub>
-- [`4a16585`](commit-ledger.md#4a16585--config-ignore-backend-sessions-db-runtime-file) config: ignore backend/sessions.db (runtime file) <sub>(2026-05-01)</sub>
 
 ## `eval` (2)
 

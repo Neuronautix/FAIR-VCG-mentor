@@ -3,9 +3,35 @@
 
 # Commit ledger — `fair-vcg-complete-3r-grant`
 
-_88 commits · HEAD `3a5ec36` (2026-06-24) · newest first._
+_90 commits · HEAD `c050e4c` (2026-06-24) · newest first._
 
 Each entry is auto-summarised from git. Curated **Why/How/Impact** notes come from `annotations.yaml`. See [`index.md`](index.md) for how to maintain this.
+
+---
+
+## `c050e4c` — config: add SessionStart hook to auto-repair FastAPI install
+<sub>2026-06-24 · Claude · scope `config` · 4 file(s)</sub>
+
+> Web sessions (and CI via scripts/setup_env.sh) now auto-repair the corrupted
+> FastAPI install: a stray fastapi/_compat/ package dir shadows the pinned 0.115.0
+> _compat.py module, dropping PYDANTIC_V2 so 'import fastapi' fails and every
+> router/integration test errors at collection. The setup script removes the
+> shadow (force-reinstalls fastapi==0.115.0 as a fallback), installs backend deps,
+> and installs frontend deps when missing. The hook runs it on SessionStart in
+> remote (web) sessions only; the script is reusable directly by CI.
+>
+> .gitignore: track .claude/settings.json + .claude/hooks/ (keep settings.local.json
+> and worktrees/ ignored) so the shared hook ships in the repo.
+
+---
+
+## `422fb83` — docs: record FastAPI _compat shadow diagnosis + refresh wiki
+<sub>2026-06-24 · Claude · scope `docs` · 3 file(s)</sub>
+
+> The container's fastapi install had a stray _compat/ package shadowing the
+> pinned 0.115.0 _compat.py module (missing PYDANTIC_V2). Removing the shadow
+> fixes import; full backend suite passes (228). Documented the repair for
+> future sessions.
 
 ---
 

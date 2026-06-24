@@ -1,6 +1,37 @@
 # Fix List — FAIR CSV Mentor
 
-Generated from code review on 2026-05-02.
+Generated from code review on 2026-05-02. Grant workstream section added 2026-06-23.
+
+## Grant: Local-LLM, Knowledge Graph & Validation (Swiss 3RCC) — updated 2026-06-23
+
+Full plan in [`docs/grant-roadmap.md`](docs/grant-roadmap.md). Status of the
+local-LLM / FAIR-VCG grant workstream:
+
+### Done (merged)
+- [x] EQIPD Quality System template — LLM-fillable, cross-standard crosswalks, paper-scoring (#14)
+- [x] Provider-agnostic LLM layer — `LLM_PROVIDER` anthropic|openai (LM Studio), structured-output local path, local PDF→text, `provider_info()`, CrossRef gated behind `ENABLE_ONLINE_ENRICHMENT` (#15)
+- [x] Masked-metadata validation harness — `backend/eval/`, deterministic baseline 100% raw / 54.5% blind, 0% hallucination (#16)
+- [x] Preclinical knowledge graph + grounding — `backend/knowledge/` from the precliniverse schema; grounding + offline ontology IRIs (#17)
+
+### In review (PRs open, CI green)
+- [ ] Local-LLM deployment — docker `local-llm` profile + setup docs + smoke (#18)
+- [ ] KG-grounded eval predictor — +50 pp blind-mode accuracy (0.25 → 0.75) (#19)
+- [ ] Live grant roadmap + this TODO (#20)
+
+### Remaining grant milestones
+- [ ] **D — integration tests on academic data** (M6–7) — end-to-end headless run + artifact/metric capture. BLOCKED: anonymised UNIL dataset. (Can start on `test_data/synthetic_biological_descriptors.csv` as placeholder.)
+- [ ] **E — proof-of-concept VCG report** (M8–9) — VCG engine on the curated historical-control dataset; bundle synthetic CSV + stats report + FAIR exports. BLOCKED: use-case spec.
+- [ ] **F — dissemination package** (M10–11) — committed provider scorecard, docs, FELASA-2027 workshop material.
+- [ ] **Live local-endpoint validation** — real provider scorecard (`python -m eval.run_eval --predictor kg-llm`) on LM Studio + Gemma/APERTUS. BLOCKED: live endpoint.
+
+### Technical backlog (post-merge follow-ups)
+- [ ] KG: expand concepts/value hooks from real data; add measurement concepts (organ weight, clinical chemistry) with UO/UCUM units.
+- [ ] Wire KG grounding into the other LLM call sites (VCG orchestrator, issue fixer, FAIR scorer, template `llm-suggest`) — currently only the column enricher.
+- [ ] Implement the optional online resolver layer (OLS4 / ORCID / ROR / MyGene) from the precliniverse `apis` registry, behind `ENABLE_ONLINE_ENRICHMENT`.
+- [ ] Eval: unit-recovery scoring; expand ground-truth datasets; wire the deterministic eval into CI as a guardrail; commit a periodic provider scorecard.
+- [ ] LLM: full PDF chunking for long papers (currently truncation via `LLM_MAX_DOC_CHARS`); validate APERTUS end-to-end.
+- [ ] Frontend: show active provider/model in LLM status; surface KG `ontology_suggestions` in the column profile; KG-grounding indicator.
+- [ ] Infra: resolve the local FastAPI/pydantic test-collection mismatch for `test_template_router` / `test_vcg_template_integration` (environment, not code; passes in clean CI).
 
 ## Roadmap — Column Understanding (Small + Fast)
 
@@ -59,7 +90,7 @@ Goal: improve automatic column/data understanding while keeping latency and comp
 
 - [ ] **Schema verification pass** — when the user clicks "Validate vocabulary", run a structural pre-flight that flags weird/inconsistent terms (e.g., unit fragments that don't parse, duplicate semantic-type assignments across columns). Surface findings inline before flipping `validated=True`.
 - [ ] **Per-field templates** — let the user save vocabulary subsets as named templates (e.g., `pharmacology_units`, `arrive_metadata_keys`, `oncology_study_types`) and re-apply them to fresh sessions. Hooks into the existing `template_store.py`.
-- [ ] **Ontology lookup integration (OLS / BioPortal / UO / EFO)** — replace free-text vocabulary suggestions with proposed IRIs from community ontologies. Issue HITL `schema_extension` suggestions carrying both the term and its ontology IRI so downstream FAIR exports can link to the canonical concept.
+- [~] **Ontology lookup integration (OLS / BioPortal / UO / EFO)** — _partially done:_ the preclinical KG (PR #17) now grounds columns to ontology schemes and proposes offline IRIs (e.g. species → NCBITaxon) via `uri_suggester.ontology_suggestions`. Still open: live OLS/BioPortal resolution + issuing these as HITL `schema_extension` suggestions carrying the ontology IRI.
 - [ ] **Vocabulary diff view** — show `history` entries on the Vocabulary panel so the user can see what each version added/removed and why.
 - [ ] **Discover from dataset description** — wire a "scan dataset description / methods" mode in `llm_vocab_discovery.py` (plain text input, not PDF only).
 - [ ] **Auto-stale on column edit** — bump vocabulary version when `PUT /api/columns` adds new sample values that change `controlled_values`.

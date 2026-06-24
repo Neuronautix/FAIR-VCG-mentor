@@ -3,7 +3,7 @@
 
 # Changes by scope
 
-_87 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
+_88 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 
 ## `merge` (18)
 
@@ -45,8 +45,9 @@ _87 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 - [`ae0a2c5`](commit-ledger.md#ae0a2c5--feat-vcg-complete-vcg-pipeline-orchestrator-engine-report-router-and-frontend-pages) feat(vcg): complete VCG pipeline — orchestrator, engine, report, router, and frontend pages <sub>(2026-05-01)</sub>
 - [`80aaf82`](commit-ledger.md#80aaf82--initial-implementation-of-fair-csv-mentor) Initial implementation of FAIR CSV Mentor <sub>(2026-04-30)</sub>
 
-## `docs` (12)
+## `docs` (13)
 
+- [`3a5ec36`](commit-ledger.md#3a5ec36--docs-refresh-commit-knowledge-base-study-corpus-port) docs: refresh commit knowledge base (Study Corpus port) <sub>(2026-06-24)</sub>
 - [`a8ea2f5`](commit-ledger.md#a8ea2f5--docs-add-regenerable-commit-knowledge-base-wiki-generator) docs: add regenerable commit knowledge base (wiki) + generator <sub>(2026-06-24)</sub>
 - [`7069c36`](commit-ledger.md#7069c36--docs-update-grant-roadmap-todo-for-d-e-f-frontend-surfacing) docs: update grant roadmap + TODO for D/E/F + frontend surfacing <sub>(2026-06-24)</sub>
 - [`8db7108`](commit-ledger.md#8db7108--docs-update-todo-with-grant-workstream-status-future-dev-backlog) docs: update TODO with grant workstream status + future-dev backlog <sub>(2026-06-23)</sub>

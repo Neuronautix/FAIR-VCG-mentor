@@ -3,9 +3,14 @@
 
 # Commit ledger — `fair-vcg-complete-3r-grant`
 
-_87 commits · HEAD `8297836` (2026-06-24) · newest first._
+_88 commits · HEAD `3a5ec36` (2026-06-24) · newest first._
 
 Each entry is auto-summarised from git. Curated **Why/How/Impact** notes come from `annotations.yaml`. See [`index.md`](index.md) for how to maintain this.
+
+---
+
+## `3a5ec36` — docs: refresh commit knowledge base (Study Corpus port)
+<sub>2026-06-24 · Claude · scope `docs` · 3 file(s)</sub>
 
 ---
 

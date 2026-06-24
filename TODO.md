@@ -31,7 +31,7 @@ local-LLM / FAIR-VCG grant workstream:
 - [ ] Eval: unit-recovery scoring; expand ground-truth datasets; wire the deterministic eval into CI as a guardrail; commit a periodic provider scorecard.
 - [ ] LLM: full PDF chunking for long papers (currently truncation via `LLM_MAX_DOC_CHARS`); validate APERTUS end-to-end.
 - [x] Frontend: show active provider/model in LLM status; surface KG `ontology_suggestions` in the column profile; KG-grounding indicator. (done on `fair-vcg-complete-3r-grant`: provider-aware LLM chip, ontology IRI chips in Column Profile, 3Rs Reduction card on VCG Results)
-- [ ] Infra: resolve the local FastAPI/pydantic test-collection mismatch for `test_template_router` / `test_vcg_template_integration` (environment, not code; passes in clean CI).
+- [x] Infra: FastAPI test-collection failure diagnosed + fixed. Root cause: a stray `fastapi/_compat/` package dir (from a different fastapi version) shadowed the real `fastapi/_compat.py` module of the pinned 0.115.0, so `PYDANTIC_V2` was missing and `import fastapi` failed. Removing the stray shadow restores a consistent install; full backend suite then passes (228 passed). This is an environment/image artifact (not code) and recurs on fresh containers — a setup step should `rm -rf $(python -c "import fastapi,os;print(os.path.dirname(fastapi.__file__))")/_compat` if `_compat.py` also exists, or reinstall `fastapi==0.115.0 --force-reinstall --no-deps`.
 
 ## Roadmap — Column Understanding (Small + Fast)
 

@@ -1,3 +1,4 @@
+import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'
 import SaveIcon from '@mui/icons-material/Save'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
@@ -13,6 +14,7 @@ import {
   FormControl,
   Grid,
   InputLabel,
+  Link,
   MenuItem,
   Paper,
   Select,
@@ -26,17 +28,20 @@ import {
   TablePagination,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   getProfile,
+  getUriSuggestions,
   listHITLSuggestions,
   requestLLMColumnSuggestions,
   saveTemplate,
   updateColumns,
 } from '../api/client'
+import type { OntologySuggestion } from '../api/client'
 import HITLPanel from '../components/HITLPanel'
 import { useStore } from '../store/useStore'
 import type { ColumnProfile } from '../store/useStore'
@@ -181,6 +186,22 @@ export default function ColumnProfilePage() {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
   const [paperHintDismissed, setPaperHintDismissed] = useState(false)
+  const [ontology, setOntology] = useState<Record<string, OntologySuggestion[]>>({})
+
+  // Pull knowledge-graph ontology groundings (NCBITaxon / UBERON / UO …) so the column
+  // editor can surface IRIs the KG retriever proposes for each column.
+  useEffect(() => {
+    if (!datasetId) return
+    let cancelled = false
+    getUriSuggestions(datasetId)
+      .then((r) => {
+        if (!cancelled) setOntology(r.ontology_suggestions ?? {})
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [datasetId])
 
   if (!datasetId) {
     return <Alert severity="info">No dataset loaded. Please upload a CSV first.</Alert>
@@ -387,6 +408,17 @@ export default function ColumnProfilePage() {
                     {paperCovariateSet.has(col.name) && (
                       <Chip label="covariate (paper)" color="secondary" size="small" sx={{ mt: 0.5 }} />
                     )}
+                    {ontology[col.name]?.length > 0 && (
+                      <Tooltip title={`${ontology[col.name].length} knowledge-graph ontology match(es)`}>
+                        <Chip
+                          icon={<AccountTreeIcon sx={{ fontSize: 14 }} />}
+                          label={ontology[col.name][0].scheme}
+                          size="small"
+                          variant="outlined"
+                          sx={{ mt: 0.5, ml: 0.5, color: '#00695c', borderColor: '#00695c' }}
+                        />
+                      </Tooltip>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -458,6 +490,53 @@ export default function ColumnProfilePage() {
               setLocalCols((prev) => prev.map((c) => (c.name === updated.name ? updated : c)))
             }
           />
+          {ontology[expanded]?.length > 0 && (
+            <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px dashed #cfd8dc' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <AccountTreeIcon sx={{ fontSize: 18, color: '#00695c', mr: 0.75 }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#00695c' }}>
+                  Ontology grounding (knowledge graph)
+                </Typography>
+              </Box>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {ontology[expanded].map((s, i) => {
+                  const iri = s.iri ?? s.iri_base
+                  const text = `${s.scheme}${s.label ? `: ${s.label}` : s.value ? `: ${s.value}` : ''}`
+                  return (
+                    <Tooltip
+                      key={i}
+                      title={
+                        <Box sx={{ fontSize: 12 }}>
+                          {iri && <div>{iri}</div>}
+                          <div>confidence {(s.confidence * 100).toFixed(0)}%</div>
+                          <div>{s.online ? 'online resolver' : 'offline IRI'}</div>
+                        </Box>
+                      }
+                    >
+                      <Chip
+                        size="small"
+                        label={
+                          iri ? (
+                            <Link href={iri} target="_blank" rel="noopener" underline="hover" color="inherit">
+                              {text}
+                            </Link>
+                          ) : (
+                            text
+                          )
+                        }
+                        variant="outlined"
+                        sx={{ color: '#00695c', borderColor: '#00695c', mb: 0.5 }}
+                      />
+                    </Tooltip>
+                  )
+                })}
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                Suggested by the preclinical knowledge graph — link this column to a standard ontology term
+                (e.g. NCBITaxon, UBERON, UO) to improve Interoperability.
+              </Typography>
+            </Box>
+          )}
         </Paper>
       )}
 

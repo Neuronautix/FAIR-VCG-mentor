@@ -69,14 +69,34 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const theme = useTheme()
-  const { datasetId, importInfo, vcgStatus, llmEnabled, setLLMEnabled, templateId } = useStore()
+  const { datasetId, importInfo, vcgStatus, llmEnabled, setLLMEnabled, llmStatus, setLLMStatus, templateId } =
+    useStore()
 
   useEffect(() => {
     if (llmEnabled !== null) return
     getLLMStatus()
-      .then((r) => setLLMEnabled(r.enabled))
-      .catch(() => setLLMEnabled(false))
-  }, [llmEnabled, setLLMEnabled])
+      .then((r) => {
+        setLLMEnabled(r.enabled)
+        setLLMStatus(r)
+      })
+      .catch(() => {
+        setLLMEnabled(false)
+        setLLMStatus({ enabled: false })
+      })
+  }, [llmEnabled, setLLMEnabled, setLLMStatus])
+
+  // Derive a compact, provider-aware label for the LLM status chip.
+  // A configured base_url means a local OpenAI-compatible endpoint (e.g. LM Studio) — surface "Local LLM"
+  // so the fully-offline deployment story is visible in the UI.
+  const isLocalLLM = Boolean(llmStatus?.base_url)
+  const providerLabel = isLocalLLM
+    ? 'Local LLM'
+    : llmStatus?.provider === 'openai'
+      ? 'OpenAI'
+      : 'Claude'
+  const model = llmStatus?.model ?? ''
+  const shortModel = model.length > 20 ? `${model.slice(0, 19)}…` : model
+  const llmChipLabel = `${providerLabel}${shortModel ? ` · ${shortModel}` : ''} · ${llmEnabled ? 'on' : 'off'}`
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -98,17 +118,29 @@ export default function Layout() {
             />
           )}
           {llmEnabled !== null && (
-            <Chip
-              label={llmEnabled ? 'Claude Haiku · on' : 'Claude Haiku · off'}
-              size="small"
-              sx={{
-                color: 'white',
-                borderColor: llmEnabled ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)',
-                mr: 1,
-                fontSize: 11,
-              }}
-              variant="outlined"
-            />
+            <Tooltip
+              title={
+                <Box sx={{ fontSize: 12, lineHeight: 1.6 }}>
+                  <div>Provider: {llmStatus?.provider ?? 'anthropic'}</div>
+                  <div>Model: {model || '—'}</div>
+                  <div>Endpoint: {isLocalLLM ? llmStatus?.base_url : 'Anthropic API (cloud)'}</div>
+                  <div>Status: {llmEnabled ? 'enabled' : 'disabled (no API key / endpoint)'}</div>
+                  {isLocalLLM && <div>Running fully offline — no external API calls.</div>}
+                </Box>
+              }
+            >
+              <Chip
+                label={llmChipLabel}
+                size="small"
+                sx={{
+                  color: 'white',
+                  borderColor: llmEnabled ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)',
+                  mr: 1,
+                  fontSize: 11,
+                }}
+                variant="outlined"
+              />
+            </Tooltip>
           )}
           <Chip
             label="Assessment only — not regulatory certification"

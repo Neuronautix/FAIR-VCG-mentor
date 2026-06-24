@@ -74,8 +74,26 @@ export const getFairScore = (id: string): Promise<FAIRScore> =>
 export const getLLMFairScore = (id: string) =>
   api.get(`/fair-score/${id}/llm`).then((r) => r.data)
 
-export const getUriSuggestions = (id: string) =>
-  api.get(`/uris/${id}`).then((r) => r.data)
+export interface OntologySuggestion {
+  value: string | null
+  label: string | null
+  iri?: string
+  iri_base?: string
+  scheme: string
+  resolver?: string
+  online: boolean
+  confidence: number
+}
+
+export interface UriSuggestions {
+  dataset_slug?: string
+  dataset_level?: Record<string, string>
+  column_uris?: Record<string, string>
+  ontology_suggestions?: Record<string, OntologySuggestion[]>
+}
+
+export const getUriSuggestions = (id: string): Promise<UriSuggestions> =>
+  api.get<UriSuggestions>(`/uris/${id}`).then((r) => r.data)
 
 export const exportUrl = (id: string, type: string) => `/api/export/${id}/${type}`
 
@@ -221,8 +239,15 @@ export interface HITLSuggestion {
   applied_at: number | null
 }
 
-export const getLLMStatus = (): Promise<{ enabled: boolean }> =>
-  api.get('/llm/status').then((r) => r.data)
+export interface LLMStatus {
+  enabled: boolean
+  provider?: string
+  model?: string
+  base_url?: string | null
+}
+
+export const getLLMStatus = (): Promise<LLMStatus> =>
+  api.get<LLMStatus>('/llm/status').then((r) => r.data)
 
 export const listHITLSuggestions = (
   id: string,

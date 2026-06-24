@@ -1,0 +1,13 @@
+subject_id,species,strain,sex,compound,tissue,body_weight_g,timepoint
+S001,Mus musculus,C57BL/6J,male,Tamoxifen,hippocampus,22.4,baseline
+S002,Mus musculus,C57BL/6J,female,vehicle,liver,21.8,baseline
+S003,Rattus norvegicus,Wistar,male,Metformin,cortex,28.6,baseline
+S004,Rattus norvegicus,Wistar,female,vehicle,hippocampus,27.1,baseline
+S005,Mus musculus,BALB/c,male,Tamoxifen,liver,23.9,baseline
+S006,Mus musculus,BALB/c,female,Metformin,cortex,20.7,baseline
+S007,Mus musculus,C57BL/6J,male,vehicle,hippocampus,24.5,endpoint
+S008,Mus musculus,C57BL/6J,female,Tamoxifen,liver,22.0,endpoint
+S009,Rattus norvegicus,Wistar,male,Metformin,cortex,29.3,endpoint
+S010,Rattus norvegicus,Wistar,female,vehicle,hippocampus,26.8,endpoint
+S011,Mus musculus,BALB/c,male,Metformin,liver,23.2,endpoint
+S012,Mus musculus,BALB/c,female,Tamoxifen,cortex,21.5,endpoint

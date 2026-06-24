@@ -19,9 +19,9 @@ local-LLM / FAIR-VCG grant workstream:
 - [ ] Live grant roadmap + this TODO (#20)
 
 ### Remaining grant milestones
-- [ ] **D — integration tests on academic data** (M6–7) — end-to-end headless run + artifact/metric capture. BLOCKED: anonymised UNIL dataset. (Can start on `test_data/synthetic_biological_descriptors.csv` as placeholder.)
-- [ ] **E — proof-of-concept VCG report** (M8–9) — VCG engine on the curated historical-control dataset; bundle synthetic CSV + stats report + FAIR exports. BLOCKED: use-case spec.
-- [ ] **F — dissemination package** (M10–11) — committed provider scorecard, docs, FELASA-2027 workshop material.
+- [~] **D — integration tests on academic data** (M6–7) — _harness ready:_ headless end-to-end run `backend/tests/test_integration_pipeline.py` (profile → FAIR → VCG) on a synthetic placeholder. Still BLOCKED on an anonymised UNIL dataset + live local endpoint for the real metric capture.
+- [x] **E — proof-of-concept VCG report** (M8–9) — rodent-toxicology PoC in `docs/vcg_poc/` (synthetic CSV + stats report + `poc_results.json`, reliability 0.935).
+- [x] **F — dissemination package** (M10–11) — `backend/scripts/build_dissemination.py` bundles provider scorecards + VCG PoC + local-llm profile into `dist/dissemination/`. Still to add: FELASA-2027 workshop material.
 - [ ] **Live local-endpoint validation** — real provider scorecard (`python -m eval.run_eval --predictor kg-llm`) on LM Studio + Gemma/APERTUS. BLOCKED: live endpoint.
 
 ### Technical backlog (post-merge follow-ups)
@@ -30,7 +30,7 @@ local-LLM / FAIR-VCG grant workstream:
 - [ ] Implement the optional online resolver layer (OLS4 / ORCID / ROR / MyGene) from the precliniverse `apis` registry, behind `ENABLE_ONLINE_ENRICHMENT`.
 - [ ] Eval: unit-recovery scoring; expand ground-truth datasets; wire the deterministic eval into CI as a guardrail; commit a periodic provider scorecard.
 - [ ] LLM: full PDF chunking for long papers (currently truncation via `LLM_MAX_DOC_CHARS`); validate APERTUS end-to-end.
-- [ ] Frontend: show active provider/model in LLM status; surface KG `ontology_suggestions` in the column profile; KG-grounding indicator.
+- [x] Frontend: show active provider/model in LLM status; surface KG `ontology_suggestions` in the column profile; KG-grounding indicator. (done on `fair-vcg-complete-3r-grant`: provider-aware LLM chip, ontology IRI chips in Column Profile, 3Rs Reduction card on VCG Results)
 - [ ] Infra: resolve the local FastAPI/pydantic test-collection mismatch for `test_template_router` / `test_vcg_template_integration` (environment, not code; passes in clean CI).
 
 ## Roadmap — Column Understanding (Small + Fast)

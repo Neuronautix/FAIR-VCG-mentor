@@ -1,0 +1,262 @@
+{
+  "method_used": "bootstrap",
+  "n_real_controls": 24,
+  "n_vcg_controls": 30,
+  "reliability_score": 0.935,
+  "reliability_breakdown": {
+    "overall_score": 0.935,
+    "per_endpoint": {
+      "body_weight_end_g": {
+        "mean_real": 254.020833,
+        "std_real": 52.147008,
+        "mean_vcg": 265.355707,
+        "std_vcg": 51.358693,
+        "cohens_d": -0.2192,
+        "ks_stat": 0.3,
+        "ks_pvalue": 0.149732,
+        "ci_lower": -39.800165,
+        "ci_upper": 17.130417,
+        "ci_width": 56.930582,
+        "interpretation": "Acceptable",
+        "interpretation_detail": "Moderate differences detected; interpret VCG comparisons with caution."
+      },
+      "liver_weight_g": {
+        "mean_real": 8.791667,
+        "std_real": 1.666988,
+        "mean_vcg": 8.987477,
+        "std_vcg": 1.612534,
+        "cohens_d": -0.1196,
+        "ks_stat": 0.266667,
+        "ks_pvalue": 0.254061,
+        "ci_lower": -1.098714,
+        "ci_upper": 0.707094,
+        "ci_width": 1.805808,
+        "interpretation": "Good",
+        "interpretation_detail": "Minor distributional differences; VCG is acceptable for most analyses."
+      },
+      "kidney_weight_g": {
+        "mean_real": 1.60225,
+        "std_real": 0.293763,
+        "mean_vcg": 1.642322,
+        "std_vcg": 0.266683,
+        "cohens_d": -0.1436,
+        "ks_stat": 0.166667,
+        "ks_pvalue": 0.798641,
+        "ci_lower": -0.19507,
+        "ci_upper": 0.114926,
+        "ci_width": 0.309996,
+        "interpretation": "Excellent",
+        "interpretation_detail": "Distributions are highly similar; VCG is a reliable substitute."
+      },
+      "alt_u_l": {
+        "mean_real": 44.420833,
+        "std_real": 5.038632,
+        "mean_vcg": 43.942153,
+        "std_vcg": 4.195417,
+        "cohens_d": 0.1043,
+        "ks_stat": 0.141667,
+        "ks_pvalue": 0.915915,
+        "ci_lower": -2.094638,
+        "ci_upper": 3.051999,
+        "ci_width": 5.146637,
+        "interpretation": "Excellent",
+        "interpretation_detail": "Distributions are highly similar; VCG is a reliable substitute."
+      },
+      "ast_u_l": {
+        "mean_real": 61.8125,
+        "std_real": 10.143291,
+        "mean_vcg": 61.401938,
+        "std_vcg": 7.587514,
+        "cohens_d": 0.0466,
+        "ks_stat": 0.2,
+        "ks_pvalue": 0.593236,
+        "ci_lower": -4.588343,
+        "ci_upper": 5.409467,
+        "ci_width": 9.99781,
+        "interpretation": "Excellent",
+        "interpretation_detail": "Distributions are highly similar; VCG is a reliable substitute."
+      },
+      "creatinine_umol_l": {
+        "mean_real": 55.966667,
+        "std_real": 7.661233,
+        "mean_vcg": 54.963136,
+        "std_vcg": 6.155702,
+        "cohens_d": 0.1462,
+        "ks_stat": 0.175,
+        "ks_pvalue": 0.747419,
+        "ci_lower": -2.860863,
+        "ci_upper": 4.867925,
+        "ci_width": 7.728788,
+        "interpretation": "Excellent",
+        "interpretation_detail": "Distributions are highly similar; VCG is a reliable substitute."
+      }
+    }
+  },
+  "warnings": [],
+  "per_endpoint_fidelity": [
+    {
+      "endpoint": "body_weight_end_g",
+      "real_mean": 254.021,
+      "real_sd": 52.147,
+      "vcg_mean": 265.356,
+      "vcg_sd": 51.359,
+      "mean_pct_diff": 4.46
+    },
+    {
+      "endpoint": "liver_weight_g",
+      "real_mean": 8.792,
+      "real_sd": 1.667,
+      "vcg_mean": 8.987,
+      "vcg_sd": 1.613,
+      "mean_pct_diff": 2.23
+    },
+    {
+      "endpoint": "kidney_weight_g",
+      "real_mean": 1.602,
+      "real_sd": 0.294,
+      "vcg_mean": 1.642,
+      "vcg_sd": 0.267,
+      "mean_pct_diff": 2.5
+    },
+    {
+      "endpoint": "alt_u_l",
+      "real_mean": 44.421,
+      "real_sd": 5.039,
+      "vcg_mean": 43.942,
+      "vcg_sd": 4.195,
+      "mean_pct_diff": -1.08
+    },
+    {
+      "endpoint": "ast_u_l",
+      "real_mean": 61.812,
+      "real_sd": 10.143,
+      "vcg_mean": 61.402,
+      "vcg_sd": 7.588,
+      "mean_pct_diff": -0.66
+    },
+    {
+      "endpoint": "creatinine_umol_l",
+      "real_mean": 55.967,
+      "real_sd": 7.661,
+      "vcg_mean": 54.963,
+      "vcg_sd": 6.156,
+      "mean_pct_diff": -1.79
+    }
+  ],
+  "correlation_recovery": {
+    "mean_abs_corr_error": 0.1061,
+    "max_abs_corr_error": 0.3234
+  },
+  "fitted_distributions": {
+    "body_weight_end_g": "lognorm",
+    "liver_weight_g": "lognorm",
+    "kidney_weight_g": "lognorm",
+    "alt_u_l": "gamma",
+    "ast_u_l": "gamma",
+    "creatinine_umol_l": "gamma"
+  },
+  "correlation_detail": {
+    "mean_abs_corr_error": 0.1061,
+    "max_abs_corr_error": 0.3234,
+    "real_corr": {
+      "body_weight_end_g": {
+        "body_weight_end_g": 1.0,
+        "liver_weight_g": 0.911,
+        "kidney_weight_g": 0.883,
+        "alt_u_l": -0.165,
+        "ast_u_l": -0.083,
+        "creatinine_umol_l": 0.578
+      },
+      "liver_weight_g": {
+        "body_weight_end_g": 0.911,
+        "liver_weight_g": 1.0,
+        "kidney_weight_g": 0.841,
+        "alt_u_l": -0.239,
+        "ast_u_l": -0.102,
+        "creatinine_umol_l": 0.623
+      },
+      "kidney_weight_g": {
+        "body_weight_end_g": 0.883,
+        "liver_weight_g": 0.841,
+        "kidney_weight_g": 1.0,
+        "alt_u_l": -0.166,
+        "ast_u_l": -0.036,
+        "creatinine_umol_l": 0.7
+      },
+      "alt_u_l": {
+        "body_weight_end_g": -0.165,
+        "liver_weight_g": -0.239,
+        "kidney_weight_g": -0.166,
+        "alt_u_l": 1.0,
+        "ast_u_l": 0.679,
+        "creatinine_umol_l": -0.061
+      },
+      "ast_u_l": {
+        "body_weight_end_g": -0.083,
+        "liver_weight_g": -0.102,
+        "kidney_weight_g": -0.036,
+        "alt_u_l": 0.679,
+        "ast_u_l": 1.0,
+        "creatinine_umol_l": 0.1
+      },
+      "creatinine_umol_l": {
+        "body_weight_end_g": 0.578,
+        "liver_weight_g": 0.623,
+        "kidney_weight_g": 0.7,
+        "alt_u_l": -0.061,
+        "ast_u_l": 0.1,
+        "creatinine_umol_l": 1.0
+      }
+    },
+    "vcg_corr": {
+      "body_weight_end_g": {
+        "body_weight_end_g": 1.0,
+        "liver_weight_g": 0.921,
+        "kidney_weight_g": 0.891,
+        "alt_u_l": 0.073,
+        "ast_u_l": 0.076,
+        "creatinine_umol_l": 0.616
+      },
+      "liver_weight_g": {
+        "body_weight_end_g": 0.921,
+        "liver_weight_g": 1.0,
+        "kidney_weight_g": 0.891,
+        "alt_u_l": 0.084,
+        "ast_u_l": 0.11,
+        "creatinine_umol_l": 0.57
+      },
+      "kidney_weight_g": {
+        "body_weight_end_g": 0.891,
+        "liver_weight_g": 0.891,
+        "kidney_weight_g": 1.0,
+        "alt_u_l": 0.096,
+        "ast_u_l": 0.081,
+        "creatinine_umol_l": 0.729
+      },
+      "alt_u_l": {
+        "body_weight_end_g": 0.073,
+        "liver_weight_g": 0.084,
+        "kidney_weight_g": 0.096,
+        "alt_u_l": 1.0,
+        "ast_u_l": 0.762,
+        "creatinine_umol_l": -0.057
+      },
+      "ast_u_l": {
+        "body_weight_end_g": 0.076,
+        "liver_weight_g": 0.11,
+        "kidney_weight_g": 0.081,
+        "alt_u_l": 0.762,
+        "ast_u_l": 1.0,
+        "creatinine_umol_l": 0.107
+      },
+      "creatinine_umol_l": {
+        "body_weight_end_g": 0.616,
+        "liver_weight_g": 0.57,
+        "kidney_weight_g": 0.729,
+        "alt_u_l": -0.057,
+        "ast_u_l": 0.107,
+        "creatinine_umol_l": 1.0
+      }
+    }
+  }
+}

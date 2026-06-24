@@ -7,6 +7,7 @@ import ChecklistIcon from '@mui/icons-material/Checklist'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoIcon from '@mui/icons-material/Info'
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'
 import ScienceIcon from '@mui/icons-material/Science'
 import RuleIcon from '@mui/icons-material/Rule'
 import TableChartIcon from '@mui/icons-material/TableChart'
@@ -47,6 +48,7 @@ const navItems: NavItem[] = [
   { label: 'Upload CSV', path: '/' },
   { label: 'NTS Analyser', path: '/nts-analyzer', alwaysEnabled: true },
   { label: 'Paper Import', path: '/paper-import', alwaysEnabled: true },
+  { label: 'Study Corpus', path: '/study-corpus' },
   { label: 'Overview', path: '/overview' },
   { label: 'Column Profile', path: '/columns' },
   { label: 'FAIR Score', path: '/fair-score' },
@@ -59,9 +61,9 @@ const navItems: NavItem[] = [
 ].map((item, i) => ({
   ...item,
   icon: [
-    <CloudUploadIcon />, <FindInPageIcon />, <ArticleIcon />, <InfoIcon />, <TableChartIcon />,
-    <AssessmentIcon />, <TuneIcon />, <RuleIcon />, <ChecklistIcon />, <ScienceIcon />,
-    <DownloadIcon />, <BarChartIcon />,
+    <CloudUploadIcon />, <FindInPageIcon />, <ArticleIcon />, <LibraryBooksIcon />, <InfoIcon />,
+    <TableChartIcon />, <AssessmentIcon />, <TuneIcon />, <RuleIcon />, <ChecklistIcon />,
+    <ScienceIcon />, <DownloadIcon />, <BarChartIcon />,
   ][i],
 }))
 

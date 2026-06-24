@@ -8,6 +8,7 @@ import type {
   Issue,
   LowConfidenceColumn,
   TableStructure,
+  VCGColumnRoles,
 } from '../store/useStore'
 
 const api = axios.create({ baseURL: '/api' })
@@ -213,6 +214,12 @@ export type HITLCategory =
   | 'fair_recommendation'
   | 'issue_fix'
   | 'schema_extension'
+  | 'schema_field'
+  | 'schema_conflict'
+  | 'ontology_mapping'
+  | 'unit_normalization'
+  | 'vcg_assumption'
+  | 'corpus_schema_approval'
 
 export type HITLStatus =
   | 'pending'
@@ -504,3 +511,200 @@ export const extractTemplateFromDocument = (
     )
     .then((r) => r.data)
 }
+
+// ── Study corpus / consensus schema synthesis (multi-paper → VCG-ready schema) ──
+
+export type StudyCorpusSourceType = 'pdf' | 'doi' | 'text'
+export type SchemaConfidence = 'auto_accept' | 'needs_review' | 'must_ask' | 'reject'
+
+export interface EvidenceSpan {
+  paper_id: string
+  section?: string | null
+  quote?: string | null
+  page?: number | null
+  confidence?: number | null
+}
+
+export interface StudyCorpusPaper {
+  id: string
+  source_type: StudyCorpusSourceType
+  source_ref: string
+  title?: string | null
+  status: string
+  text?: string | null
+  metadata?: Record<string, any>
+  created_at: number
+  updated_at: number
+}
+
+export interface ArticleSchemaCandidate {
+  id: string
+  paper_id: string
+  schema: Record<string, any>
+  evidence_spans: EvidenceSpan[]
+  confidence: number | null
+  source: string
+  status: string
+  created_at: number
+  updated_at: number
+}
+
+export interface SchemaConflict {
+  id: string
+  schema_path: string
+  issue: string
+  options: Array<Record<string, any>>
+  confidence: SchemaConfidence
+  impact: 'low' | 'medium' | 'high' | 'vcg_blocking'
+  evidence: EvidenceSpan[]
+  status: string
+}
+
+export interface ExpertDecision {
+  id: string
+  target_type: string
+  target_id: string
+  decision: string
+  rationale?: string | null
+  payload: Record<string, any>
+  created_at: number
+}
+
+export interface ProjectSchemaColumn {
+  name: string
+  label: string
+  description: string | null
+  semantic_type: string
+  data_type: string
+  unit: string | null
+  required: boolean
+  role: string
+  controlled_values: string[]
+  ontology: Record<string, any>
+  evidence: string[]
+  confidence: number
+  review_status: SchemaConfidence | 'approved'
+}
+
+export interface ProjectSchema {
+  schema_version: number
+  name: string
+  status: 'draft' | 'needs_review' | 'approved' | 'superseded'
+  metadata_fields: Record<string, Record<string, any>>
+  columns: ProjectSchemaColumn[]
+  vcg_roles: VCGColumnRoles
+  units: Record<string, Record<string, any>>
+  controlled_values: Record<string, Record<string, any>>
+  ontology_mappings: Record<string, Record<string, any>>
+  vcg_readiness: {
+    ready: boolean
+    blocking: string[]
+    warnings: string[]
+    score: number | null
+    consequences?: string[]
+  }
+  evidence: Array<Record<string, any>>
+  expert_decisions: Array<Record<string, any>>
+}
+
+export interface StudyCorpus {
+  version: number
+  papers: StudyCorpusPaper[]
+  article_schema_candidates: ArticleSchemaCandidate[]
+  consensus_schema: {
+    schema: ProjectSchema
+    source: string
+    validation?: { ok: boolean; errors: string[]; warnings: string[] }
+    updated_at: number
+  } | null
+  conflicts: SchemaConflict[]
+  expert_decisions: ExpertDecision[]
+  schema_versions: Array<Record<string, any>>
+}
+
+export const getStudyCorpus = (id: string): Promise<StudyCorpus> =>
+  api.get<StudyCorpus>(`/${id}/study-corpus`).then((r) => r.data)
+
+export const addStudyCorpusPaper = (
+  id: string,
+  body: {
+    source_type: StudyCorpusSourceType
+    source_ref: string
+    title?: string | null
+    text?: string | null
+  },
+): Promise<{ corpus: StudyCorpus; paper: StudyCorpusPaper }> =>
+  api.post(`/${id}/study-corpus/papers`, body).then(async (r) => ({
+    paper: r.data,
+    corpus: await getStudyCorpus(id),
+  }))
+
+export const addArticleSchemaCandidate = (
+  id: string,
+  body: {
+    paper_id: string
+    schema: Record<string, any>
+    evidence?: EvidenceSpan[]
+    confidence?: number
+  },
+): Promise<{ corpus: StudyCorpus; candidate: ArticleSchemaCandidate }> =>
+  api
+    .post(`/${id}/study-corpus/schema-candidates`, {
+      paper_id: body.paper_id,
+      schema: body.schema,
+      evidence_spans: body.evidence,
+      confidence: body.confidence,
+    })
+    .then(async (r) => ({ candidate: r.data, corpus: await getStudyCorpus(id) }))
+
+export const updateConsensusSchema = (
+  id: string,
+  body: { consensus_schema: Record<string, any>; reason?: string },
+): Promise<{ corpus: StudyCorpus }> =>
+  api
+    .put(`/${id}/study-corpus/consensus-schema`, {
+      schema: body.consensus_schema,
+      notes: body.reason,
+    })
+    .then(async () => ({ corpus: await getStudyCorpus(id) }))
+
+export const validateProjectSchema = (
+  id: string,
+  schema: Record<string, any>,
+): Promise<{ ok: boolean; errors: string[]; warnings: string[]; schema: ProjectSchema | null }> =>
+  api.post(`/${id}/study-corpus/project-schema/validate`, { schema }).then((r) => r.data)
+
+export const addExpertDecision = (
+  id: string,
+  body: {
+    question: string
+    answer: string
+    rationale?: string | null
+    schema_paths?: string[]
+  },
+): Promise<{ corpus: StudyCorpus; decision: ExpertDecision }> =>
+  api
+    .post(`/${id}/study-corpus/expert-decisions`, {
+      target_type: 'schema_question',
+      target_id: body.schema_paths?.[0] || 'consensus_schema',
+      decision: 'accepted',
+      rationale: body.rationale,
+      payload: {
+        question: body.question,
+        answer: body.answer,
+        schema_paths: body.schema_paths || [],
+      },
+    })
+    .then(async (r) => ({ decision: r.data, corpus: await getStudyCorpus(id) }))
+
+export const requestCorpusSchemaReview = (id: string) =>
+  api
+    .post<{ created: HITLSuggestion[]; loop_state: Record<string, any> }>(
+      `/${id}/study-corpus/schema-review`,
+    )
+    .then((r) => r.data)
+
+export const getCorpusVCGReadiness = (
+  id: string,
+): Promise<ProjectSchema['vcg_readiness']> =>
+  api.get(`/${id}/study-corpus/vcg-readiness`).then((r) => r.data)

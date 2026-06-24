@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""Knowledge-base generator for the FAIR-VCG Mentor repo.
+
+Produces an in-repo, regenerable "wiki" that summarises every commit over time so the
+team can look back at *what* was done and *how / why*.
+
+Design
+------
+- The markdown outputs (``commit-ledger.md``, ``by-scope.md``, ``prs.md``) are **fully
+  generated** from ``git log`` and are safe to overwrite on every run.
+- Curated narrative (``why`` / ``how`` / ``impact`` / ``tags``) lives ONLY in
+  ``docs/wiki/annotations.yaml`` keyed by commit hash. The generator merges it in but
+  NEVER writes to it, so regenerating can never lose hand-written context.
+- Everything is derived from the full ``git log`` of the current branch, so the ledger
+  always reflects the complete history — just re-run after each merge/PR.
+
+Usage
+-----
+    python scripts/gen_wiki.py                 # regenerate from current branch
+    python scripts/gen_wiki.py --llm           # draft notes for un-annotated commits
+                                               #   using the repo's own LLM layer (optional)
+
+The ``--llm`` path reuses ``backend/llm_service`` (provider-agnostic: Anthropic OR a
+local LM-Studio model). It writes drafts into ``annotations.yaml`` flagged
+``draft: true`` for a human to review. It degrades gracefully when no model is configured.
+"""
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    print("PyYAML is required: pip install pyyaml", file=sys.stderr)
+    raise
+
+REPO = Path(__file__).resolve().parents[1]
+WIKI = REPO / "docs" / "wiki"
+ANNOTATIONS = WIKI / "annotations.yaml"
+
+REC, UNIT = "\x1e", "\x1f"  # ASCII record / unit separators (won't appear in messages)
+TRAILER_RE = re.compile(r"^(Co-Authored-By|Co-authored-by|Claude-Session|Signed-off-by):", re.I)
+SCOPE_RE = re.compile(r"^([a-z][a-z0-9-]*):")
+PR_RE = re.compile(r"Merge pull request #(\d+) from (\S+)")
+MERGE_BRANCH_RE = re.compile(r"Merge (?:remote-tracking )?branch '([^']+)'")
+
+
+def _git(*args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=REPO, text=True)
+
+
+def branch_head() -> tuple[str, str, str, int]:
+    branch = _git("rev-parse", "--abbrev-ref", "HEAD").strip()
+    head = _git("rev-parse", "--short", "HEAD").strip()
+    head_date = _git("log", "-1", "--format=%ad", "--date=short").strip()
+    count = int(_git("rev-list", "--count", "HEAD").strip())
+    return branch, head, head_date, count
+
+
+def file_counts() -> dict[str, int]:
+    """Map full-hash -> number of files changed (from --numstat).
+
+    Note: split on REC explicitly — str.splitlines() treats \\x1e as a line break,
+    so it cannot be used to find record boundaries.
+    """
+    out = _git("log", "--numstat", f"--format={REC}%H")
+    counts: dict[str, int] = {}
+    for block in out.split(REC):
+        block = block.strip()
+        if not block:
+            continue
+        lines = block.splitlines()
+        full = lines[0].strip()
+        counts[full] = sum(1 for ln in lines[1:] if ln.strip())
+    return counts
+
+
+def clean_body(body: str) -> str:
+    lines = [ln for ln in body.splitlines() if not TRAILER_RE.match(ln.strip())]
+    text = "\n".join(lines).strip()
+    return re.sub(r"\n{3,}", "\n\n", text)
+
+
+def parse_commits() -> list[dict]:
+    fmt = REC + UNIT.join(["%H", "%h", "%an", "%ad", "%P", "%s", "%b"])
+    out = _git("log", f"--format={fmt}", "--date=short")
+    counts = file_counts()
+    commits = []
+    for rec in out.split(REC):
+        if not rec.strip():
+            continue
+        parts = rec.split(UNIT)
+        if len(parts) < 7:
+            parts += [""] * (7 - len(parts))
+        full, short, author, date, parents, subject, body = parts[:7]
+        is_merge = len(parents.split()) > 1
+        scope = "merge" if is_merge else (SCOPE_RE.match(subject).group(1) if SCOPE_RE.match(subject) else "misc")
+        pr = None
+        source = None
+        if (m := PR_RE.search(subject)):
+            pr, source = m.group(1), m.group(2)
+        elif (m := MERGE_BRANCH_RE.search(subject)):
+            source = m.group(1)
+        commits.append({
+            "full": full, "short": short, "author": author, "date": date,
+            "subject": subject.strip(), "body": clean_body(body),
+            "scope": scope, "is_merge": is_merge, "pr": pr, "source": source,
+            "files": counts.get(full, 0),
+        })
+    return commits
+
+
+def load_annotations() -> dict:
+    if not ANNOTATIONS.exists():
+        return {}
+    data = yaml.safe_load(ANNOTATIONS.read_text()) or {}
+    # normalise keys to strings
+    return {str(k): v for k, v in data.items()}
+
+
+def annotation_for(commit: dict, annos: dict) -> dict | None:
+    for key, val in annos.items():
+        if commit["full"].startswith(key) or commit["short"].startswith(key):
+            return val
+    return None
+
+
+HEADER = (
+    "<!-- AUTO-GENERATED by scripts/gen_wiki.py — DO NOT EDIT BY HAND.\n"
+    "     Curated notes live in docs/wiki/annotations.yaml; re-run the generator to refresh. -->\n"
+)
+
+
+def render_note(note: dict) -> str:
+    if not note:
+        return ""
+    out = []
+    draft = " _(draft — review)_" if note.get("draft") else ""
+    first = True
+    for label in ("why", "how", "impact"):
+        if note.get(label):
+            out.append(f"- **{label.capitalize()}{draft if first else ''}:** {str(note[label]).strip()}")
+            first = False
+    if note.get("tags"):
+        out.append(f"- **Tags:** {', '.join(note['tags'])}")
+    return "\n".join(out)
+
+
+def write_ledger(commits: list[dict], annos: dict, meta: tuple) -> None:
+    branch, head, head_date, count = meta
+    lines = [HEADER, f"# Commit ledger — `{branch}`\n",
+             f"_{count} commits · HEAD `{head}` ({head_date}) · newest first._\n",
+             "Each entry is auto-summarised from git. Curated **Why/How/Impact** notes come from "
+             "`annotations.yaml`. See [`index.md`](index.md) for how to maintain this.\n", "---\n"]
+    for c in commits:
+        anchor = c["short"]
+        tag = f" · PR #{c['pr']}" if c["pr"] else ""
+        lines.append(f"## `{anchor}` — {c['subject']}")
+        lines.append(f"<sub>{c['date']} · {c['author']} · scope `{c['scope']}` · "
+                     f"{c['files']} file(s){tag}{(' · from `'+c['source']+'`') if c['source'] else ''}</sub>\n")
+        if c["body"]:
+            quoted = "\n".join(f"> {ln}" if ln else ">" for ln in c["body"].splitlines())
+            lines.append(quoted + "\n")
+        note = annotation_for(c, annos)
+        if note:
+            lines.append(render_note(note) + "\n")
+        lines.append("---\n")
+    (WIKI / "commit-ledger.md").write_text("\n".join(lines))
+
+
+def write_by_scope(commits: list[dict], meta: tuple) -> None:
+    branch, head, head_date, count = meta
+    by: dict[str, list[dict]] = {}
+    for c in commits:
+        by.setdefault(c["scope"], []).append(c)
+    lines = [HEADER, "# Changes by scope\n",
+             f"_{count} commits on `{branch}`, grouped by `scope:` prefix._\n"]
+    for scope in sorted(by, key=lambda s: (-len(by[s]), s)):
+        lines.append(f"## `{scope}` ({len(by[scope])})\n")
+        for c in by[scope]:
+            lines.append(f"- [`{c['short']}`](commit-ledger.md#{c['short']}--"
+                         f"{re.sub(r'[^a-z0-9]+', '-', c['subject'].lower()).strip('-')}) "
+                         f"{c['subject']} <sub>({c['date']})</sub>")
+        lines.append("")
+    (WIKI / "by-scope.md").write_text("\n".join(lines))
+
+
+def write_prs(commits: list[dict], meta: tuple) -> None:
+    branch, head, head_date, count = meta
+    merges = [c for c in commits if c["is_merge"]]
+    lines = [HEADER, "# Merge & PR timeline\n",
+             f"_{len(merges)} merge commits on `{branch}`, newest first._\n",
+             "| Commit | PR | Source | Subject | Date |", "|---|---|---|---|---|"]
+    for c in merges:
+        pr = f"#{c['pr']}" if c["pr"] else "—"
+        src = f"`{c['source']}`" if c["source"] else "—"
+        lines.append(f"| `{c['short']}` | {pr} | {src} | {c['subject']} | {c['date']} |")
+    (WIKI / "prs.md").write_text("\n".join(lines) + "\n")
+
+
+def maybe_llm_draft(commits: list[dict], annos: dict) -> None:
+    """Draft why/how/impact for un-annotated, non-merge commits using the repo's LLM layer."""
+    sys.path.insert(0, str(REPO / "backend"))
+    try:
+        import llm_service  # type: ignore
+    except Exception as e:  # pragma: no cover
+        print(f"[gen_wiki] --llm unavailable ({e}); skipping draft generation.")
+        return
+    if not getattr(llm_service, "llm_enabled", lambda: False)():
+        print("[gen_wiki] --llm requested but no model configured (set ANTHROPIC_API_KEY or "
+              "LLM_BASE_URL). Skipping; deterministic ledger still generated.")
+        return
+    targets = [c for c in commits if not c["is_merge"] and annotation_for(c, annos) is None]
+    if not targets:
+        print("[gen_wiki] every commit already annotated; nothing to draft.")
+        return
+    print(f"[gen_wiki] drafting notes for {len(targets)} un-annotated commit(s) via "
+          f"{getattr(llm_service, 'provider_info', lambda: {})()}…")
+    for c in targets:
+        try:
+            diffstat = _git("show", "--stat", "--format=", c["full"])[:4000]
+            prompt = (
+                "Summarise this git commit for an engineering knowledge base. Return THREE short "
+                "sentences labelled exactly 'WHY:', 'HOW:', 'IMPACT:'. Be concrete and factual; do "
+                "not speculate.\n\n"
+                f"Subject: {c['subject']}\n\nBody:\n{c['body']}\n\nFiles:\n{diffstat}"
+            )
+            # call_haiku is the repo's provider-agnostic single-call helper.
+            resp = llm_service.call_haiku(prompt) if hasattr(llm_service, "call_haiku") else None
+            text = resp.get("text") if isinstance(resp, dict) else str(resp)
+            note = {"draft": True}
+            for label in ("why", "how", "impact"):
+                m = re.search(rf"{label}:\s*(.+)", text or "", re.I)
+                if m:
+                    note[label] = m.group(1).strip()
+            if len(note) > 1:
+                annos[c["short"]] = note
+        except Exception as e:  # pragma: no cover
+            print(f"[gen_wiki]   skipped {c['short']}: {e}")
+    ANNOTATIONS.write_text(
+        "# Curated why/how/impact notes, keyed by commit hash (short or full).\n"
+        "# NEVER overwritten by gen_wiki.py EXCEPT entries it drafted with --llm (draft: true).\n"
+        "# Review drafts, remove the 'draft' flag, and edit freely.\n\n"
+        + yaml.safe_dump(annos, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    )
+    print(f"[gen_wiki] wrote {len(targets)} draft note(s) to {ANNOTATIONS.relative_to(REPO)} for review.")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Generate the in-repo commit knowledge base.")
+    ap.add_argument("--llm", action="store_true",
+                    help="draft notes for un-annotated commits via the repo's LLM layer")
+    args = ap.parse_args()
+
+    WIKI.mkdir(parents=True, exist_ok=True)
+    meta = branch_head()
+    commits = parse_commits()
+    annos = load_annotations()
+    if args.llm:
+        maybe_llm_draft(commits, annos)
+        annos = load_annotations()
+    write_ledger(commits, annos, meta)
+    write_by_scope(commits, meta)
+    write_prs(commits, meta)
+    annotated = sum(1 for c in commits if annotation_for(c, annos))
+    print(f"[gen_wiki] {meta[3]} commits → docs/wiki/  (ledger, by-scope, prs); "
+          f"{annotated} curated note(s).")
+
+
+if __name__ == "__main__":
+    main()

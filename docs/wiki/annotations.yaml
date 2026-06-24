@@ -10,6 +10,12 @@
 # ----------------------------------------------------------------------------
 
 # ---- Grant workstream: consolidation onto fair-vcg-complete-3r-grant ----
+8297836:
+  why: The Study Corpus subsystem (many papers -> one VCG-ready consensus schema) was unmerged work stranded on the stale v2-local-llm-hitl-planning branch; it is grant-relevant (consensus schema, hallucination/conflict checks, VCG readiness, HITL) and worth keeping.
+  how: Brought the self-contained backend modules + tests + StudyCorpusPage over as-is, then re-applied the integration hooks onto current files (main.py router registration, vcg_router prefill bridge, hitl.py 6 new categories + validation, client/App/Layout/HITLPanel). Dropped v2's duplicate LLMStatus in favour of the existing typed getLLMStatus.
+  impact: Adds /study-corpus endpoints + page; the approved consensus schema pre-fills the VCG wizard. Offline-friendly (rule-based, no LLM key). Frontend type-checks; 198 backend tests pass.
+  tags: [grant, study-corpus, vcg, hitl, port]
+
 ace930d:
   why: The KG-grounded eval predictor was an open branch; the grant's "complete" build needs the A↔C accuracy-lift evidence in one place.
   how: Merged origin/claude/grant-kg-eval (disjoint files — backend/eval/*) with no conflicts.

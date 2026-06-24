@@ -3,9 +3,64 @@
 
 # Commit ledger — `fair-vcg-complete-3r-grant`
 
-_85 commits · HEAD `7069c36` (2026-06-24) · newest first._
+_87 commits · HEAD `8297836` (2026-06-24) · newest first._
 
 Each entry is auto-summarised from git. Curated **Why/How/Impact** notes come from `annotations.yaml`. See [`index.md`](index.md) for how to maintain this.
+
+---
+
+## `8297836` — feat: port Study Corpus (multi-paper consensus schema) onto grant branch
+<sub>2026-06-24 · Claude · scope `feat` · 20 file(s)</sub>
+
+> Brings the unmerged Study Corpus subsystem from v2-local-llm-hitl-planning onto
+> fair-vcg-complete-3r-grant and adapts it to the current codebase + grant context.
+>
+> Feature: assemble several papers (DOI/PDF/text) into a corpus, synthesise a
+> consensus project schema with per-field evidence, validate it, assess VCG
+> readiness (missing fields, invalid refs, hallucinated roles, conflicting
+> aliases), and review AI proposals via HITL — then the approved consensus schema
+> pre-fills the VCG wizard.
+>
+> Backend (self-contained, rule-based, no LLM key required — offline-friendly):
+> - new: study_corpus.py, project_schema.py, vcg_readiness.py, schema_agent_loop.py,
+>   corpus_router.py (+ 6 test files / fixtures).
+> - main.py: register corpus_router via the existing init_*_router injection.
+> - vcg/vcg_router.py: _apply_project_schema_defaults() overlays the corpus consensus
+>   schema onto wizard-prefill BEFORE template defaults (template-locked values still win).
+> - hitl.py (additive): 6 new categories (schema_field, schema_conflict, ontology_mapping,
+>   unit_normalization, vcg_assumption, corpus_schema_approval) with per-category payload
+>   validation and a schema-planning-note applier. Existing vcg_config validation
+>   (group_values normalization) left intact.
+>
+> Frontend:
+> - new StudyCorpusPage.tsx + route + 'Study Corpus' nav entry.
+> - api/client.ts: corpus types + endpoint functions (reusing the existing typed
+>   getLLMStatus; v2's duplicate LLMStatus intentionally dropped).
+> - HITLPanel/HITLCategory extended for the new categories.
+>
+> API contract: adds /api/{id}/study-corpus* endpoints; session gains optional
+> study_corpus + schema_planning keys (guarded with .get(), safe on old sessions).
+>
+> Tests: 19 ported logic tests pass; full suite 198 passed (router/corpus tests need
+> fastapi, which is broken in this container only); frontend type-check clean.
+
+- **Why:** The Study Corpus subsystem (many papers -> one VCG-ready consensus schema) was unmerged work stranded on the stale v2-local-llm-hitl-planning branch; it is grant-relevant (consensus schema, hallucination/conflict checks, VCG readiness, HITL) and worth keeping.
+- **How:** Brought the self-contained backend modules + tests + StudyCorpusPage over as-is, then re-applied the integration hooks onto current files (main.py router registration, vcg_router prefill bridge, hitl.py 6 new categories + validation, client/App/Layout/HITLPanel). Dropped v2's duplicate LLMStatus in favour of the existing typed getLLMStatus.
+- **Impact:** Adds /study-corpus endpoints + page; the approved consensus schema pre-fills the VCG wizard. Offline-friendly (rule-based, no LLM key). Frontend type-checks; 198 backend tests pass.
+- **Tags:** grant, study-corpus, vcg, hitl, port
+
+---
+
+## `a8ea2f5` — docs: add regenerable commit knowledge base (wiki) + generator
+<sub>2026-06-24 · Claude · scope `docs` · 6 file(s)</sub>
+
+> scripts/gen_wiki.py builds an in-repo, version-tracked wiki from git history:
+> commit-ledger.md (per-commit what/why/how), by-scope.md (topic index), and
+> prs.md (merge/PR timeline). The markdown is fully regenerated from git log;
+> curated Why/How/Impact notes live in docs/wiki/annotations.yaml (seeded for the
+> 16 key grant/feature commits) and are never overwritten — so regeneration is
+> always safe. Optional --llm flag drafts notes via the repo's own offline-capable
+> LLM layer. See docs/wiki/index.md for the maintenance routine.
 
 ---
 

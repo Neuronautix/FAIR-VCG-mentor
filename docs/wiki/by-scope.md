@@ -3,7 +3,7 @@
 
 # Changes by scope
 
-_85 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
+_87 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 
 ## `merge` (18)
 
@@ -45,8 +45,9 @@ _85 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 - [`ae0a2c5`](commit-ledger.md#ae0a2c5--feat-vcg-complete-vcg-pipeline-orchestrator-engine-report-router-and-frontend-pages) feat(vcg): complete VCG pipeline — orchestrator, engine, report, router, and frontend pages <sub>(2026-05-01)</sub>
 - [`80aaf82`](commit-ledger.md#80aaf82--initial-implementation-of-fair-csv-mentor) Initial implementation of FAIR CSV Mentor <sub>(2026-04-30)</sub>
 
-## `docs` (11)
+## `docs` (12)
 
+- [`a8ea2f5`](commit-ledger.md#a8ea2f5--docs-add-regenerable-commit-knowledge-base-wiki-generator) docs: add regenerable commit knowledge base (wiki) + generator <sub>(2026-06-24)</sub>
 - [`7069c36`](commit-ledger.md#7069c36--docs-update-grant-roadmap-todo-for-d-e-f-frontend-surfacing) docs: update grant roadmap + TODO for D/E/F + frontend surfacing <sub>(2026-06-24)</sub>
 - [`8db7108`](commit-ledger.md#8db7108--docs-update-todo-with-grant-workstream-status-future-dev-backlog) docs: update TODO with grant workstream status + future-dev backlog <sub>(2026-06-23)</sub>
 - [`7f80c0c`](commit-ledger.md#7f80c0c--docs-update-roadmap-status-a-c-merged-b-deploy-kg-eval-in-review) docs: update roadmap status — A/C merged, B-deploy + KG-eval in review <sub>(2026-06-23)</sub>
@@ -59,8 +60,9 @@ _85 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 - [`b866d69`](commit-ledger.md#b866d69--docs-add-readme-with-features-quick-start-and-architecture-overview) docs: add README with features, quick start, and architecture overview <sub>(2026-05-01)</sub>
 - [`e3bdbf1`](commit-ledger.md#e3bdbf1--docs-add-claude-md-with-repo-assessment-and-multi-agent-guidelines) docs: add CLAUDE.md with repo assessment and multi-agent guidelines <sub>(2026-05-01)</sub>
 
-## `feat` (10)
+## `feat` (11)
 
+- [`8297836`](commit-ledger.md#8297836--feat-port-study-corpus-multi-paper-consensus-schema-onto-grant-branch) feat: port Study Corpus (multi-paper consensus schema) onto grant branch <sub>(2026-06-24)</sub>
 - [`cf8fa96`](commit-ledger.md#cf8fa96--feat-add-two-layer-nts-citation-analyser) feat: add two-layer NTS citation analyser <sub>(2026-05-29)</sub>
 - [`adc701f`](commit-ledger.md#adc701f--feat-add-csv-generation-endpoint-and-functionality-for-paper-templates) feat: add CSV generation endpoint and functionality for paper templates <sub>(2026-05-19)</sub>
 - [`860c4fa`](commit-ledger.md#860c4fa--feat-add-paper-template-suggestion-endpoints-and-ui-components-for-yaml-generation) feat: add paper template suggestion endpoints and UI components for YAML generation <sub>(2026-05-19)</sub>

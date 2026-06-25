@@ -23,7 +23,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from eval.datasets import EvalDataset, available_datasets  # noqa: E402
 from eval.masking import MASKING_LEVELS, mask_dataset  # noqa: E402
-from eval.predictors import DeterministicPredictor, LLMPredictor  # noqa: E402
+from eval.predictors import (  # noqa: E402
+    DeterministicPredictor,
+    KGGroundedLLMPredictor,
+    KGPredictor,
+    LLMPredictor,
+)
 from eval.scorecard import ScoreCard  # noqa: E402
 from eval.scoring import score_predictions  # noqa: E402
 
@@ -61,14 +66,24 @@ def evaluate(
 def _make_predictor(kind: str):
     if kind == "deterministic":
         return DeterministicPredictor()
+    if kind == "kg":
+        return KGPredictor()
     if kind == "llm":
         return LLMPredictor()
-    raise SystemExit(f"unknown predictor: {kind!r} (expected 'deterministic' or 'llm')")
+    if kind == "kg-llm":
+        return KGGroundedLLMPredictor()
+    raise SystemExit(
+        f"unknown predictor: {kind!r} (expected 'deterministic', 'kg', 'llm', or 'kg-llm')"
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Masked-metadata validation harness.")
-    parser.add_argument("--predictor", default="deterministic", choices=["deterministic", "llm"])
+    parser.add_argument(
+        "--predictor",
+        default="deterministic",
+        choices=["deterministic", "kg", "llm", "kg-llm"],
+    )
     parser.add_argument(
         "--levels",
         default=",".join(MASKING_LEVELS),

@@ -1,4 +1,5 @@
 import DownloadIcon from '@mui/icons-material/Download'
+import PetsIcon from '@mui/icons-material/Pets'
 import {
   Alert,
   Box,
@@ -227,6 +228,19 @@ export default function VCGResultsPage() {
     }
   })()
 
+  // --- 3Rs (Reduction) impact ---------------------------------------------
+  // A validated VCG lets a future study of comparable design substitute its live concurrent
+  // control arm with synthetic controls, sparing animals. How much substitution is defensible
+  // is gated by the reliability of the synthetic cohort.
+  const expansionFactor = n_subjects_real > 0 ? n_subjects_vcg / n_subjects_real : 0
+  const reductionPerStudy = n_subjects_real
+  const substitution =
+    reliabilityScore >= 0.8
+      ? { label: 'Full substitution statistically defensible', color: '#2e7d32' }
+      : reliabilityScore >= 0.6
+        ? { label: 'Partial substitution / informative prior', color: '#e65100' }
+        : { label: 'Supporting evidence only — not a standalone replacement', color: '#c62828' }
+
   return (
     <Box>
       {/* Header */}
@@ -281,6 +295,51 @@ export default function VCGResultsPage() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* 3Rs Reduction impact */}
+      <Card sx={{ mb: 3, border: '1px solid #c8e6c9', background: 'linear-gradient(90deg, #f1f8f2 0%, #ffffff 60%)' }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+            <PetsIcon sx={{ color: '#2e7d32', mr: 1 }} />
+            <Typography variant="h6" sx={{ fontWeight: 700, color: '#1b5e20' }}>
+              Reduction (3Rs) — Animal-Welfare Impact
+            </Typography>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="h4" sx={{ color: '#2e7d32', fontWeight: 700 }}>
+                up to {reductionPerStudy}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                live control animals reducible per future study of comparable design
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="h4" sx={{ color: '#2e7d32', fontWeight: 700 }}>
+                {n_subjects_vcg}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                synthetic controls generated from {n_subjects_real} real controls
+                {expansionFactor > 0 && ` (${expansionFactor.toFixed(1)}×)`}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="subtitle1" sx={{ color: substitution.color, fontWeight: 700 }}>
+                {substitution.label}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                based on reliability {reliabilityScore.toFixed(2)}
+              </Typography>
+            </Grid>
+          </Grid>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+            Replacing or shrinking the concurrent control arm with validated synthetic controls directly serves
+            the <strong>Reduction</strong> principle. Realised savings depend on statistical validation and
+            regulatory/ethical acceptance for the specific study; figures above are an upper-bound estimate, not a
+            guarantee.
+          </Typography>
+        </CardContent>
+      </Card>
 
       {/* Warnings */}
       {warnings && warnings.length > 0 && (

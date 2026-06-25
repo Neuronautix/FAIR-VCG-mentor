@@ -246,6 +246,7 @@ interface AppState {
   llmFairScore: any | null
 
   llmEnabled: boolean | null
+  llmStatus: import('../api/client').LLMStatus | null
   hitlSuggestions: import('../api/client').HITLSuggestion[]
   vocabulary: import('../api/client').Vocabulary | null
 
@@ -287,6 +288,7 @@ interface AppState {
   setLLMFairScore: (score: any | null) => void
 
   setLLMEnabled: (enabled: boolean | null) => void
+  setLLMStatus: (status: import('../api/client').LLMStatus | null) => void
   setHITLSuggestions: (suggestions: import('../api/client').HITLSuggestion[]) => void
   setVocabulary: (vocab: import('../api/client').Vocabulary | null) => void
 
@@ -326,6 +328,7 @@ export const useStore = create<AppState>((set) => ({
   llmFairScore: null,
 
   llmEnabled: null,
+  llmStatus: null,
   hitlSuggestions: [],
   vocabulary: null,
 
@@ -396,6 +399,7 @@ export const useStore = create<AppState>((set) => ({
   setLLMFairScore: (score) => set({ llmFairScore: score }),
 
   setLLMEnabled: (llmEnabled) => set({ llmEnabled }),
+  setLLMStatus: (llmStatus) => set({ llmStatus }),
   setHITLSuggestions: (hitlSuggestions) => set({ hitlSuggestions }),
   setVocabulary: (vocabulary) => set({ vocabulary }),
 

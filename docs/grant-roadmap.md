@@ -41,6 +41,21 @@ dissemination package.
   knowledge graph (`uri_suggester.py` is template-only), no LLM-output /
   masked-metadata validation harness.
 
+## 2b. Progress (live)
+
+| Milestone | Status | Where |
+|-----------|--------|-------|
+| **B** — provider-agnostic LLM layer | ✅ merged | PR #15 (provider switch, structured-output local path, local PDF→text, `provider_info()`, CrossRef gated) |
+| **B** — local deployment (docker `local-llm` profile, setup docs, live-endpoint smoke) | ✅ on branch | merged into `fair-vcg-complete-3r-grant` (`docker-compose.local-llm.yml`, `docs/local-llm-setup.md`, `backend/scripts/llm_smoke.py`) |
+| **C** — masked-metadata validation harness + scorecard | ✅ merged | PR #16 (`backend/eval/`; current scorecard: deterministic 73.2% overall / 48.8% blind, KG 76.8% / 58.5% blind, 0% hallucination) |
+| **A** — preclinical metadata knowledge graph + grounding | ✅ merged | PR #17 (`backend/knowledge/`, from the precliniverse schema; grounding + offline ontology IRIs) |
+| **A↔C bridge** — KG-grounded eval predictor (quantifies blind-mode lift) | ✅ on branch | merged into `fair-vcg-complete-3r-grant` — **+50 pp blind-mode accuracy (0.25 → 0.75) on the synthetic set, 0% hallucination** |
+| **D** — integration tests on academic datasets | 🛠 harness ready | headless end-to-end test `backend/tests/test_integration_pipeline.py` (profile → FAIR → VCG) on a synthetic placeholder; still blocked on an anonymised UNIL dataset + live local endpoint |
+| **E** — proof-of-concept VCG report (one use case) | ✅ on branch | rodent-toxicology PoC `docs/vcg_poc/` (synthetic CSV + stats report + `poc_results.json`, reliability 0.935) |
+| **F** — dissemination package | ✅ on branch | `backend/scripts/build_dissemination.py` bundles scorecards + VCG PoC + local-llm profile into `dist/dissemination/` (see §8) |
+
+Legend: ✅ merged · ✅ on branch (in `fair-vcg-complete-3r-grant`, not yet in `main`) · 🔍 in review (open PR) · 🛠 in progress (branch) · ⏳ not started.
+
 ## 3. Decisions on record
 
 | # | Decision | Choice |
@@ -128,3 +143,37 @@ Per-feature model overrides (`PAPER_EXTRACTION_MODEL`, `FAIR_SCORER_MODEL`,
 `COLUMN_ENRICHER_MODEL`, `ISSUE_FIXER_MODEL`, `VOCAB_DISCOVERY_MODEL`,
 `VCG_ORCHESTRATOR_MODEL`, `HAIKU_MODEL`) continue to work for both providers;
 when unset under `openai`, they fall back to `LLM_MODEL`.
+
+## 8. Dissemination package (Milestone F)
+
+`backend/scripts/build_dissemination.py` assembles a self-contained, offline-reproducible
+evidence bundle for the grant. Run it from `backend/`:
+
+```bash
+python -m scripts.build_dissemination     # or: python scripts/build_dissemination.py
+```
+
+It lands in `dist/dissemination/` at the repo root and contains: the masked-metadata
+provider scorecards (`scorecard_deterministic.md`, `scorecard_kg.md`, regenerated
+in-process from the eval harness), the VCG proof-of-concept outputs under `vcg_poc/`,
+the local-LLM deployment assets under `local_llm_deployment/`, and a `README.md` MANIFEST.
+Headline metrics (eval accuracy / hallucination rate, VCG reliability score) are parsed
+from the generated artifacts rather than hardcoded. The build is idempotent and is covered
+by `backend/tests/test_dissemination.py`.
+
+## 9. Frontend grant surfacing
+
+Three grant-relevant features previously computed but not shown in the UI are now surfaced
+(branch `fair-vcg-complete-3r-grant`):
+
+- **Offline / local-LLM indicator** — the top-bar status chip reads the real provider/model
+  from `/api/llm/status` (no longer hardcoded "Claude Haiku"); a configured `base_url` shows
+  "Local LLM" with an "fully offline — no external API calls" tooltip, making the offline
+  deployment story visible (`Layout.tsx`).
+- **Knowledge-graph ontology grounding** — `ColumnProfilePage` now fetches `/api/uris/{id}`
+  and shows the KG's per-column ontology matches (NCBITaxon / UBERON / UO …) as clickable IRI
+  chips with confidence, wiring the previously-dead `getUriSuggestions` into the UI (Milestone A
+  made visible).
+- **3Rs Reduction impact** — `VCGResultsPage` adds a "Reduction (3Rs)" card quantifying live
+  control animals reducible per future study, the synthetic expansion factor, and a
+  reliability-gated substitution verdict — the headline animal-welfare metric for the 3RCC grant.

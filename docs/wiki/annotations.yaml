@@ -1,0 +1,115 @@
+# Curated why/how/impact notes for the commit knowledge base.
+# ----------------------------------------------------------------------------
+# Keyed by commit hash (short or full — the generator matches by prefix).
+# This file is the ONLY hand-written part of the wiki; gen_wiki.py merges it into
+# commit-ledger.md but NEVER overwrites it (except entries it drafts with --llm,
+# which are flagged `draft: true` for you to review).
+#
+# Add an entry after each meaningful merge/PR, then run:  python scripts/gen_wiki.py
+# Fields (all optional): why, how, impact, tags.
+# ----------------------------------------------------------------------------
+
+# ---- Grant workstream: consolidation onto fair-vcg-complete-3r-grant ----
+8297836:
+  why: The Study Corpus subsystem (many papers -> one VCG-ready consensus schema) was unmerged work stranded on the stale v2-local-llm-hitl-planning branch; it is grant-relevant (consensus schema, hallucination/conflict checks, VCG readiness, HITL) and worth keeping.
+  how: Brought the self-contained backend modules + tests + StudyCorpusPage over as-is, then re-applied the integration hooks onto current files (main.py router registration, vcg_router prefill bridge, hitl.py 6 new categories + validation, client/App/Layout/HITLPanel). Dropped v2's duplicate LLMStatus in favour of the existing typed getLLMStatus.
+  impact: Adds /study-corpus endpoints + page; the approved consensus schema pre-fills the VCG wizard. Offline-friendly (rule-based, no LLM key). Frontend type-checks; 198 backend tests pass.
+  tags: [grant, study-corpus, vcg, hitl, port]
+
+ace930d:
+  why: The KG-grounded eval predictor was an open branch; the grant's "complete" build needs the A↔C accuracy-lift evidence in one place.
+  how: Merged origin/claude/grant-kg-eval (disjoint files — backend/eval/*) with no conflicts.
+  impact: Brings the KG predictor (+50pp blind-mode lift on the synthetic set) onto the grant branch.
+  tags: [grant, milestone-AC, merge]
+
+26da15c:
+  why: The offline-deployment milestone (B) was a separate branch; needed on the complete build for the "no external API" story.
+  how: Merged origin/claude/grant-local-llm-deploy (docker profile, setup docs, smoke test) — disjoint files, clean.
+  impact: One-command local-LLM deployment now part of the grant branch.
+  tags: [grant, milestone-B, deployment, merge]
+
+a3da940:
+  why: Keep the live grant roadmap/TODO status alongside the code it describes.
+  how: Merged origin/claude/grant-roadmap-status (docs only).
+  impact: Roadmap + TODO travel with the complete build.
+  tags: [grant, docs, merge]
+
+cdcdaeb:
+  why: Milestone E asks for a proof-of-concept VCG report on one concrete use case.
+  how: Added docs/vcg_poc/ — a synthetic rodent-toxicology dataset run through the real VCG engine (Gaussian copula bootstrap), emitting synthetic-control CSV + stats report.
+  impact: Demonstrates the end-to-end VCG value with reliability 0.935; the use case can later be swapped for a real UNIL study.
+  tags: [grant, milestone-E, vcg, poc]
+
+4bd9c98:
+  why: Milestones D (integration test) and F (dissemination package) were the only buildable grant items still missing.
+  how: Added a headless profile→FAIR→VCG integration test (no HTTP, to dodge the container's broken fastapi import) and build_dissemination.py, which bundles scorecards + VCG PoC + local-llm profile with metrics parsed from artifacts.
+  impact: D harness ready (real run still needs a UNIL dataset); F produces a shareable evidence pack in one command.
+  tags: [grant, milestone-D, milestone-F, tests, dissemination]
+
+7591692:
+  why: Three grant-relevant capabilities existed in the backend but were invisible in the UI, weakening the demo and the grant narrative.
+  how: LLM status chip now reads real provider/model and flags "Local LLM"/offline; ColumnProfile wires the previously-dead getUriSuggestions to show KG ontology IRIs; VCGResults adds a 3Rs Reduction card.
+  impact: Makes the offline-LLM, knowledge-graph-grounding, and animal-reduction stories visible to users and reviewers.
+  tags: [grant, frontend, 3rs, knowledge-graph, offline-llm]
+
+# ---- Grant milestones (original PRs / branch commits) ----
+8025768:
+  why: Milestone A — metadata reasoning needed grounding in a real preclinical knowledge graph, not just template strings.
+  how: Added backend/knowledge/ (KG from the precliniverse schema) with a deterministic retriever that injects per-column subgraphs + offline ontology IRIs (NCBITaxon/UBERON/UO).
+  impact: Foundation for grounded, hallucination-resistant metadata suggestions; offline by design.
+  tags: [grant, milestone-A, knowledge-graph]
+
+09c0bd8:
+  why: Milestone C — the grant claims ~90% accuracy, which requires a measurable, reproducible validation harness.
+  how: Added backend/eval/ — masks labels/types/units on known-good datasets, runs the pipeline, scores recovered vs ground truth with a hallucination metric.
+  impact: Produces the provider scorecard (deterministic 73.2% / KG 76.8%, 0% hallucination); the offline parts run in CI.
+  tags: [grant, milestone-C, eval]
+
+77f158b:
+  why: Milestone B — the tool was coupled to Anthropic; the grant requires running fully on a local LLM with no external API.
+  how: Added a provider switch (anthropic|openai/LM Studio) in llm_service with a structured-output local path and local PDF→text; provider_info() reports state; CrossRef gated behind ENABLE_ONLINE_ENRICHMENT.
+  impact: Single provider seam; the whole app can run offline against Gemma/APERTUS.
+  tags: [grant, milestone-B, llm, offline]
+
+d6d7918:
+  why: Quantify how much the knowledge graph (A) actually helps the validator (C).
+  how: Added a KG-grounded predictor to the eval harness and a blind-mode lift demo.
+  impact: +50 percentage-point blind-mode accuracy (0.25→0.75) on the synthetic set, 0% hallucination — the A↔C evidence bridge.
+  tags: [grant, milestone-AC, eval, knowledge-graph]
+
+c802dd3:
+  why: Milestone B needed a turnkey way for a lab to run everything offline.
+  how: Added docker-compose.local-llm.yml, .env.local-llm.example, setup docs, and a live-endpoint smoke check.
+  impact: One-command local deployment; the basis of the dissemination package's deployment assets.
+  tags: [grant, milestone-B, deployment]
+
+# ---- Major product capabilities (pre-grant) ----
+ae0a2c5:
+  why: Core product feature — generate statistically rigorous virtual control groups without an external LLM.
+  how: Added the full VCG module — rule-based orchestrator FSM, four-agent engine, Markdown report, router, and frontend pages.
+  impact: The VCG half of the product; everything in the grant's VCG/3Rs story builds on this.
+  tags: [vcg, feature]
+
+50d8edb:
+  why: Datasets need to be checked against real reporting standards, not just generic FAIR heuristics.
+  how: Added the validated template layer (ARRIVE 2.0 + MNMS) with column/metadata conformance, scoring, and VCG prefill.
+  impact: Template-driven conformance + the hierarchical conforms_to model used by every later standard.
+  tags: [templates, scoring, feature]
+
+d1a0f72:
+  why: Quality-system reporting (EQIPD) is LLM-fillable and connects standards via crosswalks.
+  how: Added the EQIPD template (18 Core Requirements) with eqipd_section/guidance and cross-standard crosswalks.
+  impact: Standalone quality-system standard that auto-satisfies from ARRIVE/PREPARE fields; surfaces on paper import.
+  tags: [templates, eqipd]
+
+cf8fa96:
+  why: Reviewers and grant evidence benefit from analysing the citation/NTS context of a paper.
+  how: Added a two-layer NTS (non-technical summary) citation analyser.
+  impact: Extracts 3Rs/procedure/harm-benefit context from papers; feeds the metadata and VCG flows.
+  tags: [nts, feature]
+
+258135e:
+  why: LLM suggestions must be controlled and auditable, not free-form.
+  how: Vocabulary-constrained LLM calls with versioning + a human-in-the-loop (HITL) review queue + PDF vocab discovery.
+  impact: Every AI suggestion is enum-constrained and human-approved before it lands — the grant's stated safeguard pattern.
+  tags: [hitl, llm, vocabulary]

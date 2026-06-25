@@ -14,6 +14,7 @@ import PaperImportPage from './pages/PaperImportPage'
 import TemplateSelectorPage from './pages/TemplateSelectorPage'
 import TemplateFillPage from './pages/TemplateFillPage'
 import NTSAnalyzerPage from './pages/NTSAnalyzerPage'
+import StudyCorpusPage from './pages/StudyCorpusPage'
 
 const theme = createTheme({
   palette: {
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="vcg/wizard" element={<VCGWizardPage />} />
             <Route path="vcg/results" element={<VCGResultsPage />} />
             <Route path="paper-import" element={<PaperImportPage />} />
+            <Route path="study-corpus" element={<StudyCorpusPage />} />
             <Route path="nts-analyzer" element={<NTSAnalyzerPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

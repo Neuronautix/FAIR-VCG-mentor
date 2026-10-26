@@ -41,7 +41,8 @@ python scripts/gen_wiki.py
 #      why:    Why this change was needed.
 #      how:    How it was done (approach, key files).
 #      impact: What it unblocks / changes downstream.
-#      tags:   [grant, vcg, frontend]
+#      note:   (optional) correction or caveat about the commit message.
+#      tags:   [roadmap, vcg, frontend]
 #
 # 3. Re-run so the note lands in the ledger, then commit both:
 python scripts/gen_wiki.py
@@ -61,7 +62,7 @@ python scripts/gen_wiki.py --llm
 It writes drafts into `annotations.yaml` flagged `draft: true` for you to review, edit, and
 un-flag. It degrades gracefully (prints a notice and still generates the deterministic
 ledger) when no model is configured. Running it against a **local** model keeps the whole
-knowledge-base workflow offline — consistent with the grant's no-external-API goal.
+knowledge-base workflow offline — consistent with the roadmap's no-external-API goal.
 
 ## Conventions that make this work
 
@@ -70,4 +71,4 @@ knowledge-base workflow offline — consistent with the grant's no-external-API 
 - **Scopes** seen so far: `vcg`, `vcg-agents`, `vcg-chat`, `templates`, `eval`, `knowledge`,
   `frontend`, `backend`, `api`, `scoring`, `profiler`, `tests`, `docs`, `config`, `feat`, `fix`.
 - **Tags** in `annotations.yaml` are free-form; use them to trace cross-cutting threads
-  (e.g. `grant`, `milestone-B`, `3rs`, `offline-llm`).
+  (e.g. `roadmap`, `milestone-B`, `3rs`, `offline-llm`).

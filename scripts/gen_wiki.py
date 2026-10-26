@@ -8,7 +8,7 @@ Design
 ------
 - The markdown outputs (``commit-ledger.md``, ``by-scope.md``, ``prs.md``) are **fully
   generated** from ``git log`` and are safe to overwrite on every run.
-- Curated narrative (``why`` / ``how`` / ``impact`` / ``tags``) lives ONLY in
+- Curated narrative (``why`` / ``how`` / ``impact`` / ``note`` / ``tags``) lives ONLY in
   ``docs/wiki/annotations.yaml`` keyed by commit hash. The generator merges it in but
   NEVER writes to it, so regenerating can never lose hand-written context.
 - Everything is derived from the full ``git log`` of the current branch, so the ledger
@@ -141,7 +141,7 @@ def render_note(note: dict) -> str:
     out = []
     draft = " _(draft — review)_" if note.get("draft") else ""
     first = True
-    for label in ("why", "how", "impact"):
+    for label in ("why", "how", "impact", "note"):
         if note.get(label):
             out.append(f"- **{label.capitalize()}{draft if first else ''}:** {str(note[label]).strip()}")
             first = False

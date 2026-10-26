@@ -1,11 +1,13 @@
 # Fix List — FAIR CSV Mentor
 
-Generated from code review on 2026-05-02. Grant workstream section added 2026-06-23.
+Generated from code review on 2026-05-02. Roadmap workstream section added 2026-06-23.
 
-## Grant: Local-LLM, Knowledge Graph & Validation (Swiss 3RCC) — updated 2026-06-23
+## Roadmap: Local-LLM, Knowledge Graph & Validation — updated 2026-06-23
 
-Full plan in [`docs/grant-roadmap.md`](docs/grant-roadmap.md). Status of the
-local-LLM / FAIR-VCG grant workstream:
+_Independent personal project (not grant-funded)._
+
+Full plan in [`docs/roadmap.md`](docs/roadmap.md). Status of the
+local-LLM / FAIR-VCG roadmap workstream:
 
 ### Done (merged)
 - [x] EQIPD Quality System template — LLM-fillable, cross-standard crosswalks, paper-scoring (#14)
@@ -16,10 +18,10 @@ local-LLM / FAIR-VCG grant workstream:
 ### In review (PRs open, CI green)
 - [ ] Local-LLM deployment — docker `local-llm` profile + setup docs + smoke (#18)
 - [ ] KG-grounded eval predictor — +50 pp blind-mode accuracy (0.25 → 0.75) (#19)
-- [ ] Live grant roadmap + this TODO (#20)
+- [ ] Live roadmap + this TODO (#20)
 
-### Remaining grant milestones
-- [~] **D — integration tests on academic data** (M6–7) — _harness ready:_ headless end-to-end run `backend/tests/test_integration_pipeline.py` (profile → FAIR → VCG) on a synthetic placeholder. Still BLOCKED on an anonymised UNIL dataset + live local endpoint for the real metric capture.
+### Remaining roadmap milestones
+- [~] **D — integration tests on academic data** (M6–7) — _harness ready:_ headless end-to-end run `backend/tests/test_integration_pipeline.py` (profile → FAIR → VCG) on a synthetic placeholder. Still BLOCKED on an anonymised real-world dataset + live local endpoint for the real metric capture.
 - [x] **E — proof-of-concept VCG report** (M8–9) — rodent-toxicology PoC in `docs/vcg_poc/` (synthetic CSV + stats report + `poc_results.json`, reliability 0.935).
 - [x] **F — dissemination package** (M10–11) — `backend/scripts/build_dissemination.py` bundles provider scorecards + VCG PoC + local-llm profile into `dist/dissemination/`. Still to add: FELASA-2027 workshop material.
 - [ ] **Live local-endpoint validation** — real provider scorecard (`python -m eval.run_eval --predictor kg-llm`) on LM Studio + Gemma/APERTUS. BLOCKED: live endpoint.
@@ -30,7 +32,7 @@ local-LLM / FAIR-VCG grant workstream:
 - [ ] Implement the optional online resolver layer (OLS4 / ORCID / ROR / MyGene) from the precliniverse `apis` registry, behind `ENABLE_ONLINE_ENRICHMENT`.
 - [ ] Eval: unit-recovery scoring; expand ground-truth datasets; wire the deterministic eval into CI as a guardrail; commit a periodic provider scorecard.
 - [ ] LLM: full PDF chunking for long papers (currently truncation via `LLM_MAX_DOC_CHARS`); validate APERTUS end-to-end.
-- [x] Frontend: show active provider/model in LLM status; surface KG `ontology_suggestions` in the column profile; KG-grounding indicator. (done on `fair-vcg-complete-3r-grant`: provider-aware LLM chip, ontology IRI chips in Column Profile, 3Rs Reduction card on VCG Results)
+- [x] Frontend: show active provider/model in LLM status; surface KG `ontology_suggestions` in the column profile; KG-grounding indicator. (done on `fair-vcg-milestones-d-f`: provider-aware LLM chip, ontology IRI chips in Column Profile, 3Rs Reduction card on VCG Results)
 - [x] Infra: FastAPI test-collection failure diagnosed + fixed. Root cause: a stray `fastapi/_compat/` package dir (from a different fastapi version) shadowed the real `fastapi/_compat.py` module of the pinned 0.115.0, so `PYDANTIC_V2` was missing and `import fastapi` failed. Removing the stray shadow restores a consistent install; full backend suite then passes (228 passed). This is an environment/image artifact (not code) and recurs on fresh containers — a setup step should `rm -rf $(python -c "import fastapi,os;print(os.path.dirname(fastapi.__file__))")/_compat` if `_compat.py` also exists, or reinstall `fastapi==0.115.0 --force-reinstall --no-deps`.
 
 ## Roadmap — Column Understanding (Small + Fast)

@@ -1,4 +1,4 @@
-"""Assemble a self-contained dissemination bundle for the 3RCC grant (Milestone F).
+"""Assemble a self-contained dissemination bundle (roadmap Milestone F).
 
 Runs from the ``backend/`` directory:
 
@@ -136,7 +136,7 @@ def _render_readme(
     lines.append("# FAIR-VCG Mentor — Dissemination Package")
     lines.append("")
     lines.append(
-        "Self-contained evidence bundle for the Swiss 3RCC animal-reduction grant. "
+        "Self-contained evidence bundle for the FAIR-VCG animal-reduction (3Rs) work. "
         "Every artifact below is reproducible offline from this repository; no "
         "external LLM API is required."
     )

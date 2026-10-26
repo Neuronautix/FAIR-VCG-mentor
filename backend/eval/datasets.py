@@ -92,6 +92,23 @@ EVAL_DATASETS: List[EvalDataset] = [
         },
     ),
     EvalDataset(
+        # Biological-descriptor-rich dataset. Under blind masking (headers → var_N)
+        # the rule-based profiler loses the column-name signal, but the KG recovers
+        # species/strain/sex/compound/tissue from the controlled *values*. This is
+        # the fixture that demonstrates the KG blind-mode accuracy lift.
+        "synthetic_biological_descriptors.csv",
+        {
+            "subject_id": "identifier",
+            "species": "biological_descriptor",
+            "strain": "biological_descriptor",
+            "sex": "biological_descriptor",
+            "compound": "experimental_condition",
+            "tissue": "biological_descriptor",
+            "body_weight_g": "measurement",
+            "timepoint": "time_variable",
+        },
+    ),
+    EvalDataset(
         "THY_Tau22_VCG_experimental_metadata_fields.csv",
         {
             "field_id": "identifier",

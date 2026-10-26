@@ -12,7 +12,14 @@ on demand against whichever provider `llm_service` is configured for.
 """
 
 from .datasets import ALLOWED_SEMANTIC_TYPES, EVAL_DATASETS, EvalDataset
-from .predictors import CallablePredictor, DeterministicPredictor, LLMPredictor, Prediction
+from .predictors import (
+    CallablePredictor,
+    DeterministicPredictor,
+    KGGroundedLLMPredictor,
+    KGPredictor,
+    LLMPredictor,
+    Prediction,
+)
 from .scorecard import ScoreCard
 
 # Note: `evaluate` lives in `eval.run_eval` and is intentionally not re-exported
@@ -26,6 +33,8 @@ __all__ = [
     "Prediction",
     "DeterministicPredictor",
     "LLMPredictor",
+    "KGPredictor",
+    "KGGroundedLLMPredictor",
     "CallablePredictor",
     "ScoreCard",
 ]

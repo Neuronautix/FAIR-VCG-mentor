@@ -1,0 +1,19 @@
+# Compose OVERRIDE for running FAIR-VCG Mentor against a host-run local LLM
+# (LM Studio / Gemma / APERTUS serving an OpenAI-compatible API).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.local-llm.yml up
+#
+# This is additive: it only injects the local-LLM env onto the existing backend
+# service and adds host.docker.internal so a Linux container can reach an LLM
+# server running on the host. Values are overridable from your shell env.
+services:
+  backend:
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      - LLM_MODEL=${LLM_MODEL:-google/gemma-3-27b-it}
+      - LLM_API_KEY=${LLM_API_KEY:-lm-studio}
+      - ENABLE_ONLINE_ENRICHMENT=${ENABLE_ONLINE_ENRICHMENT:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

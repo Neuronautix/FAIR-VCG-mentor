@@ -127,6 +127,11 @@ class LLMPredictor:
         self._model_env = model_env
         self._max_samples = max_samples
 
+    def _extra_system_blocks(self, columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Hook for subclasses to append extra system blocks (e.g. KG grounding).
+        The base predictor adds none, so its behaviour is unchanged."""
+        return []
+
     def predict(self, columns: List[Dict[str, Any]]) -> Dict[str, Prediction]:
         from llm_service import call_haiku
 
@@ -139,13 +144,17 @@ class LLMPredictor:
             }
             for c in columns
         ]
-        raw = call_haiku(
+        call_kwargs: Dict[str, Any] = dict(
             system_prompt=_LLM_SYSTEM_PROMPT,
             tool=_build_llm_tool(),
             user_message=json.dumps({"columns": payload}),
             model_env=self._model_env,
             max_tokens=2048,
         )
+        extra_blocks = self._extra_system_blocks(columns)
+        if extra_blocks:
+            call_kwargs["extra_system_blocks"] = extra_blocks
+        raw = call_haiku(**call_kwargs)
 
         out: Dict[str, Prediction] = {}
         for item in raw.get("predictions") or []:
@@ -162,3 +171,87 @@ class LLMPredictor:
                 unit=item.get("unit"),
             )
         return out
+
+
+# ── KG-grounded predictors ───────────────────────────────────────────────────
+
+
+class KGPredictor:
+    """Deterministic hybrid: rule-based profiler inference + knowledge-graph override.
+
+    For each column it starts from the profiler's own inference (same fields the
+    ``DeterministicPredictor`` reads). When the offline KG retriever matches the
+    column to a concept — by NAME keyword or, crucially, by sample VALUE — the
+    concept's curated ``semantic_type`` overrides the base prediction and the
+    confidence is raised to ~0.9. Under blind masking (headers anonymised) the
+    value-based match is what recovers species/strain/sex/compound/tissue that the
+    name-pattern profiler can no longer see.
+
+    Fully offline / CI-safe. A KG import or lookup failure degrades gracefully to
+    the base profiler prediction.
+    """
+
+    name = "kg"
+    provider = "kg+rule-based"
+
+    _KG_CONFIDENCE = 0.9
+
+    def predict(self, columns: List[Dict[str, Any]]) -> Dict[str, Prediction]:
+        # Base prediction = profiler's own rule-based inference (never overridden
+        # away on failure — the KG only ever *adds* signal).
+        out: Dict[str, Prediction] = {
+            c["name"]: Prediction(
+                semantic_type=str(c.get("inferred_type") or "unknown"),
+                confidence=float(c.get("confidence") or 0.0),
+                unit=c.get("unit_guess"),
+            )
+            for c in columns
+        }
+
+        try:
+            from knowledge.retriever import match_columns
+            from knowledge.kg import load_kg
+
+            kg = load_kg()
+            for m in match_columns(columns, kg):
+                concept = kg.concept(m.concept_id)
+                if concept is None or m.column not in out:
+                    continue
+                base = out[m.column]
+                out[m.column] = Prediction(
+                    semantic_type=str(concept.semantic_type),
+                    confidence=self._KG_CONFIDENCE,
+                    unit=base.unit,
+                )
+        except Exception:
+            # Any KG failure → keep the base profiler predictions. Offline-safe.
+            return out
+
+        return out
+
+
+class KGGroundedLLMPredictor(LLMPredictor):
+    """LLM predictor that injects the KG grounding block as an extra system block.
+
+    On-demand LLM path (not CI-tested). Identical to ``LLMPredictor`` except it
+    retrieves ``knowledge.retriever.grounding_block(columns)`` and, when non-empty,
+    appends it as a system block so the model is grounded in the curated
+    concept→semantic_type mappings for the columns it actually sees.
+    """
+
+    name = "kg-llm"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.provider = f"kg+{self.provider}"
+
+    def _extra_system_blocks(self, columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        try:
+            from knowledge.retriever import grounding_block
+
+            block = grounding_block(columns)
+        except Exception:
+            block = ""
+        if not block:
+            return []
+        return [{"type": "text", "text": block}]

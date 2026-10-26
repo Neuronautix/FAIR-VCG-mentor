@@ -43,6 +43,7 @@ app = FastAPI(title="FAIR CSV Mentor API", version="1.0.0")
 
 from vcg.vcg_router import vcg_router, init_vcg_router  # noqa: E402
 from template_router import template_router, init_template_router  # noqa: E402
+from corpus_router import corpus_router, init_corpus_router  # noqa: E402
 from nts_router import nts_router  # noqa: E402
 from template_engine import (  # noqa: E402
     conformance_to_issues,
@@ -740,6 +741,9 @@ app.include_router(vcg_router)
 
 init_template_router(sessions, _save_session, _load_session)
 app.include_router(template_router)
+
+init_corpus_router(sessions, _save_session, _load_session)
+app.include_router(corpus_router)
 
 app.include_router(nts_router)
 

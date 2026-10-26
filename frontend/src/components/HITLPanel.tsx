@@ -35,6 +35,12 @@ const CATEGORY_LABELS: Record<HITLSuggestion['category'], string> = {
   fair_recommendation: 'FAIR recommendation',
   issue_fix: 'Issue fix',
   schema_extension: 'Schema extension',
+  schema_field: 'Schema field',
+  schema_conflict: 'Schema conflict',
+  ontology_mapping: 'Ontology mapping',
+  unit_normalization: 'Unit normalisation',
+  vcg_assumption: 'VCG assumption',
+  corpus_schema_approval: 'Consensus schema approval',
 }
 
 const STATUS_COLORS: Record<HITLSuggestion['status'], 'default' | 'warning' | 'success' | 'error' | 'info'> = {

@@ -1,8 +1,8 @@
-# FAIR-VCG Mentor — Local-LLM & Grant Compatibility Roadmap
+# FAIR-VCG Mentor — Local-LLM Roadmap
 
-Status: **living document** · Context: Swiss 3RCC Support grant (Neuronautix / UNIL), 12 months, start 2026-10-01.
+Status: **living document** · Context: independent personal project (not grant-funded); self-set 12-month plan (M1–M12) starting 2026-10-01.
 
-This roadmap maps the grant's milestones onto concrete engineering work in this
+This roadmap maps the project's milestones onto concrete engineering work in this
 repository. It is the planning counterpart to `CLAUDE.md` (which documents the
 system as-built).
 
@@ -100,7 +100,7 @@ Legend: ✅ merged · ✅ on branch (in `fair-vcg-complete-3r-grant`, not yet in
   **scorecard** (also a dissemination artifact). Offline parts run in CI.
 
 ### WS5 · Integration + PoC → **Milestones D** (M6–7) & **E** (M8–9)
-- D: end-to-end local runs on UNIL datasets; harden flaky-endpoint / context
+- D: end-to-end local runs on real-world datasets; harden flaky-endpoint / context
   handling; curate a historical-control resource. E: run the existing VCG
   engine for one predefined use case; package synthetic-control CSV + stats
   report + FAIR exports into a PoC bundle.
@@ -113,18 +113,18 @@ Legend: ✅ merged · ✅ on branch (in `fair-vcg-complete-3r-grant`, not yet in
 
 | Risk | Mitigation |
 |------|------------|
-| Local tool-calling unreliability | Structured-output JSON-schema + KG-grounded enums + HITL review + validation harness (the grant's stated safeguard set). |
+| Local tool-calling unreliability | Structured-output JSON-schema + KG-grounded enums + HITL review + validation harness (the planned safeguard set). |
 | Context window / PDF size on consumer hardware | Local text extraction + truncation/chunking. |
 | Reproducibility across models | Fixed seeds where possible; scorecard tracking; masked-metadata regression tests. |
 
-## 6. Notes for the proposal text (non-code)
+## 6. Planning notes (non-code)
 
-- **Milestone numbering mismatch**: the Milestones table has A = knowledge graph
-  @ M1, B = local LLM @ M2; the Gantt has A = local LLM @ M1, B = knowledge
+- **Milestone numbering mismatch**: the milestones table has A = knowledge graph
+  @ M1, B = local LLM @ M2; the timeline (Gantt) has A = local LLM @ M1, B = knowledge
   graph @ M3–4. Engineering-wise **B (provider layer) is foundational** and
-  should lead or run parallel to A — reconcile the IDs before submission.
-- The Methodology names **two different local models** (APERTUS vs
-  Google/Gemma) and contains duplicated paragraphs — tighten before submission.
+  should lead or run parallel to A — reconcile the IDs.
+- The methodology notes name **two different local models** (APERTUS vs
+  Google/Gemma) and contain duplicated paragraphs — tighten.
 - Optional attachments to produce: FAIR→3R Sankey, raw-data→FAIR→VCG flowchart,
   interface screenshot/demo.
 

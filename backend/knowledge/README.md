@@ -1,6 +1,6 @@
 # Preclinical metadata knowledge graph
 
-Grant **Milestone A**. A lightweight, ontology-bound term graph that grounds
+Roadmap **Milestone A** (see `docs/roadmap.md`). A lightweight, ontology-bound term graph that grounds
 metadata reasoning (for cloud *and* local LLMs) and suggests ontology IRIs for
 recognised biological values. Fully offline; online IRI resolution is opt-in.
 

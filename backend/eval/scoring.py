@@ -1,7 +1,7 @@
 """Scoring primitives: per-column results + aggregate metrics.
 
 The scored target is the column **semantic type**. Three metrics matter for the
-grant's ~90 % goal:
+roadmap's ~90 % goal:
 
 - **accuracy** — fraction of evaluated columns whose predicted type matches
   ground truth.

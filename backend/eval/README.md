@@ -1,10 +1,10 @@
 # Masked-metadata validation harness
 
-Grant **Milestone C**. Quantifies how well a metadata predictor recovers column
+Roadmap **Milestone C** (see `docs/roadmap.md`). Quantifies how well a metadata predictor recovers column
 **semantic types** from datasets whose metadata signal has been *masked*, and
 emits a provider **scorecard** (accuracy · hallucination rate · confidence
 calibration). It lets us compare the deterministic baseline against cloud and
-local LLMs (Gemma / APERTUS) toward the grant's ~90 % accuracy target.
+local LLMs (Gemma / APERTUS) toward the roadmap's ~90 % accuracy target.
 
 ## Why "masked"
 

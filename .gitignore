@@ -26,4 +26,5 @@ Thumbs.db
 !.claude/hooks/
 
 # Runtime database (generated at startup, not for version control)
-backend/sessions.db
+# The backend writes SESSION_DB (default: sessions.db) relative to the launch directory.
+sessions.db

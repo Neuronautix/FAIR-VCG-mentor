@@ -1,4 +1,4 @@
-"""Preclinical metadata knowledge graph (grant Milestone A).
+"""Preclinical metadata knowledge graph (roadmap Milestone A).
 
 A lightweight, ontology-bound term graph derived from the precliniverse
 "Open Science Dataset Registration Wizard" schema (see

@@ -14,7 +14,7 @@
 # verbatim as history; curated notes use "roadmap/project milestone" wording.
 # ----------------------------------------------------------------------------
 
-# ---- Roadmap workstream: consolidation onto one integration branch (fair-vcg-complete-3r-grant, since renamed fair-vcg-milestones-d-f) ----
+# ---- Roadmap workstream: consolidation onto one integration branch (fair-vcg-complete-3r-grant — historical name, PR #21) ----
 8297836:
   why: The Study Corpus subsystem (many papers -> one VCG-ready consensus schema) was unmerged work stranded on the stale v2-local-llm-hitl-planning branch; it is roadmap-relevant (consensus schema, hallucination/conflict checks, VCG readiness, HITL) and worth keeping.
   how: Brought the self-contained backend modules + tests + StudyCorpusPage over as-is, then re-applied the integration hooks onto current files (main.py router registration, vcg_router prefill bridge, hitl.py 6 new categories + validation, client/App/Layout/HITLPanel). Dropped v2's duplicate LLMStatus in favour of the existing typed getLLMStatus.
@@ -139,3 +139,6 @@ a8ea2f5:
 
 5134353:
   note: The commit message above mentions a grant; no grant was awarded — FAIR-VCG is independent personal work. Read "grant" as "roadmap".
+
+7597a58:
+  note: Superseded in part — the planned rename to fair-vcg-milestones-d-f was reverted because renaming the head branch closed PR #21; docs now refer to "the PR #21 integration branch".

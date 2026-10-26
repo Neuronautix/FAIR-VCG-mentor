@@ -46,15 +46,15 @@ dissemination package.
 | Milestone | Status | Where |
 |-----------|--------|-------|
 | **B** — provider-agnostic LLM layer | ✅ merged | PR #15 (provider switch, structured-output local path, local PDF→text, `provider_info()`, CrossRef gated) |
-| **B** — local deployment (docker `local-llm` profile, setup docs, live-endpoint smoke) | ✅ on branch | merged into `fair-vcg-milestones-d-f` (`docker-compose.local-llm.yml`, `docs/local-llm-setup.md`, `backend/scripts/llm_smoke.py`) |
+| **B** — local deployment (docker `local-llm` profile, setup docs, live-endpoint smoke) | ✅ on branch | merged into the PR #21 integration branch (`docker-compose.local-llm.yml`, `docs/local-llm-setup.md`, `backend/scripts/llm_smoke.py`) |
 | **C** — masked-metadata validation harness + scorecard | ✅ merged | PR #16 (`backend/eval/`; current scorecard: deterministic 73.2% overall / 48.8% blind, KG 76.8% / 58.5% blind, 0% hallucination) |
 | **A** — preclinical metadata knowledge graph + grounding | ✅ merged | PR #17 (`backend/knowledge/`, from the precliniverse schema; grounding + offline ontology IRIs) |
-| **A↔C bridge** — KG-grounded eval predictor (quantifies blind-mode lift) | ✅ on branch | merged into `fair-vcg-milestones-d-f` — **+50 pp blind-mode accuracy (0.25 → 0.75) on the synthetic set, 0% hallucination** |
+| **A↔C bridge** — KG-grounded eval predictor (quantifies blind-mode lift) | ✅ on branch | merged into the PR #21 integration branch — **+50 pp blind-mode accuracy (0.25 → 0.75) on the synthetic set, 0% hallucination** |
 | **D** — integration tests on academic datasets | 🛠 harness ready | headless end-to-end test `backend/tests/test_integration_pipeline.py` (profile → FAIR → VCG) on a synthetic placeholder; still blocked on an anonymised real-world dataset + live local endpoint |
 | **E** — proof-of-concept VCG report (one use case) | ✅ on branch | rodent-toxicology PoC `docs/vcg_poc/` (synthetic CSV + stats report + `poc_results.json`, reliability 0.935) |
 | **F** — dissemination package | ✅ on branch | `backend/scripts/build_dissemination.py` bundles scorecards + VCG PoC + local-llm profile into `dist/dissemination/` (see §8) |
 
-Legend: ✅ merged · ✅ on branch (in `fair-vcg-milestones-d-f`, not yet in `main`) · 🔍 in review (open PR) · 🛠 in progress (branch) · ⏳ not started.
+Legend: ✅ merged · ✅ on branch (in the PR #21 integration branch `fair-vcg-complete-3r-grant`, not yet in `main`; the branch name is historical) · 🔍 in review (open PR) · 🛠 in progress (branch) · ⏳ not started.
 
 ## 3. Decisions on record
 
@@ -164,7 +164,7 @@ by `backend/tests/test_dissemination.py`.
 ## 9. Frontend surfacing of roadmap features
 
 Three roadmap-relevant features previously computed but not shown in the UI are now surfaced
-(branch `fair-vcg-milestones-d-f`):
+(on the PR #21 integration branch):
 
 - **Offline / local-LLM indicator** — the top-bar status chip reads the real provider/model
   from `/api/llm/status` (no longer hardcoded "Claude Haiku"); a configured `base_url` shows

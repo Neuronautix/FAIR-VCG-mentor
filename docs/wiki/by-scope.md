@@ -3,7 +3,7 @@
 
 # Changes by scope
 
-_97 commits on `fair-vcg-milestones-d-f`, grouped by `scope:` prefix._
+_99 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 
 ## `merge` (21)
 
@@ -29,8 +29,10 @@ _97 commits on `fair-vcg-milestones-d-f`, grouped by `scope:` prefix._
 - [`f480b97`](commit-ledger.md#f480b97--merge-pull-request-2-from-dhuzard-ccr-3ad9c960-mrsw6) Merge pull request #2 from dhuzard/ccr-3ad9c960-mRsW6 <sub>(2026-05-07)</sub>
 - [`68cebc1`](commit-ledger.md#68cebc1--merge-pull-request-1-from-dhuzard-claude-assess-repo-multi-agent-otjzz) Merge pull request #1 from dhuzard/claude/assess-repo-multi-agent-OtJzZ <sub>(2026-05-02)</sub>
 
-## `docs` (17)
+## `docs` (19)
 
+- [`d7628c4`](commit-ledger.md#d7628c4--docs-point-branch-references-at-the-pr-21-integration-branch) docs: point branch references at the PR #21 integration branch <sub>(2026-10-26)</sub>
+- [`7f80f5e`](commit-ledger.md#7f80f5e--docs-refresh-commit-knowledge-base) docs: refresh commit knowledge base <sub>(2026-10-26)</sub>
 - [`7597a58`](commit-ledger.md#7597a58--docs-remove-grant-claims-from-milestone-d-e-f-work) docs: remove grant claims from milestone D/E/F work <sub>(2026-10-26)</sub>
 - [`6aa65f2`](commit-ledger.md#6aa65f2--docs-remove-grant-claims-reframe-roadmap-as-personal-project-plan) docs: remove grant claims; reframe roadmap as personal project plan <sub>(2026-10-26)</sub>
 - [`e959661`](commit-ledger.md#e959661--docs-refresh-commit-knowledge-base-sessionstart-hook) docs: refresh commit knowledge base (SessionStart hook) <sub>(2026-06-24)</sub>

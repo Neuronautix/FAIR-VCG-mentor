@@ -3,10 +3,13 @@
 
 # Merge & PR timeline
 
-_18 merge commits on `fair-vcg-complete-3r-grant`, newest first._
+_21 merge commits on `fair-vcg-milestones-d-f`, newest first._
 
 | Commit | PR | Source | Subject | Date |
 |---|---|---|---|---|
+| `77212ed` | — | `origin/main` | Merge remote-tracking branch 'origin/main' into fair-vcg-complete-3r-grant | 2026-10-26 |
+| `1dbb0d9` | #23 | `Neuronautix/docs/remove-grant-claims` | Merge pull request #23 from Neuronautix/docs/remove-grant-claims | 2026-10-26 |
+| `c127b94` | #22 | `Neuronautix/chore/untrack-sessions-db` | Merge pull request #22 from Neuronautix/chore/untrack-sessions-db | 2026-10-26 |
 | `a3da940` | — | `origin/claude/grant-roadmap-status` | Merge remote-tracking branch 'origin/claude/grant-roadmap-status' into fair-vcg-complete-3r-grant | 2026-06-24 |
 | `26da15c` | — | `origin/claude/grant-local-llm-deploy` | Merge remote-tracking branch 'origin/claude/grant-local-llm-deploy' into fair-vcg-complete-3r-grant | 2026-06-24 |
 | `ace930d` | — | `origin/claude/grant-kg-eval` | Merge remote-tracking branch 'origin/claude/grant-kg-eval' into fair-vcg-complete-3r-grant | 2026-06-24 |

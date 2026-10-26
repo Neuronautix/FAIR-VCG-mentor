@@ -3,10 +3,13 @@
 
 # Changes by scope
 
-_90 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
+_97 commits on `fair-vcg-milestones-d-f`, grouped by `scope:` prefix._
 
-## `merge` (18)
+## `merge` (21)
 
+- [`77212ed`](commit-ledger.md#77212ed--merge-remote-tracking-branch-origin-main-into-fair-vcg-complete-3r-grant) Merge remote-tracking branch 'origin/main' into fair-vcg-complete-3r-grant <sub>(2026-10-26)</sub>
+- [`1dbb0d9`](commit-ledger.md#1dbb0d9--merge-pull-request-23-from-neuronautix-docs-remove-grant-claims) Merge pull request #23 from Neuronautix/docs/remove-grant-claims <sub>(2026-10-26)</sub>
+- [`c127b94`](commit-ledger.md#c127b94--merge-pull-request-22-from-neuronautix-chore-untrack-sessions-db) Merge pull request #22 from Neuronautix/chore/untrack-sessions-db <sub>(2026-10-26)</sub>
 - [`a3da940`](commit-ledger.md#a3da940--merge-remote-tracking-branch-origin-claude-grant-roadmap-status-into-fair-vcg-complete-3r-grant) Merge remote-tracking branch 'origin/claude/grant-roadmap-status' into fair-vcg-complete-3r-grant <sub>(2026-06-24)</sub>
 - [`26da15c`](commit-ledger.md#26da15c--merge-remote-tracking-branch-origin-claude-grant-local-llm-deploy-into-fair-vcg-complete-3r-grant) Merge remote-tracking branch 'origin/claude/grant-local-llm-deploy' into fair-vcg-complete-3r-grant <sub>(2026-06-24)</sub>
 - [`ace930d`](commit-ledger.md#ace930d--merge-remote-tracking-branch-origin-claude-grant-kg-eval-into-fair-vcg-complete-3r-grant) Merge remote-tracking branch 'origin/claude/grant-kg-eval' into fair-vcg-complete-3r-grant <sub>(2026-06-24)</sub>
@@ -26,6 +29,26 @@ _90 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 - [`f480b97`](commit-ledger.md#f480b97--merge-pull-request-2-from-dhuzard-ccr-3ad9c960-mrsw6) Merge pull request #2 from dhuzard/ccr-3ad9c960-mRsW6 <sub>(2026-05-07)</sub>
 - [`68cebc1`](commit-ledger.md#68cebc1--merge-pull-request-1-from-dhuzard-claude-assess-repo-multi-agent-otjzz) Merge pull request #1 from dhuzard/claude/assess-repo-multi-agent-OtJzZ <sub>(2026-05-02)</sub>
 
+## `docs` (17)
+
+- [`7597a58`](commit-ledger.md#7597a58--docs-remove-grant-claims-from-milestone-d-e-f-work) docs: remove grant claims from milestone D/E/F work <sub>(2026-10-26)</sub>
+- [`6aa65f2`](commit-ledger.md#6aa65f2--docs-remove-grant-claims-reframe-roadmap-as-personal-project-plan) docs: remove grant claims; reframe roadmap as personal project plan <sub>(2026-10-26)</sub>
+- [`e959661`](commit-ledger.md#e959661--docs-refresh-commit-knowledge-base-sessionstart-hook) docs: refresh commit knowledge base (SessionStart hook) <sub>(2026-06-24)</sub>
+- [`422fb83`](commit-ledger.md#422fb83--docs-record-fastapi-compat-shadow-diagnosis-refresh-wiki) docs: record FastAPI _compat shadow diagnosis + refresh wiki <sub>(2026-06-24)</sub>
+- [`3a5ec36`](commit-ledger.md#3a5ec36--docs-refresh-commit-knowledge-base-study-corpus-port) docs: refresh commit knowledge base (Study Corpus port) <sub>(2026-06-24)</sub>
+- [`a8ea2f5`](commit-ledger.md#a8ea2f5--docs-add-regenerable-commit-knowledge-base-wiki-generator) docs: add regenerable commit knowledge base (wiki) + generator <sub>(2026-06-24)</sub>
+- [`7069c36`](commit-ledger.md#7069c36--docs-update-grant-roadmap-todo-for-d-e-f-frontend-surfacing) docs: update grant roadmap + TODO for D/E/F + frontend surfacing <sub>(2026-06-24)</sub>
+- [`8db7108`](commit-ledger.md#8db7108--docs-update-todo-with-grant-workstream-status-future-dev-backlog) docs: update TODO with grant workstream status + future-dev backlog <sub>(2026-06-23)</sub>
+- [`7f80c0c`](commit-ledger.md#7f80c0c--docs-update-roadmap-status-a-c-merged-b-deploy-kg-eval-in-review) docs: update roadmap status — A/C merged, B-deploy + KG-eval in review <sub>(2026-06-23)</sub>
+- [`12a05c7`](commit-ledger.md#12a05c7--docs-add-live-milestone-progress-status-to-grant-roadmap) docs: add live milestone-progress status to grant roadmap <sub>(2026-06-23)</sub>
+- [`50db9d2`](commit-ledger.md#50db9d2--docs-document-template-layer-arrive-mnms-namo-linkml-in-readme) docs: document template layer + ARRIVE/MNMS/NAMO/LinkML in README <sub>(2026-05-14)</sub>
+- [`d1b0c01`](commit-ledger.md#d1b0c01--docs-add-vocabulary-hitl-schema-verification-follow-ups-to-readme-punch-list) docs: add vocabulary, HITL & schema verification follow-ups to README punch list <sub>(2026-05-14)</sub>
+- [`b5abc75`](commit-ledger.md#b5abc75--docs-update-readme-mark-paper-import-items-done-add-must-nice-to-have-punch-list) docs: update README — mark paper import items done, add must/nice-to-have punch list <sub>(2026-05-14)</sub>
+- [`2d35376`](commit-ledger.md#2d35376--docs-add-paper-import-llm-enrichment-roadmap-items-to-readme-and-todo) docs: add paper import & LLM enrichment roadmap items to README and TODO <sub>(2026-05-13)</sub>
+- [`91dd897`](commit-ledger.md#91dd897--docs-mark-all-todo-items-as-completed) docs: mark all TODO items as completed <sub>(2026-05-02)</sub>
+- [`b866d69`](commit-ledger.md#b866d69--docs-add-readme-with-features-quick-start-and-architecture-overview) docs: add README with features, quick start, and architecture overview <sub>(2026-05-01)</sub>
+- [`e3bdbf1`](commit-ledger.md#e3bdbf1--docs-add-claude-md-with-repo-assessment-and-multi-agent-guidelines) docs: add CLAUDE.md with repo assessment and multi-agent guidelines <sub>(2026-05-01)</sub>
+
 ## `misc` (16)
 
 - [`66028a2`](commit-ledger.md#66028a2--eqipd-now-follows-the-supplied-table-2-exactly-18-requirements-in-the-six-stated-categories-i-corrected-the-category-label-from-continuous-performance-to-continuous-improvement-for-requirements-15-17) EQIPD now follows the supplied Table 2 exactly: 18 requirements in the six stated categories. I corrected the category label from “Continuous performance” to “Continuous improvement” for requirements 15–17. <sub>(2026-06-23)</sub>
@@ -44,23 +67,6 @@ _90 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 - [`a34432b`](commit-ledger.md#a34432b--refactor-readme-md-to-update-project-name-to-fair-vcg-mentor-and-enhance-descriptions-for-fair-assessment-and-vcg-generation-features-add-detailed-workflow-steps-for-both-fair-assessment-and-vcg-generation-and-outline-a-roadmap-for-future-improvements-update-repository-structure-to-reflect-new-vcg-components-and-clarify-environment-variables-improve-formatting-and-consistency-throughout-the-document) Refactor README.md to update project name to FAIR-VCG Mentor and enhance descriptions for FAIR assessment and VCG generation features. Add detailed workflow steps for both FAIR assessment and VCG generation, and outline a roadmap for future improvements. Update repository structure to reflect new VCG components and clarify environment variables. Improve formatting and consistency throughout the document. <sub>(2026-05-04)</sub>
 - [`ae0a2c5`](commit-ledger.md#ae0a2c5--feat-vcg-complete-vcg-pipeline-orchestrator-engine-report-router-and-frontend-pages) feat(vcg): complete VCG pipeline — orchestrator, engine, report, router, and frontend pages <sub>(2026-05-01)</sub>
 - [`80aaf82`](commit-ledger.md#80aaf82--initial-implementation-of-fair-csv-mentor) Initial implementation of FAIR CSV Mentor <sub>(2026-04-30)</sub>
-
-## `docs` (14)
-
-- [`422fb83`](commit-ledger.md#422fb83--docs-record-fastapi-compat-shadow-diagnosis-refresh-wiki) docs: record FastAPI _compat shadow diagnosis + refresh wiki <sub>(2026-06-24)</sub>
-- [`3a5ec36`](commit-ledger.md#3a5ec36--docs-refresh-commit-knowledge-base-study-corpus-port) docs: refresh commit knowledge base (Study Corpus port) <sub>(2026-06-24)</sub>
-- [`a8ea2f5`](commit-ledger.md#a8ea2f5--docs-add-regenerable-commit-knowledge-base-wiki-generator) docs: add regenerable commit knowledge base (wiki) + generator <sub>(2026-06-24)</sub>
-- [`7069c36`](commit-ledger.md#7069c36--docs-update-grant-roadmap-todo-for-d-e-f-frontend-surfacing) docs: update grant roadmap + TODO for D/E/F + frontend surfacing <sub>(2026-06-24)</sub>
-- [`8db7108`](commit-ledger.md#8db7108--docs-update-todo-with-grant-workstream-status-future-dev-backlog) docs: update TODO with grant workstream status + future-dev backlog <sub>(2026-06-23)</sub>
-- [`7f80c0c`](commit-ledger.md#7f80c0c--docs-update-roadmap-status-a-c-merged-b-deploy-kg-eval-in-review) docs: update roadmap status — A/C merged, B-deploy + KG-eval in review <sub>(2026-06-23)</sub>
-- [`12a05c7`](commit-ledger.md#12a05c7--docs-add-live-milestone-progress-status-to-grant-roadmap) docs: add live milestone-progress status to grant roadmap <sub>(2026-06-23)</sub>
-- [`50db9d2`](commit-ledger.md#50db9d2--docs-document-template-layer-arrive-mnms-namo-linkml-in-readme) docs: document template layer + ARRIVE/MNMS/NAMO/LinkML in README <sub>(2026-05-14)</sub>
-- [`d1b0c01`](commit-ledger.md#d1b0c01--docs-add-vocabulary-hitl-schema-verification-follow-ups-to-readme-punch-list) docs: add vocabulary, HITL & schema verification follow-ups to README punch list <sub>(2026-05-14)</sub>
-- [`b5abc75`](commit-ledger.md#b5abc75--docs-update-readme-mark-paper-import-items-done-add-must-nice-to-have-punch-list) docs: update README — mark paper import items done, add must/nice-to-have punch list <sub>(2026-05-14)</sub>
-- [`2d35376`](commit-ledger.md#2d35376--docs-add-paper-import-llm-enrichment-roadmap-items-to-readme-and-todo) docs: add paper import & LLM enrichment roadmap items to README and TODO <sub>(2026-05-13)</sub>
-- [`91dd897`](commit-ledger.md#91dd897--docs-mark-all-todo-items-as-completed) docs: mark all TODO items as completed <sub>(2026-05-02)</sub>
-- [`b866d69`](commit-ledger.md#b866d69--docs-add-readme-with-features-quick-start-and-architecture-overview) docs: add README with features, quick start, and architecture overview <sub>(2026-05-01)</sub>
-- [`e3bdbf1`](commit-ledger.md#e3bdbf1--docs-add-claude-md-with-repo-assessment-and-multi-agent-guidelines) docs: add CLAUDE.md with repo assessment and multi-agent guidelines <sub>(2026-05-01)</sub>
 
 ## `feat` (11)
 
@@ -134,6 +140,10 @@ _90 commits on `fair-vcg-complete-3r-grant`, grouped by `scope:` prefix._
 ## `api` (1)
 
 - [`a9aa3f8`](commit-ledger.md#a9aa3f8--api-add-sqlite-persistence-cors-env-var-excel-upload) api: add SQLite persistence, CORS env var, Excel upload <sub>(2026-05-01)</sub>
+
+## `chore` (1)
+
+- [`cc96769`](commit-ledger.md#cc96769--chore-stop-tracking-the-runtime-sessions-db) chore: stop tracking the runtime sessions.db <sub>(2026-10-26)</sub>
 
 ## `knowledge` (1)
 

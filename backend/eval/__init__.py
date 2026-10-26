@@ -1,4 +1,4 @@
-"""Masked-metadata validation harness for FAIR-VCG Mentor (grant Milestone C).
+"""Masked-metadata validation harness for FAIR-VCG Mentor (roadmap Milestone C).
 
 This package quantifies how well a metadata predictor — the deterministic
 rule-based profiler, a cloud LLM, or a local LLM — recovers column semantic
